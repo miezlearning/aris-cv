@@ -1,0 +1,258 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+@font-face {
+  font-family: "Sunghyun Sans";
+  src: local("Sunghyun Sans"), local("SunghyunSans");
+  font-display: swap;
+}
+
+@theme {
+  --color-ink: #251813;
+  --color-paper: #fff4d8;
+  --color-clay: #e86f4d;
+  --color-moss: #1f6b57;
+  --color-line: #251813;
+  --color-sky: #7bc7d8;
+  --color-butter: #f5d35b;
+  --font-sans: "Sunghyun Sans", Arial, Helvetica, sans-serif;
+  --shadow-panel: 7px 8px 0 rgba(37, 24, 19, 0.16);
+}
+
+:root {
+  color-scheme: light;
+  --paper: #fff4d8;
+  --paper-strong: #fffaf0;
+  --paper-soft: #f8e7b8;
+  --ink: #251813;
+  --muted: #57443b;
+  --line: #251813;
+  --moss: #1f6b57;
+  --moss-dark: #154538;
+  --clay: #e86f4d;
+  --clay-dark: #9d321e;
+  --sky: #7bc7d8;
+  --butter: #f5d35b;
+  --danger: #a3291b;
+  --warning: #7a5400;
+  --success: #17583d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 12px 12px, rgba(37, 24, 19, 0.055) 1.3px, transparent 1.6px),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.46), rgba(245, 211, 91, 0.18)),
+    var(--paper);
+  background-size: 26px 26px, 100% 100%, auto;
+  color: var(--ink);
+  font-family: "Sunghyun Sans", Arial, Helvetica, sans-serif;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 3px solid var(--moss-dark);
+  outline-offset: 4px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(37, 24, 19, 0.45) rgba(255, 250, 240, 0.65);
+}
+
+*::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(255, 250, 240, 0.65);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(37, 24, 19, 0.45);
+  border: 3px solid rgba(255, 250, 240, 0.8);
+  border-radius: 999px;
+}
+
+.doodle-stage {
+  position: relative;
+  isolation: isolate;
+}
+
+.doodle-stage::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 8% 18%, rgba(123, 199, 216, 0.22), transparent 18rem),
+    radial-gradient(circle at 87% 10%, rgba(232, 111, 77, 0.16), transparent 16rem),
+    radial-gradient(circle at 75% 82%, rgba(31, 107, 87, 0.14), transparent 18rem);
+  z-index: -1;
+}
+
+.doodle-card {
+  position: relative;
+  border: 2px solid var(--line);
+  border-radius: 25px 18px 28px 16px;
+  box-shadow: var(--shadow-panel);
+}
+
+.doodle-card::after {
+  content: "";
+  position: absolute;
+  inset: 7px -7px -7px 7px;
+  border: 2px solid rgba(37, 24, 19, 0.22);
+  border-radius: 18px 25px 16px 28px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.doodle-tape {
+  position: relative;
+}
+
+.doodle-tape::before {
+  content: "";
+  position: absolute;
+  top: -13px;
+  left: 32px;
+  width: 88px;
+  height: 24px;
+  transform: rotate(-2deg);
+  border: 2px solid rgba(37, 24, 19, 0.18);
+  background: rgba(245, 211, 91, 0.78);
+  border-radius: 4px 7px 5px 6px;
+}
+
+.doodle-title-mark {
+  display: inline;
+  background-image: linear-gradient(transparent 62%, rgba(245, 211, 91, 0.72) 62%);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.doodle-btn.btn {
+  min-height: 2.9rem;
+  border: 2px solid var(--line);
+  border-radius: 16px 13px 18px 12px;
+  box-shadow: 3px 4px 0 rgba(37, 24, 19, 0.18);
+  text-transform: none;
+}
+
+.doodle-btn.btn:hover {
+  transform: translate(-1px, -1px) rotate(-0.2deg);
+  box-shadow: 5px 6px 0 rgba(37, 24, 19, 0.16);
+}
+
+.doodle-input.input,
+.doodle-input.textarea {
+  border: 2px solid rgba(37, 24, 19, 0.82);
+  border-radius: 16px 12px 17px 13px;
+  background: #fffdf7;
+}
+
+.doodle-input.input:focus,
+.doodle-input.textarea:focus {
+  border-color: var(--moss-dark);
+}
+
+.doodle-chip {
+  border: 2px solid var(--line);
+  border-radius: 999px 12px 999px 14px;
+  box-shadow: 2px 3px 0 rgba(37, 24, 19, 0.14);
+}
+
+.doodle-score {
+  border: 2px solid var(--line);
+  border-radius: 21px 15px 23px 17px;
+  box-shadow: 5px 6px 0 rgba(37, 24, 19, 0.12);
+}
+
+.doodle-note-yellow {
+  background: #fff0a8;
+}
+
+.doodle-note-blue {
+  background: #e0f6fb;
+}
+
+.doodle-note-green {
+  background: #e4f6df;
+}
+
+.doodle-note-red {
+  background: #ffe1d6;
+}
+
+.cv-paper {
+  background: #ffffff;
+  color: #101513;
+  font-family: Arial, Helvetica, sans-serif;
+  line-height: 1.45;
+}
+
+.preview-watermark {
+  position: relative;
+}
+
+.preview-watermark::after {
+  content: "Pratinjau QuickTailor CV";
+  position: absolute;
+  inset: 40% auto auto 50%;
+  transform: translate(-50%, -50%) rotate(-20deg);
+  color: rgba(23, 33, 31, 0.08);
+  font-size: clamp(2rem, 9vw, 5rem);
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .doodle-card {
+    box-shadow: 4px 5px 0 rgba(37, 24, 19, 0.14);
+  }
+
+  .doodle-card::after {
+    inset: 5px -5px -5px 5px;
+  }
+}
+
+@media print {
+  body {
+    background: white;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .cv-paper {
+    box-shadow: none !important;
+  }
+}
