@@ -1,0 +1,21 @@
+Aris Pratama
+aris.pratama@example.com | 0812-3456-7890 | Jakarta Selatan | linkedin.com/in/arispratama
+Summary
+Data analyst dengan pengalaman dua tahun menyusun laporan penjualan dan merapikan data pelanggan memakai Excel dan SQL untuk kebutuhan tim penjualan.
+Experience
+Data Analyst, PT Contoh Sejahtera
+08/2024 - Present
+•
+Menyusun laporan penjualan mingguan sehingga waktu rekap turun dari 5 hari menjadi 1 hari.
+•
+Merapikan data pelanggan memakai SQL dan Excel untuk kebutuhan tim penjualan.
+Intern Data, Startup Contoh
+01/2024 - 06/2024
+•
+Membantu menyiapkan dashboard penjualan memakai Power BI.
+Education
+S1, Sistem Informasi
+Universitas Contoh, 2024
+GPA/IPK: 3.75/4.00
+Skills
+SQL, analisis data, Excel, Power BI, komunikasi, kolaborasi

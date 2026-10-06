@@ -63,7 +63,7 @@ const steps: Step[] = [
     order: 4,
     short: "Unduh",
     title: "Unduh CV",
-    body: "Pratinjau gratis bertanda air, atau unduhan bersih memakai token.",
+    body: "Pilih format PDF atau DOCX, lalu unduh. Berkas dibuat di perangkat ini dan formatnya satu kolom supaya terbaca sistem pembaca lowongan.",
     color: "bg-[#ffe1d6]"
   }
 ];
@@ -93,7 +93,7 @@ const pageCopy: Record<WorkspacePage, { title: string; body: string; step?: numb
   },
   export: {
     title: "Unduh CV",
-    body: "Pratinjau gratis memakai tanda air. Unduhan bersih butuh token, dan kartu QRIS di layar ini masih penanda uji coba yang belum terhubung ke pembayaran.",
+    body: "Pilih format PDF atau DOCX, lalu unduh. Berkas dibuat di perangkat ini dan formatnya satu kolom supaya terbaca sistem pembaca lowongan.",
     step: 4
   }
 };
@@ -107,7 +107,6 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
   const job = useCvStore((state) => state.jobTarget);
   const analytics = useCvStore((state) => state.matchAnalytics);
   const suggestions = useCvStore((state) => state.suggestions);
-  const tokens = useCvStore((state) => state.exportTokens);
 
   const completeness = getResumeCompleteness(resumeProfile);
   const analyzed = analytics.keywordMatches.length > 0;
@@ -116,25 +115,41 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
   const copy = pageCopy[currentPage];
   const nextStep = copy.next ? steps.find((step) => step.id === copy.next) : undefined;
 
-  const stepStatus = (id: StepId) => {
+  const stepStatus = (id: StepId): { text: string; short: string; done: boolean } => {
     if (id === "master") {
       return completeness >= 80
-        ? { text: "Selesai", done: true }
-        : { text: `${completeness}% terisi`, done: false };
+        ? { text: `${completeness}% data sudah terisi`, short: "Selesai", done: true }
+        : { text: `${completeness}% data terisi`, short: `${completeness}% terisi`, done: false };
     }
     if (id === "target") {
-      if (!analyzed) return { text: "Belum dianalisis", done: false };
-      return { text: `Skor ${analytics.overallScore}% untuk ${job.jobTitle || "lowongan ini"}`, done: true };
+      if (!analyzed) return { text: "Belum ada iklan yang dianalisis", short: "Belum", done: false };
+      return {
+        text: `Skor ${analytics.overallScore}% untuk ${job.jobTitle || "lowongan ini"}`,
+        short: `Skor ${analytics.overallScore}%`,
+        done: true
+      };
     }
     if (id === "rewrite") {
-      if (!suggestions.length) return { text: "Belum ada saran", done: false };
-      if (pendingSuggestions) return { text: `${pendingSuggestions} saran menunggu keputusan`, done: false };
-      return { text: `${suggestions.length} saran sudah diputuskan`, done: true };
+      if (!suggestions.length) return { text: "Belum ada saran", short: "Belum ada saran", done: false };
+      if (pendingSuggestions) {
+        return {
+          text: `${pendingSuggestions} saran menunggu keputusanmu`,
+          short: `${pendingSuggestions} saran menunggu`,
+          done: false
+        };
+      }
+      return { text: `${suggestions.length} saran sudah diputuskan`, short: `${suggestions.length} saran selesai`, done: true };
     }
-    return { text: tokens > 0 ? `${tokens} token siap dipakai` : "Unduhan pratinjau gratis", done: false };
+    return { text: "Siap diunduh dalam format PDF atau DOCX", short: "Siap diunduh", done: false };
   };
 
   const focusStep = steps.find((step) => !stepStatus(step.id).done) ?? steps[steps.length - 1];
+
+  const metricCards: Array<{ label: string; value: string; help: string; href: string; color: string }> = [
+    { label: "Data CV", value: `${completeness}%`, help: "semakin tinggi, semakin lengkap", href: "/master-cv", color: "bg-[#fff0a8]" },
+    { label: "Skor kecocokan", value: analyzed ? `${analytics.overallScore}%` : "Belum ada", help: "dari kata kunci iklan lowongan", href: "/lowongan", color: "bg-[#e0f6fb]" },
+    { label: "Saran siap", value: String(suggestions.length), help: pendingSuggestions ? `${pendingSuggestions} menunggu keputusan` : "semua sudah diputuskan", href: "/optimasi", color: "bg-[#e4f6df]" }
+  ];
 
   useEffect(() => {
     setMounted(true);
@@ -149,6 +164,17 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [previewOpen]);
+
+  // Latar tidak boleh ikut bergeser saat drawer terbuka.
+  useEffect(() => {
+    if (!previewOpen) return;
+
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
   }, [previewOpen]);
 
   if (!mounted) {
@@ -201,6 +227,7 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
             <nav aria-label="Langkah kerja" className="mt-2 flex snap-x gap-2 overflow-x-auto pb-2">
               <Link
                 href="/"
+                aria-current={currentPage === "dashboard" ? "page" : undefined}
                 className={`flex min-h-11 shrink-0 snap-start items-center rounded-[14px_10px_16px_12px] border-2 border-line px-3 text-sm font-black shadow-[2px_3px_0_rgba(37,24,19,0.14)] ${currentPage === "dashboard" ? "bg-white ring-4 ring-[#251813]/10" : "bg-[#fffaf0]"}`}
               >
                 Ringkasan
@@ -212,12 +239,12 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
                   <Link
                     key={step.id}
                     href={step.href}
-                    className={`flex min-h-11 shrink-0 snap-start items-center gap-2 rounded-[14px_10px_16px_12px] border-2 border-line px-3 text-sm font-black shadow-[2px_3px_0_rgba(37,24,19,0.14)] ${selected ? `${step.color} ring-4 ring-[#251813]/10` : "bg-white"}`}
+                    aria-label={`Langkah ${step.order}: ${step.title}. ${status.done ? "Sudah selesai." : status.text}`}
                     aria-current={selected ? "page" : undefined}
+                    className={`flex min-h-11 shrink-0 snap-start items-center gap-2 rounded-[14px_10px_16px_12px] border-2 border-line px-3 text-sm font-black shadow-[2px_3px_0_rgba(37,24,19,0.14)] ${selected ? `${step.color} ring-4 ring-[#251813]/10` : "bg-white"}`}
                   >
                     <span aria-hidden="true">{status.done ? "✓" : step.order}</span>
-                    {step.short}
-                    <span className="sr-only">{status.done ? "selesai" : status.text}</span>
+                    <span aria-hidden="true">{step.short}</span>
                   </Link>
                 );
               })}
@@ -230,18 +257,18 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
             </div>
           </div>
 
-          {/* Layar besar: rail lengkap dengan nomor langkah dan status nyata. */}
-          <div className="hidden lg:block lg:sticky lg:top-5">
-            <div className="doodle-card bg-[var(--paper-strong)] p-4">
-              <div className="mb-4">
+          {/* Layar besar: rail ringkas, satu baris per langkah, dengan pengaman tinggi viewport. */}
+          <div className="hidden lg:block lg:sticky lg:top-5 lg:max-h-[calc(100dvh-2.5rem)] lg:overflow-y-auto">
+            <div className="doodle-card bg-[var(--paper-strong)] p-3">
+              <div className="mb-3">
                 <p className="text-xs font-black uppercase tracking-[0.12em] text-[#57443b]">Alur kerja</p>
-                <h2 className="mt-1 text-xl font-black leading-tight text-ink"><span className="doodle-title-mark">Langkah kerja</span></h2>
+                <h2 className="mt-1 text-lg font-black leading-tight text-ink"><span className="doodle-title-mark">Langkah kerja</span></h2>
               </div>
-              <nav aria-label="Langkah kerja" className="grid gap-2">
+              <nav aria-label="Langkah kerja" className="grid gap-1.5">
                 <Link
                   href="/"
-                  className={`flex min-h-11 items-center rounded-[16px_12px_18px_13px] border-2 border-line px-3 text-sm font-black shadow-[2px_3px_0_rgba(37,24,19,0.12)] transition hover:-translate-y-0.5 ${currentPage === "dashboard" ? "bg-white ring-4 ring-[#251813]/10" : "bg-[#fffaf0]"}`}
                   aria-current={currentPage === "dashboard" ? "page" : undefined}
+                  className={`flex min-h-11 items-center rounded-[14px_10px_16px_12px] border-2 border-line px-3 text-sm font-black shadow-[2px_3px_0_rgba(37,24,19,0.12)] transition hover:-translate-y-0.5 ${currentPage === "dashboard" ? "bg-white ring-4 ring-[#251813]/10" : "bg-[#fffaf0]"}`}
                 >
                   Ringkasan
                 </Link>
@@ -253,22 +280,27 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
                     <Link
                       key={step.id}
                       href={step.href}
-                      className={`flex min-h-11 items-start gap-3 rounded-[16px_12px_18px_13px] border-2 border-line p-3 shadow-[2px_3px_0_rgba(37,24,19,0.12)] transition hover:-translate-y-0.5 ${selected ? `${step.color} ring-4 ring-[#251813]/10` : "bg-white"}`}
                       aria-current={selected ? "page" : undefined}
+                      className={`grid min-h-11 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-[14px_10px_16px_12px] border-2 border-line px-2 py-1.5 shadow-[2px_3px_0_rgba(37,24,19,0.12)] transition hover:-translate-y-0.5 ${selected ? `${step.color} ring-4 ring-[#251813]/10` : "bg-white"}`}
                     >
-                      <span className="doodle-step-number" data-state={status.done ? "done" : "todo"} aria-hidden="true">
+                      <span
+                        aria-hidden="true"
+                        className={`grid h-8 w-8 shrink-0 place-items-center rounded-[13px_9px_14px_10px] border-2 border-line text-xs font-black shadow-[2px_2px_0_rgba(37,24,19,0.16)] ${status.done ? "bg-moss text-white" : "bg-[#fffaf0] text-ink"}`}
+                      >
                         {status.done ? "✓" : step.order}
                       </span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-black text-ink">{step.title}</span>
-                        <span className="mt-1 block text-xs font-semibold leading-5 text-[#57443b]">{status.text}</span>
-                        {isFocus ? <span className="mt-1 inline-block text-xs font-black text-moss">Lanjutkan di sini</span> : null}
+                      <span className="min-w-0 text-xs leading-4">
+                        <span className="block font-black text-ink">{step.title}</span>
+                        <span className="block font-semibold text-[#57443b]">
+                          {isFocus ? <span className="font-black text-moss">Mulai di sini. </span> : null}
+                          {status.short}
+                        </span>
                       </span>
                     </Link>
                   );
                 })}
               </nav>
-              <div className="mt-4 grid gap-2">
+              <div className="mt-3 grid gap-2">
                 <Button type="button" className="w-full" onClick={() => setPreviewOpen(true)}>
                   Lihat CV sekarang
                 </Button>
@@ -301,7 +333,7 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
 
           <div key={currentPage} className="motion-panel grid gap-5">
             {currentPage === "dashboard" ? (
-              <Dashboard focusStep={focusStep} stepStatus={stepStatus} />
+              <Dashboard focusStep={focusStep} metrics={metricCards} />
             ) : null}
             {currentPage === "master" ? (
               <div className="grid gap-5">
@@ -358,10 +390,10 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
 
 const Dashboard = ({
   focusStep,
-  stepStatus
+  metrics
 }: {
   focusStep: Step;
-  stepStatus: (id: StepId) => { text: string; done: boolean };
+  metrics: Array<{ label: string; value: string; help: string; href: string; color: string }>;
 }) => (
   <div className="grid gap-5">
     <Reveal>
@@ -384,34 +416,19 @@ const Dashboard = ({
       </section>
     </Reveal>
 
-    <section className="doodle-card bg-[var(--paper-strong)] p-5">
-      <h3 className="text-lg font-black text-ink"><span className="doodle-title-mark">Urutan lengkapnya</span></h3>
-      <p className="mt-2 text-sm font-semibold leading-6 text-[#4d3b33]">
-        Nomor yang sudah bertanda centang berarti bagian itu sudah terisi. Kamu bisa kembali ke langkah mana pun tanpa kehilangan data.
-      </p>
-      <ol className="mt-4 grid gap-3">
-        {steps.map((step, index) => {
-          const status = stepStatus(step.id);
-          return (
-            <Reveal key={step.id} delay={index * 70}>
-              <li>
-                <Link
-                  href={step.href}
-                  className="flex min-h-16 items-center gap-4 rounded-[20px_14px_22px_16px] border-2 border-line bg-white p-3 shadow-[3px_4px_0_rgba(37,24,19,0.12)] transition hover:-translate-y-0.5"
-                >
-                  <span className="doodle-step-number" data-state={status.done ? "done" : "todo"} aria-hidden="true">
-                    {status.done ? "✓" : step.order}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-black text-ink">{step.title}</span>
-                    <span className="mt-1 block text-xs font-semibold leading-5 text-[#57443b]">{status.text}</span>
-                  </span>
-                </Link>
-              </li>
-            </Reveal>
-          );
-        })}
-      </ol>
+    <section aria-label="Ringkasan kemajuan" className="grid gap-3 sm:grid-cols-3">
+      {metrics.map((metric, index) => (
+        <Reveal key={metric.label} delay={index * 60}>
+          <Link
+            href={metric.href}
+            className={`block h-full rounded-[24px_17px_26px_19px] border-2 border-line p-4 shadow-[4px_5px_0_rgba(37,24,19,0.12)] transition hover:-translate-y-0.5 ${metric.color}`}
+          >
+            <span className="block text-sm font-black text-[#57443b]">{metric.label}</span>
+            <span className="mt-2 block text-3xl font-black text-ink">{metric.value}</span>
+            <span className="mt-2 block text-xs font-semibold leading-5 text-[#4d3b33]">{metric.help}</span>
+          </Link>
+        </Reveal>
+      ))}
     </section>
   </div>
 );

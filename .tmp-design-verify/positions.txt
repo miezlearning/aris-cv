@@ -1,0 +1,27 @@
+halaman A4: lebar 595.28 pt, margin kiri 54.0 pt, batas kanan 541.28 pt
+
+      x       y  teks
+------------------------------------------------------------------------------
+   54.0   769.9  Aris Pratama
+   54.0   762.0  aris.pratama@example.com | 0812-3456-7890 | Jakarta Selatan | linkedin.com/in/arispratam
+   54.0   719.4  SUMMAR
+   54.0   695.3  Data analyst dengan pengalaman dua tahun menyusun laporan penjualan dan merapikan data
+   54.0   681.0  pelanggan memakai Excel dan SQL untuk kebutuhan tim penjualan.
+   54.0   650.7  EXPERIENCE
+  465.8   619.9  08/2024 - 
+  508.5   619.9  Presen
+   54.0   618.1  Data Analyst, PT Contoh Sejahter
+   66.0   604.3  Menyusun laporan penjualan mingguan sehingga waktu rekap turun dari 5 hari menjadi 1 hari.
+   66.0   588.0  Merapikan data pelanggan memakai SQL dan Excel untuk kebutuhan tim penjualan
+  464.2   565.0  01/2024 - 06/202
+   54.0   563.2  Intern Data, Startup Conto
+   66.0   549.4  Membantu menyiapkan dashboard penjualan memakai Power BI
+   54.0   519.1  EDUCATIO
+  434.9   488.3  Universitas Contoh, 2024
+   54.0   486.5  S1, Sistem Informasi
+   54.0   470.7  GPA/IPK: 3.75/4.00
+   54.0   442.4  SKILLS
+   54.0   418.3  SQL, analisis data, Excel, Power BI, komunikasi, kolaboras
+
+=== baris dengan dua potongan sejajar ===
+y=  619.9  kiri x= 465.8 '08/2024 - '   kanan x= 508.5 'Presen'

@@ -84,4 +84,4 @@ export type RewriteSuggestion = {
   status: "pending" | "accepted" | "rejected" | "edited";
 };
 
-export type ExportMode = "preview" | "clean";
+

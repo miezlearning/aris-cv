@@ -1,4 +1,9 @@
+/* Catatan dev: Turbopack pada versi Next ini hanya menghitung ulang CSS Tailwind saat
+   berkas ini berubah, bukan saat berkas komponen berubah. Kalau kamu menambah atau
+   menghapus kelas di komponen dan gayanya belum muncul, simpan ulang (touch) berkas ini
+   untuk memaksa regenerasi. Direktif @source di bawah membuat deteksi konten eksplisit. */
 @import "tailwindcss";
+@source "../**/*.{ts,tsx}";
 @plugin "daisyui";
 
 @font-face {
@@ -217,22 +222,6 @@ summary:focus-visible {
   line-height: 1.45;
 }
 
-.preview-watermark {
-  position: relative;
-}
-
-.preview-watermark::after {
-  content: "Pratinjau QuickTailor CV";
-  position: absolute;
-  inset: 40% auto auto 50%;
-  transform: translate(-50%, -50%) rotate(-20deg);
-  color: rgba(23, 33, 31, 0.08);
-  font-size: clamp(2rem, 9vw, 5rem);
-  font-weight: 700;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
 /* Motion layer (MOTION 2). Gerakan hanya menandai "baru muncul" dan "ini hasil barumu",
    lalu berhenti. Tidak ada loop dan tidak ada parallax. */
 :root {
@@ -318,25 +307,6 @@ summary:focus-visible {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.doodle-step-number {
-  display: grid;
-  place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  flex: 0 0 auto;
-  border: 2px solid var(--line);
-  border-radius: 18px 13px 20px 14px;
-  background: #fffaf0;
-  box-shadow: 3px 4px 0 rgba(37, 24, 19, 0.16);
-  font-weight: 900;
-  color: var(--ink);
-}
-
-.doodle-step-number[data-state="done"] {
-  background: var(--moss);
-  color: #ffffff;
 }
 
 @media (max-width: 640px) {

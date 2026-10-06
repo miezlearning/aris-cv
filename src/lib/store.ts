@@ -9,7 +9,6 @@ type AppState = {
   jobTarget: JobTarget;
   matchAnalytics: MatchAnalytics;
   suggestions: RewriteSuggestion[];
-  exportTokens: number;
   hydrated: boolean;
   setHydrated: (value: boolean) => void;
   updateContact: (field: keyof ResumeProfile["contact"], value: string) => void;
@@ -31,8 +30,6 @@ type AppState = {
   updateSuggestion: (id: string, patch: Partial<RewriteSuggestion>) => void;
   applySuggestion: (id: string, value?: string) => void;
   rejectSuggestion: (id: string) => void;
-  addExportToken: (count: number) => void;
-  consumeExportToken: () => boolean;
   resetAll: () => void;
 };
 
@@ -56,7 +53,6 @@ export const useCvStore = create<AppState>()(
       jobTarget: emptyJobTarget(),
       matchAnalytics: emptyAnalytics(),
       suggestions: [],
-      exportTokens: 0,
       hydrated: false,
       setHydrated: (value) => set({ hydrated: value }),
       updateContact: (field, value) =>
@@ -193,20 +189,12 @@ export const useCvStore = create<AppState>()(
         getState().updateSuggestion(id, { suggestion: finalValue, status: value ? "edited" : "accepted" });
       },
       rejectSuggestion: (id) => getState().updateSuggestion(id, { status: "rejected" }),
-      addExportToken: (count) => set((state) => ({ exportTokens: Math.max(0, state.exportTokens + count) })),
-      consumeExportToken: () => {
-        const tokens = getState().exportTokens;
-        if (tokens <= 0) return false;
-        set({ exportTokens: tokens - 1 });
-        return true;
-      },
       resetAll: () =>
         set({
           resumeProfile: emptyResumeProfile(),
           jobTarget: emptyJobTarget(),
           matchAnalytics: emptyAnalytics(),
-          suggestions: [],
-          exportTokens: 0
+          suggestions: []
         })
     }),
     {
@@ -216,8 +204,7 @@ export const useCvStore = create<AppState>()(
         resumeProfile: state.resumeProfile,
         jobTarget: state.jobTarget,
         matchAnalytics: state.matchAnalytics,
-        suggestions: state.suggestions,
-        exportTokens: state.exportTokens
+        suggestions: state.suggestions
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHydrated(true);
