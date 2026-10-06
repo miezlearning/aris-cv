@@ -233,6 +233,112 @@ summary:focus-visible {
   pointer-events: none;
 }
 
+/* Motion layer (MOTION 2). Gerakan hanya menandai "baru muncul" dan "ini hasil barumu",
+   lalu berhenti. Tidak ada loop dan tidak ada parallax. */
+:root {
+  --motion-fast: 160ms;
+  --motion-base: 260ms;
+  --motion-rise: 460ms;
+  --motion-ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.motion-rise {
+  opacity: 0;
+  transform: translateY(14px);
+}
+
+.motion-rise.is-visible {
+  animation: rise-in var(--motion-rise) var(--motion-ease) forwards;
+  animation-delay: var(--rise-delay, 0ms);
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.motion-pop {
+  animation: pop-in var(--motion-base) var(--motion-ease);
+}
+
+@keyframes pop-in {
+  from {
+    transform: scale(0.94);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.motion-drawer {
+  animation: drawer-in var(--motion-base) var(--motion-ease);
+}
+
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.motion-backdrop {
+  animation: backdrop-in var(--motion-fast) linear;
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Tab dan panel isi: konten baru masuk tanpa menggeser layout sekitarnya. */
+.motion-panel {
+  animation: panel-in var(--motion-base) var(--motion-ease);
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.doodle-step-number {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 auto;
+  border: 2px solid var(--line);
+  border-radius: 18px 13px 20px 14px;
+  background: #fffaf0;
+  box-shadow: 3px 4px 0 rgba(37, 24, 19, 0.16);
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.doodle-step-number[data-state="done"] {
+  background: var(--moss);
+  color: #ffffff;
+}
+
 @media (max-width: 640px) {
   .doodle-card {
     box-shadow: 4px 5px 0 rgba(37, 24, 19, 0.14);
@@ -240,6 +346,29 @@ summary:focus-visible {
 
   .doodle-card::after {
     inset: 5px -5px -5px 5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .motion-rise {
+    opacity: 1;
+    transform: none;
+  }
+
+  .doodle-btn.btn:hover {
+    transform: none;
   }
 }
 

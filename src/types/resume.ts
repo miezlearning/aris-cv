@@ -78,6 +78,8 @@ export type RewriteSuggestion = {
   bulletIndex: number;
   original: string;
   suggestion: string;
+  /** Catatan pola XYZ untuk poin ini, misalnya belum ada ukuran hasil. */
+  note?: string;
   keywordsUsed: string[];
   status: "pending" | "accepted" | "rejected" | "edited";
 };

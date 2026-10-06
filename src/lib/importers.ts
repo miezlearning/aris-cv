@@ -7,19 +7,22 @@ const firstValue = (...values: Array<unknown>) => values.find((value) => typeof 
 export const parseResumeInput = (raw: string): { profile: ResumeProfile; message: string } => {
   const value = raw.trim();
   if (!value) {
-    return { profile: emptyResumeProfile(), message: "Tidak ada teks yang diimpor." };
+    return { profile: emptyResumeProfile(), message: "Belum ada teks yang ditempel." };
   }
 
   try {
     const parsed = JSON.parse(value);
 
     if (parsed.resumeProfile) {
-      return { profile: normalizeProfile(parsed.resumeProfile), message: "JSON QuickTailor berhasil diimpor." };
+      return { profile: normalizeProfile(parsed.resumeProfile), message: "Data dari berkas QuickTailor berhasil dimasukkan. Periksa hasilnya di formulir bawah." };
     }
 
-    return { profile: fromJsonResume(parsed), message: "JSON Resume berhasil diimpor." };
+    return { profile: fromJsonResume(parsed), message: "Data dari berkas JSON Resume berhasil dimasukkan. Periksa hasilnya di formulir bawah." };
   } catch {
-    return { profile: fromStructuredText(value), message: "Teks resume dipetakan ke profil. Periksa ulang bagian pengalaman dan skills." };
+    return {
+      profile: fromStructuredText(value),
+      message: "Teks CV kamu berhasil dipisah menjadi beberapa bagian. Periksa bagian pengalaman dan keahlian, karena pemisahan otomatis sering masih perlu dirapikan."
+    };
   }
 };
 

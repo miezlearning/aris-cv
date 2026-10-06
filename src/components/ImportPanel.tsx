@@ -16,9 +16,9 @@ export const ImportPanel = () => {
 
   return (
     <SectionCard
-      title="Impor resume"
-      description="Tempel JSON Resume, JSON QuickTailor, atau teks resume terstruktur. Data tetap diproses di browser."
-      actions={<Button type="button" variant="secondary" onClick={() => setRaw("")}>Kosongkan input</Button>}
+      title="Punya CV lama? Tempel di sini"
+      description="Sistem akan mencoba memisahkan kontak, pengalaman, dan pendidikan secara otomatis. Kalau belum punya CV, lewati bagian ini dan langsung isi formulir di bawah. Semua diproses di perangkat ini."
+      actions={<Button type="button" variant="secondary" onClick={() => setRaw("")}>Kosongkan kotak</Button>}
     >
       <div className="grid gap-3">
         <div className="rounded-[20px_14px_22px_16px] border-2 border-line bg-[#fff0a8] p-3">
@@ -26,15 +26,17 @@ export const ImportPanel = () => {
             rows={6}
             value={raw}
             onChange={(event) => setRaw(event.target.value)}
-            placeholder="Tempel resume lama atau JSON Resume di sini"
+            placeholder="Tempel isi CV lama kamu di sini."
           />
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" onClick={handleImport} disabled={!raw.trim()}>
-            Impor ke Master CV
+            Isi otomatis dari teks ini
           </Button>
         </div>
-        {message ? <EmptyState title="Hasil impor" description={message} /> : null}
+        <div role="status" aria-live="polite">
+          {message ? <EmptyState title="Hasil pemisahan otomatis" description={message} /> : null}
+        </div>
       </div>
     </SectionCard>
   );

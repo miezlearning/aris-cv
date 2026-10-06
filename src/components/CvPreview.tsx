@@ -6,12 +6,15 @@ export const CvPreview = ({ watermarked = true }: { watermarked?: boolean }) => 
 
   return (
     <aside className="preview-shell max-h-none overflow-visible rounded-[34px_24px_36px_22px] border-2 border-line bg-[#fff0a8] p-4 shadow-panel lg:max-h-[calc(100dvh-2.5rem)] lg:overflow-auto lg:p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm font-black text-ink">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 text-sm font-black text-ink">
         <div>
-          <p className="text-xs uppercase tracking-[0.12em] text-[#57443b]">Live preview</p>
-          <span className="text-lg">ATS sheet</span>
+          <p className="text-xs uppercase tracking-[0.12em] text-[#57443b]">Pratinjau langsung</p>
+          <span className="text-lg">Lembar CV kamu</span>
+          <p className="mt-1 max-w-md text-xs font-semibold leading-5 text-[#57443b]">
+            Lembar ini ikut berubah setiap kali kamu mengetik. Judul bagian sengaja memakai istilah Inggris (Summary, Experience, Education, Skills) karena itu yang dicari sistem pembaca lowongan.
+          </p>
         </div>
-        <span className="rounded-[999px_12px_999px_14px] border-2 border-line bg-white px-3 py-1 text-xs shadow-[2px_3px_0_rgba(37,24,19,0.12)]">Single column</span>
+        <span className="rounded-[999px_12px_999px_14px] border-2 border-line bg-white px-3 py-1 text-xs shadow-[2px_3px_0_rgba(37,24,19,0.12)]">Satu kolom</span>
       </div>
       <div className="rounded-[24px_18px_28px_20px] border-2 border-line bg-[#251813] p-3 shadow-[4px_5px_0_rgba(37,24,19,0.12)] sm:p-4">
         <div className={`cv-paper mx-auto min-h-[980px] w-full max-w-[760px] rounded-[12px] border border-[#d7d7d7] p-7 shadow-[0_12px_32px_rgba(0,0,0,0.16)] sm:p-9 ${watermarked ? "preview-watermark" : ""}`}>
@@ -44,7 +47,7 @@ export const CvPreview = ({ watermarked = true }: { watermarked?: boolean }) => 
                     {experience.bulletPoints.filter(Boolean).length ? (
                       experience.bulletPoints.filter(Boolean).map((bullet, index) => <li key={index}>{bullet}</li>)
                     ) : (
-                      <li>Bullet pengalaman akan tampil di sini.</li>
+                      <li>Poin pengalaman akan tampil di sini.</li>
                     )}
                   </ul>
                 </div>
@@ -69,7 +72,7 @@ export const CvPreview = ({ watermarked = true }: { watermarked?: boolean }) => 
               {resume.skills.hardSkills.length ? <p><strong>Hard Skills:</strong> {resume.skills.hardSkills.join(", ")}</p> : null}
               {resume.skills.tools.length ? <p><strong>Tools:</strong> {resume.skills.tools.join(", ")}</p> : null}
               {resume.skills.softSkills.length ? <p><strong>Soft Skills:</strong> {resume.skills.softSkills.join(", ")}</p> : null}
-              {!resume.skills.hardSkills.length && !resume.skills.tools.length && !resume.skills.softSkills.length ? <p>Daftar skills akan tampil di sini.</p> : null}
+              {!resume.skills.hardSkills.length && !resume.skills.tools.length && !resume.skills.softSkills.length ? <p>Daftar keahlian akan tampil di sini.</p> : null}
             </div>
           </PreviewSection>
         </div>

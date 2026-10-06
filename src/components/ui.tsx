@@ -61,9 +61,10 @@ export const Tag = ({ tone, children }: { tone: "match" | "semantic" | "missing"
   return <span className={`doodle-chip inline-flex px-2.5 py-1 text-xs font-black ${styles[tone]}`}>{children}</span>;
 };
 
-export const EmptyState = ({ title, description }: { title: string; description: string }) => (
+export const EmptyState = ({ title, description, action }: { title: string; description: string; action?: ReactNode }) => (
   <div className="rounded-[19px_14px_21px_16px] border-2 border-dashed border-line bg-white p-4 text-sm shadow-[3px_4px_0_rgba(37,24,19,0.10)]">
     <p className="font-black text-ink">{title}</p>
     <p className="mt-1 leading-6 text-[#57443b]">{description}</p>
+    {action ? <div className="mt-3 flex flex-wrap gap-2">{action}</div> : null}
   </div>
 );

@@ -312,27 +312,122 @@ export const analyzeMatch = (resume: ResumeProfile, job: JobTarget): MatchAnalyt
   };
 };
 
-const pickSafeKeywords = (resume: ResumeProfile, analytics: MatchAnalytics, bullet: string) => {
-  const resumeText = makeResumeText(resume);
-  const bulletText = normalizeText(bullet);
-  return unique([...analytics.matchedKeywords, ...analytics.semanticKeywords])
-    .filter((keyword) => containsTerm(resumeText, keyword) || containsTerm(bulletText, keyword))
-    .slice(0, 2);
+export const hasMetric = (value: string) => /\d|%|rp\s?\d/i.test(value);
+
+/** Pembuka yang membuat poin pengalaman terdengar seperti deskripsi tugas, bukan pencapaian. */
+const fillerOpeners = [
+  "bertanggung jawab untuk",
+  "bertanggung jawab atas",
+  "bertanggung jawab dalam",
+  "ikut serta dalam",
+  "ikut membantu dalam",
+  "membantu dalam",
+  "membantu untuk",
+  "terlibat dalam",
+  "berperan dalam",
+  "ditugaskan untuk",
+  "tugas saya adalah",
+  "tugas saya",
+  "job desc",
+  "jobdesk"
+];
+
+/** Kata kerja lemah yang bisa diganti kata kerja lebih tegas tanpa mengubah artinya. */
+const verbUpgrades: Record<string, string> = {
+  membuat: "Menyusun",
+  buat: "Menyusun",
+  bikin: "Menyusun",
+  mengurus: "Mengelola",
+  mengatur: "Mengelola",
+  membantu: "Mendukung",
+  menolong: "Mendukung",
+  mengecek: "Memeriksa",
+  memberi: "Memberikan",
+  melakukan: "Menjalankan",
+  melaksanakan: "Menjalankan"
 };
 
-const hasMetric = (value: string) => /\d|%|rp\s?\d/i.test(value);
+const stripBulletMark = (value: string) => value.trim().replace(/^[-•*\u2022\s]+/, "").trim();
 
-const buildSuggestion = (bullet: string, role: string, keywords: string[]) => {
-  const clean = bullet.trim().replace(/^[-•]\s*/, "");
-  const keywordPhrase = keywords.length ? ` dengan konteks ${keywords.join(" dan ")}` : "";
+const stripFillerOpeners = (value: string) => {
+  let text = value;
+  let changed = true;
 
-  if (!clean) return "";
-
-  if (hasMetric(clean)) {
-    return `Meningkatkan kontribusi pada ${role || "peran terkait"}${keywordPhrase} melalui ${clean.charAt(0).toLowerCase()}${clean.slice(1)}`;
+  while (changed) {
+    changed = false;
+    const lower = text.toLowerCase();
+    const opener = fillerOpeners.find((item) => lower.startsWith(item));
+    if (opener) {
+      text = text.slice(opener.length).replace(/^[\s:,]+/, "").trim();
+      changed = true;
+    }
   }
 
-  return `Menangani ${role || "tanggung jawab utama"}${keywordPhrase} dengan menjalankan ${clean.charAt(0).toLowerCase()}${clean.slice(1)}`;
+  return text;
+};
+
+const looksLikeActionVerb = (word: string) => /^(me|ber|di|ter)[a-z]{3,}$/i.test(word);
+
+const capitalizeFirst = (value: string) => (value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value);
+
+const endSentence = (value: string) => (/[.!?]$/.test(value) ? value : `${value}.`);
+
+type SuggestionDraft = {
+  suggestion: string;
+  note: string;
+};
+
+/**
+ * Membangun ulang satu poin pengalaman memakai kerangka Google XYZ.
+ * Fungsi ini hanya menyusun ulang kata yang sudah ditulis pengguna: tidak menambah
+ * angka, sertifikat, alat, atau keahlian yang tidak ada di input.
+ */
+const buildSuggestion = (bullet: string): SuggestionDraft | null => {
+  const stripped = stripBulletMark(bullet);
+  const clean = stripFillerOpeners(stripped);
+  if (!clean) return null;
+
+  const words = clean.split(/\s+/);
+  const first = words[0] ?? "";
+  let body = clean;
+  let substantive = clean !== stripped;
+  let startsWithVerb = false;
+
+  const upgraded = verbUpgrades[first.toLowerCase()];
+  if (upgraded) {
+    body = [upgraded, ...words.slice(1)].join(" ");
+    substantive = true;
+    startsWithVerb = true;
+  } else if (looksLikeActionVerb(first)) {
+    const capitalized = capitalizeFirst(first);
+    if (capitalized !== first) substantive = true;
+    body = [capitalized, ...words.slice(1)].join(" ");
+    startsWithVerb = true;
+  } else {
+    const capitalized = capitalizeFirst(clean);
+    if (capitalized !== clean) substantive = true;
+    body = capitalized;
+  }
+
+  if (!substantive) return null;
+
+  const notes: string[] = [];
+  if (!startsWithVerb) {
+    notes.push("Kalimat ini belum dibuka dengan kata kerja. Sistem ATS membaca lebih baik kalau dimulai dengan kata kerja seperti Menyusun atau Mengelola.");
+  }
+  if (!hasMetric(body)) {
+    notes.push("Belum ada ukuran hasil. Tambahkan angka, persentase, atau jumlah kalau datanya memang ada. Jangan dikarang.");
+  }
+
+  return { suggestion: endSentence(body), note: notes.join(" ") };
+};
+
+/** Kata kunci lowongan yang sudah benar-benar terbaca di dalam poin ini. */
+const keywordsInBullet = (analytics: MatchAnalytics, bullet: string) => {
+  const bulletText = normalizeText(bullet);
+  return unique([...analytics.matchedKeywords, ...analytics.semanticKeywords])
+    .filter((keyword) => containsTerm(bulletText, keyword))
+    .slice(0, 3);
 };
 
 export const generateRewriteSuggestions = (resume: ResumeProfile, analytics: MatchAnalytics): RewriteSuggestion[] => {
@@ -340,23 +435,38 @@ export const generateRewriteSuggestions = (resume: ResumeProfile, analytics: Mat
     const items: RewriteSuggestion[] = [];
 
     experience.bulletPoints.forEach((bullet, bulletIndex) => {
-      const keywordsUsed = pickSafeKeywords(resume, analytics, bullet);
-      const suggestion = buildSuggestion(bullet, experience.role, keywordsUsed);
-      if (!suggestion || suggestion === bullet) return;
+      const draft = buildSuggestion(bullet);
+      if (!draft) return;
 
       items.push({
         id: createId(),
         experienceId: experience.id,
         bulletIndex,
         original: bullet,
-        suggestion,
-        keywordsUsed,
+        suggestion: draft.suggestion,
+        note: draft.note,
+        keywordsUsed: keywordsInBullet(analytics, bullet),
         status: "pending"
       });
     });
 
     return items;
   });
+};
+
+/** Arahan penempatan untuk satu kata kunci. Tidak pernah mengklaim pengguna punya keahlian itu. */
+export const describeKeywordAction = (match: KeywordMatch): string => {
+  if (match.status === "matched") return "Sudah terbaca di CV.";
+  if (match.status === "semantic") {
+    return `${match.reason} Pakai istilah yang sama persis dengan lowongan supaya sistem membacanya sebagai kecocokan langsung.`;
+  }
+  if (match.category === "requiredHardSkills") {
+    return "Kalau kamu memang menguasainya, tulis di Keahlian teknis lalu sebut di poin pengalaman yang memakainya.";
+  }
+  if (match.category === "domainKeywords") {
+    return "Sebut di ringkasan atau di poin pengalaman yang paling berhubungan dengan bidang ini.";
+  }
+  return "Tunjukkan lewat cara kerjamu di poin pengalaman, bukan hanya menuliskan namanya.";
 };
 
 export const buildAnalysis = (resume: ResumeProfile, job: JobTarget) => {
