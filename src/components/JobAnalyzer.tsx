@@ -35,56 +35,61 @@ export const JobAnalyzer = () => {
 
   const statusMessage = {
     idle: "",
-    loading: "Sedang membaca kata kunci dari iklan ini.",
-    error: "Isi iklan lowongan belum diisi. Tempel dulu teksnya, lalu coba lagi.",
-    success: "Selesai. Skor kecocokan ada di bawah. Buka langkah 3 untuk memperbaiki kalimat pengalaman."
+    loading: "Sedang membaca kata kunci dari iklan lowongan ini...",
+    error: "Teks iklan lowongan masih kosong. Tempel dulu teksnya, lalu tekan Cocokkan dengan CV saya.",
+    success: "Analisis selesai! Skor kecocokan ada di bawah. Buka Langkah 3 untuk memperbaiki butir pengalaman."
   }[status];
 
   const statusTone = {
     idle: "",
-    loading: "bg-[#e0f6fb] text-[#251813]",
-    error: "bg-[#ffe1d6] text-[#7b1f14]",
-    success: "bg-[#e4f6df] text-[#155436]"
+    loading: "bg-[#e0f6fb] text-[#1a4a58] border-[#7bc7d8]",
+    error: "bg-[#ffe1d6] text-[#7b1f14] border-[#e86f4d]",
+    success: "bg-[#e4f6df] text-[#155436] border-[#1f6b57]"
   }[status];
 
   return (
     <SectionCard
       title="Kata kunci dari lowongan"
-      description="Tempel seluruh isi iklan lowongan. Sistem membaca kata kunci yang diminta dan membandingkannya dengan isi CV kamu. Semua diproses di perangkat ini dan tidak dikirim ke server."
+      description="Tempel seluruh isi iklan lowongan kerja. Sistem membaca kata kunci kualifikasi dan membandingkannya dengan isi CV kamu secara lokal di perangkat ini."
       actions={
         <Button type="button" onClick={handleAnalyze} disabled={status === "loading"}>
-          {status === "loading" ? "Sedang membaca..." : "Cocokkan dengan CV saya"}
+          {status === "loading" ? "Sedang menganalisis..." : "Cocokkan dengan CV saya ➔"}
         </Button>
       }
     >
-      <div className="grid gap-3">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Judul posisi">
-            <TextInput value={job.jobTitle} onChange={(event) => updateJobTarget({ jobTitle: event.target.value })} placeholder="Contoh: Data Analyst" />
+      <div className="grid gap-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Judul posisi atau jabatan">
+            <TextInput value={job.jobTitle} onChange={(event) => updateJobTarget({ jobTitle: event.target.value })} placeholder="Contoh: Frontend Developer, Data Analyst" />
           </Field>
-          <Field label="Nama perusahaan" hint="Opsional.">
-            <TextInput value={job.companyName} onChange={(event) => updateJobTarget({ companyName: event.target.value })} placeholder="Nama perusahaan" />
+          <Field label="Nama perusahaan" hint="Opsional, membantu konteks analisis.">
+            <TextInput value={job.companyName} onChange={(event) => updateJobTarget({ companyName: event.target.value })} placeholder="Nama perusahaan atau agensi" />
           </Field>
         </div>
-        <Field label="Isi iklan lowongan" hint="Salin dari judul sampai persyaratan terakhir. Makin lengkap, makin akurat hasilnya.">
+
+        <Field label="Isi lengkap iklan lowongan" hint="Salin seluruh teks lowongan: tanggung jawab, persyaratan wajib, kualifikasi, dan alat yang digunakan.">
           <TextArea
-            rows={10}
+            rows={8}
             value={job.rawDescription}
             onChange={(event) => updateJobTarget({ rawDescription: event.target.value })}
-            placeholder="Tempel kualifikasi, tanggung jawab, dan persyaratan lowongan di sini."
+            placeholder="Tempel seluruh isi iklan lowongan dari LinkedIn, Jobstreet, Glints, atau portal kerja lainnya..."
           />
         </Field>
 
         <div role="status" aria-live="polite">
           {statusMessage ? (
-            <p className={`rounded-[18px_14px_20px_16px] border-2 border-line p-3 text-sm font-black ${statusTone}`}>{statusMessage}</p>
+            <p className={`rounded-xl border-2 p-4 text-sm font-bold ${statusTone}`}>{statusMessage}</p>
           ) : null}
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-3">
-          <KeywordGroup title="Keahlian teknis" items={job.extractedKeywords.requiredHardSkills} tone="blue" />
-          <KeywordGroup title="Bidang dan tanggung jawab" items={job.extractedKeywords.domainKeywords} tone="yellow" />
-          <KeywordGroup title="Sikap kerja" items={job.extractedKeywords.softSkills} tone="green" />
+        {/* Extracted Keyword Groups */}
+        <div>
+          <h3 className="text-sm font-bold text-ink mb-3">Kata kunci yang diekstraksi dari iklan:</h3>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <KeywordGroup title="Keahlian teknis (Hard Skills)" items={job.extractedKeywords.requiredHardSkills} tone="blue" />
+            <KeywordGroup title="Bidang & tanggung jawab" items={job.extractedKeywords.domainKeywords} tone="yellow" />
+            <KeywordGroup title="Sikap kerja (Soft Skills)" items={job.extractedKeywords.softSkills} tone="green" />
+          </div>
         </div>
       </div>
     </SectionCard>
@@ -92,13 +97,13 @@ export const JobAnalyzer = () => {
 };
 
 const KeywordGroup = ({ title, items, tone }: { title: string; items: string[]; tone: keyof typeof toneClass }) => (
-  <div className={`rounded-[19px_14px_21px_16px] border-2 border-line p-3 shadow-[3px_4px_0_rgba(37,24,19,0.10)] ${toneClass[tone]}`}>
-    <h3 className="text-sm font-black text-ink">{title}</h3>
-    <div className="mt-3 flex flex-wrap gap-2">
+  <div className={`rounded-2xl border-2 border-line p-4 sm:p-5 shadow-[2px_3px_0_rgba(37,24,19,0.08)] ${toneClass[tone]}`}>
+    <h4 className="text-sm font-bold text-ink">{title}</h4>
+    <div className="mt-3 flex flex-wrap gap-1.5">
       {items.length ? (
         items.map((item) => <Tag key={item} tone="neutral">{item}</Tag>)
       ) : (
-        <p className="text-sm font-semibold text-[#57443b]">Belum ada kata kunci.</p>
+        <p className="text-xs text-[#57443b]">Belum ada kata kunci.</p>
       )}
     </div>
   </div>

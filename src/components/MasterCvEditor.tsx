@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { Button, Field, SectionCard, TextArea, TextInput } from "@/components/ui";
 import { useCvStore } from "@/lib/store";
@@ -30,10 +32,14 @@ export const MasterCvEditor = () => {
   const updateSkills = useCvStore((state) => state.updateSkills);
 
   return (
-    <div className="grid gap-4">
-      <div className="doodle-card bg-[var(--paper-strong)] p-3">
-        <p className="mb-2 text-sm font-black text-ink">Pilih bagian yang mau diisi</p>
-        <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Bagian data CV">
+    <div className="grid gap-5">
+      {/* Clean Segmented Tab Navigation - No horizontal scrollbar! */}
+      <div className="doodle-card bg-[var(--paper-strong)] p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <p className="text-sm font-bold text-ink">Pilih bagian data CV:</p>
+          <span className="text-xs text-[#6b584d]">5 bagian standar format ATS</span>
+        </div>
+        <div className="flex flex-wrap gap-2 sm:gap-2.5" role="group" aria-label="Bagian data CV">
           {masterTabs.map((tab) => {
             const selected = activeTab === tab.id;
             return (
@@ -42,7 +48,11 @@ export const MasterCvEditor = () => {
                 type="button"
                 aria-pressed={selected}
                 onClick={() => setActiveTab(tab.id)}
-                className={`min-h-11 shrink-0 rounded-[999px_13px_999px_16px] border-2 border-line px-4 text-sm font-black shadow-[2px_3px_0_rgba(37,24,19,0.14)] transition hover:-translate-y-0.5 ${selected ? tab.color : "bg-white"}`}
+                className={`min-h-[44px] px-4 sm:px-5 py-2 rounded-xl text-sm font-bold border-2 border-line transition-all ${
+                  selected
+                    ? `${tab.color} shadow-[2px_3px_0_rgba(37,24,19,0.18)] translate-y-[-1px] ring-2 ring-line/20`
+                    : "bg-white text-ink/80 hover:bg-[#fffdf7] hover:-translate-y-0.5"
+                }`}
               >
                 {tab.label}
               </button>
@@ -51,13 +61,14 @@ export const MasterCvEditor = () => {
         </div>
       </div>
 
-      <div key={activeTab} className="motion-panel grid gap-4">
+      {/* Active Tab Panel */}
+      <div key={activeTab} className="motion-panel grid gap-5">
         {activeTab === "contact" ? (
           <SectionCard
             title="Kontak pribadi"
             description="Nama dan kontak diletakkan di bagian atas isi CV, bukan di header atau footer dokumen, supaya sistem ATS tetap bisa membacanya."
           >
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Nama lengkap">
                 <TextInput value={resume.contact.fullName} onChange={(event) => updateContact("fullName", event.target.value)} placeholder="Nama sesuai CV" />
               </Field>
@@ -85,12 +96,12 @@ export const MasterCvEditor = () => {
             title="Ringkasan tentang kamu"
             description="Tulis 3 sampai 5 kalimat: siapa kamu, bidang yang kamu tekuni, dan hal yang paling kamu kuasai. Semua isinya harus benar-benar ada di pengalaman atau keahlianmu."
           >
-            <Field label="Ringkasan" hint="Hindari kalimat klise seperti pekerja keras dan cepat belajar. Sebut hal yang bisa dibuktikan.">
+            <Field label="Ringkasan eksekutif" hint="Hindari kalimat klise seperti pekerja keras dan cepat belajar. Sebut hal konkret yang bisa dibuktikan.">
               <TextArea
-                rows={7}
+                rows={6}
                 value={resume.summary}
                 onChange={(event) => updateSummary(event.target.value)}
-                placeholder="Contoh: lulusan sistem informasi dengan pengalaman magang di bagian data. Terbiasa menyusun laporan bulanan dan merapikan data pelanggan."
+                placeholder="Contoh: Lulusan Sistem Informasi dengan pengalaman magang di bagian analisis data. Terbiasa mengolah spreadsheet transaksi, menyusun dasbor metrik, dan merapikan data pelanggan."
               />
             </Field>
           </SectionCard>
@@ -99,48 +110,75 @@ export const MasterCvEditor = () => {
         {activeTab === "experience" ? (
           <SectionCard
             title="Pengalaman kerja dan organisasi"
-            description="Tanggal memakai format MM/YYYY, contoh 08/2024. Kalau masih berjalan, tulis Present. Magang MSIB dan pengalaman organisasi boleh dimasukkan di sini."
-            actions={<Button type="button" variant="secondary" onClick={addExperience}>Tambah pengalaman</Button>}
+            description="Format tanggal: MM/YYYY (contoh: 08/2024). Kalau masih berjalan, tulis 'Present'. Magang MSIB dan pengalaman organisasi kampus boleh dimasukkan di sini."
+            actions={<Button type="button" variant="secondary" onClick={addExperience}>+ Tambah pengalaman</Button>}
           >
-            <div className="grid gap-4">
-              {resume.workExperience.map((experience) => (
-                <div key={experience.id} className="rounded-[22px_15px_24px_17px] border-2 border-line bg-[#e0f6fb] p-4 shadow-[4px_5px_0_rgba(37,24,19,0.12)]">
-                  <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-5">
+              {resume.workExperience.map((experience, expIndex) => (
+                <div key={experience.id} className="rounded-2xl border-2 border-line bg-[#f8fbff] p-5 sm:p-6 shadow-[2px_3px_0_rgba(37,24,19,0.08)]">
+                  <div className="flex items-center justify-between mb-4 border-b border-line/15 pb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#57443b]">Pengalaman #{expIndex + 1}</span>
+                    {resume.workExperience.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => removeExperience(experience.id)}
+                        className="text-xs font-bold text-[#a3291b] hover:underline"
+                      >
+                        Hapus bagian ini
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="Perusahaan atau organisasi">
-                      <TextInput value={experience.company} onChange={(event) => updateExperience(experience.id, { company: event.target.value })} placeholder="Nama perusahaan, MSIB, atau organisasi" />
+                      <TextInput value={experience.company} onChange={(event) => updateExperience(experience.id, { company: event.target.value })} placeholder="Nama perusahaan atau organisasi" />
                     </Field>
-                    <Field label="Posisi">
+                    <Field label="Posisi atau jabatan">
                       <TextInput value={experience.role} onChange={(event) => updateExperience(experience.id, { role: event.target.value })} placeholder="Posisi atau jabatan" />
                     </Field>
-                    <Field label="Mulai" hint="Format MM/YYYY.">
+                    <Field label="Bulan mulai" hint="Format MM/YYYY, contoh: 01/2023.">
                       <TextInput value={experience.startDate} onChange={(event) => updateExperience(experience.id, { startDate: event.target.value })} placeholder="MM/YYYY" />
                     </Field>
-                    <Field label="Selesai" hint="Format MM/YYYY, atau tulis Present.">
+                    <Field label="Bulan selesai" hint="Format MM/YYYY, atau tulis 'Present'.">
                       <TextInput value={experience.endDate} onChange={(event) => updateExperience(experience.id, { endDate: event.target.value, isCurrent: event.target.value.toLowerCase() === "present" })} placeholder="MM/YYYY atau Present" />
                     </Field>
                   </div>
-                  <div className="mt-4 grid gap-2">
-                    <p className="text-sm font-black text-ink">Poin pengalaman</p>
-                    <p className="text-xs font-semibold leading-5 text-[#57443b]">
-                      Satu poin berisi satu hal yang kamu kerjakan dan hasilnya. Kalau ada angkanya, tulis angkanya.
-                    </p>
-                    {experience.bulletPoints.map((bullet, index) => (
-                      <div key={`${experience.id}-${index}`} className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                        <TextArea rows={2} value={bullet} onChange={(event) => updateBullet(experience.id, index, event.target.value)} placeholder="Tulis tindakan, hasil, dan alat yang digunakan." />
-                        <Button type="button" variant="danger" onClick={() => removeBullet(experience.id, index)} aria-label={`Hapus poin ke-${index + 1}`}>
-                          Hapus
-                        </Button>
-                      </div>
-                    ))}
-                    <div className="flex flex-wrap gap-2">
+
+                  <div className="mt-5 border-t border-line/10 pt-4 grid gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-ink">Poin-poin pencapaian</p>
+                      <p className="text-xs text-[#57443b] mt-0.5">
+                        Tulis tindakan nyata, hasil/dampak, dan alat kerja. Kalau ada angka terukur (%, jumlah), cantumkan angkanya.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-2.5">
+                      {experience.bulletPoints.map((bullet, index) => (
+                        <div key={`${experience.id}-${index}`} className="flex flex-col sm:flex-row gap-2 sm:items-start">
+                          <div className="flex-1">
+                            <TextArea
+                              rows={2}
+                              value={bullet}
+                              onChange={(event) => updateBullet(experience.id, index, event.target.value)}
+                              placeholder="Contoh: Mengelola 5 kampanye pemasaran digital dengan kenaikan prospek 25% menggunakan Meta Ads."
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="danger"
+                            onClick={() => removeBullet(experience.id, index)}
+                            aria-label={`Hapus poin ke-${index + 1}`}
+                            className="shrink-0 self-end sm:self-start"
+                          >
+                            Hapus
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="pt-2">
                       <Button type="button" variant="secondary" onClick={() => addBullet(experience.id)}>
-                        Tambah poin
+                        + Tambah poin pencapaian
                       </Button>
-                      {resume.workExperience.length > 1 ? (
-                        <Button type="button" variant="danger" onClick={() => removeExperience(experience.id)}>
-                          Hapus pengalaman
-                        </Button>
-                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -151,37 +189,42 @@ export const MasterCvEditor = () => {
 
         {activeTab === "education" ? (
           <SectionCard
-            title="Pendidikan"
-            description="Isi IPK dengan skala 4.00 kalau kamu ingin mencantumkannya. Fresh graduate biasanya mencantumkan IPK, yang sudah punya pengalaman kerja biasanya tidak."
-            actions={<Button type="button" variant="secondary" onClick={addEducation}>Tambah pendidikan</Button>}
+            title="Riwayat pendidikan"
+            description="Tulis jenjang perguruan tinggi atau sekolah terakhir. Fresh graduate disarankan mencantumkan IPK skala 4.00 dan bulan/tahun kelulusan."
+            actions={<Button type="button" variant="secondary" onClick={addEducation}>+ Tambah pendidikan</Button>}
           >
-            <div className="grid gap-4">
-              {resume.education.map((education) => (
-                <div key={education.id} className="rounded-[18px_24px_17px_22px] border-2 border-line bg-[#fff0a8] p-4 shadow-[4px_5px_0_rgba(37,24,19,0.12)]">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Institusi">
-                      <TextInput value={education.institution} onChange={(event) => updateEducation(education.id, { institution: event.target.value })} placeholder="Universitas atau sekolah" />
+            <div className="grid gap-5">
+              {resume.education.map((education, eduIndex) => (
+                <div key={education.id} className="rounded-2xl border-2 border-line bg-[#fffdf7] p-5 sm:p-6 shadow-[2px_3px_0_rgba(37,24,19,0.08)]">
+                  <div className="flex items-center justify-between mb-4 border-b border-line/15 pb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#57443b]">Pendidikan #{eduIndex + 1}</span>
+                    {resume.education.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => removeEducation(education.id)}
+                        className="text-xs font-bold text-[#a3291b] hover:underline"
+                      >
+                        Hapus bagian ini
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Nama institusi atau universitas">
+                      <TextInput value={education.institution} onChange={(event) => updateEducation(education.id, { institution: event.target.value })} placeholder="Universitas atau Sekolah" />
                     </Field>
-                    <Field label="Jenjang" hint="Contoh: S1, D3, atau bootcamp.">
+                    <Field label="Jenjang" hint="Contoh: S1, D3, SMK, atau Bootcamp.">
                       <TextInput value={education.degree} onChange={(event) => updateEducation(education.id, { degree: event.target.value })} placeholder="S1, D3, Bootcamp" />
                     </Field>
-                    <Field label="Bidang studi">
+                    <Field label="Program studi atau jurusan">
                       <TextInput value={education.fieldOfStudy} onChange={(event) => updateEducation(education.id, { fieldOfStudy: event.target.value })} placeholder="Program studi" />
                     </Field>
-                    <Field label="IPK" hint="Tulis dengan skala 4.00.">
+                    <Field label="IPK atau Nilai Akhir" hint="Skala 4.00, contoh: 3.75/4.00.">
                       <TextInput value={education.gpa} onChange={(event) => updateEducation(education.id, { gpa: event.target.value })} placeholder="3.75/4.00" />
                     </Field>
-                    <Field label="Tahun lulus" hint="Empat angka, contoh 2025.">
+                    <Field label="Tahun kelulusan" hint="Empat angka, contoh: 2025.">
                       <TextInput value={education.graduationDate} onChange={(event) => updateEducation(education.id, { graduationDate: event.target.value })} placeholder="2025" />
                     </Field>
                   </div>
-                  {resume.education.length > 1 ? (
-                    <div className="mt-3">
-                      <Button type="button" variant="danger" onClick={() => removeEducation(education.id)}>
-                        Hapus pendidikan
-                      </Button>
-                    </div>
-                  ) : null}
                 </div>
               ))}
             </div>
@@ -191,17 +234,17 @@ export const MasterCvEditor = () => {
         {activeTab === "skills" ? (
           <SectionCard
             title="Keahlian kamu"
-            description="Daftar ini dipakai untuk mencocokkan CV dengan kata kunci lowongan. Tulis keahlian yang benar-benar kamu punya, karena kata kunci yang tidak didukung pengalaman justru terlihat mencurigakan saat wawancara."
+            description="Daftar ini dicocokkan langsung dengan kata kunci lowongan di Langkah 2. Tulis keahlian dan alat kerja yang benar-benar kamu kuasai."
           >
-            <div className="grid gap-3">
-              <Field label="Keahlian teknis" hint="Pisahkan dengan koma atau baris baru.">
-                <TextArea rows={4} value={resume.skills.hardSkills.join(", ")} onChange={(event) => updateSkills("hardSkills", splitList(event.target.value))} placeholder="SQL, analisis data, SEO" />
+            <div className="grid gap-4">
+              <Field label="Keahlian teknis (Hard Skills)" hint="Pisahkan dengan koma atau baris baru. Contoh: SQL, Pemodelan Data, SEO, Analisis Keuangan.">
+                <TextArea rows={4} value={resume.skills.hardSkills.join(", ")} onChange={(event) => updateSkills("hardSkills", splitList(event.target.value))} placeholder="SQL, analisis data, Python, Google Analytics" />
               </Field>
-              <Field label="Alat kerja" hint="Alat yang benar-benar pernah kamu pakai.">
-                <TextArea rows={4} value={resume.skills.tools.join(", ")} onChange={(event) => updateSkills("tools", splitList(event.target.value))} placeholder="Excel, Figma, Power BI" />
+              <Field label="Alat kerja (Tools & Software)" hint="Perangkat lunak yang pernah kamu gunakan. Contoh: Excel, Figma, Tableau, Git.">
+                <TextArea rows={4} value={resume.skills.tools.join(", ")} onChange={(event) => updateSkills("tools", splitList(event.target.value))} placeholder="Excel, Figma, Power BI, VS Code" />
               </Field>
-              <Field label="Sikap kerja" hint="Sebutkan sikap yang bisa kamu buktikan dengan cerita pengalaman.">
-                <TextArea rows={4} value={resume.skills.softSkills.join(", ")} onChange={(event) => updateSkills("softSkills", splitList(event.target.value))} placeholder="Komunikasi, kolaborasi, pemecahan masalah" />
+              <Field label="Sikap & kompetensi kerja (Soft Skills)" hint="Sikap yang bisa kamu buktikan dengan contoh nyata saat wawancara.">
+                <TextArea rows={4} value={resume.skills.softSkills.join(", ")} onChange={(event) => updateSkills("softSkills", splitList(event.target.value))} placeholder="Komunikasi, kolaborasi tim, pemecahan masalah" />
               </Field>
             </div>
           </SectionCard>

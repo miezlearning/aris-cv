@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BulletRewriter } from "@/components/BulletRewriter";
 import { CvPreview } from "@/components/CvPreview";
+import { DoodleArt } from "@/components/DoodleArt";
 import { ExportPanel } from "@/components/ExportPanel";
 import { Header } from "@/components/Header";
 import { ImportPanel } from "@/components/ImportPanel";
@@ -28,7 +29,6 @@ type Step = {
   color: string;
 };
 
-/** Urutan langkah ini mengikuti alur kerja produk yang sebenarnya, bukan template tiga langkah. */
 const steps: Step[] = [
   {
     id: "master",
@@ -45,14 +45,14 @@ const steps: Step[] = [
     order: 2,
     short: "Lowongan",
     title: "Tempel iklan lowongan",
-    body: "Salin seluruh isi iklan dari portal kerja. Sistem membaca kata kunci yang diminta dan menandai yang belum ada di CV kamu.",
+    body: "Salin seluruh isi iklan lowongan. Sistem membaca kata kunci yang diminta dan menandai yang belum ada di CV kamu.",
     color: "bg-[#e0f6fb]"
   },
   {
     id: "rewrite",
     href: "/optimasi",
     order: 3,
-    short: "Perbaiki",
+    short: "Optimasi",
     title: "Perbaiki kalimat pengalaman",
     body: "Pakai saran yang sesuai, lewati yang tidak. Sistem hanya menyusun ulang kalimatmu, tanpa menambah fakta baru.",
     color: "bg-[#e4f6df]"
@@ -62,8 +62,8 @@ const steps: Step[] = [
     href: "/export",
     order: 4,
     short: "Unduh",
-    title: "Unduh CV",
-    body: "Pilih format PDF atau DOCX, lalu unduh. Berkas dibuat di perangkat ini dan formatnya satu kolom supaya terbaca sistem pembaca lowongan.",
+    title: "Unduh CV siap kirim",
+    body: "Pilih format PDF atau DOCX. Berkas dibuat di perangkat ini dengan format satu kolom ramah sistem ATS.",
     color: "bg-[#ffe1d6]"
   }
 ];
@@ -74,35 +74,35 @@ const pageCopy: Record<WorkspacePage, { title: string; body: string; step?: numb
     body: "Empat langkah dari data mentah sampai CV siap dikirim. Semua data tersimpan di perangkat ini, bukan di server."
   },
   master: {
-    title: "Isi data CV",
+    title: "Langkah 1: Isi data CV",
     body: "Tulis apa adanya. Sistem hanya menyusun ulang kata yang kamu tulis sendiri, jadi tidak ada keahlian atau angka yang muncul tiba-tiba.",
     step: 1,
     next: "target"
   },
   target: {
-    title: "Tempel iklan lowongan",
-    body: "Masukkan judul posisi dan seluruh isi iklannya. Setelah dianalisis, kamu akan melihat kata kunci mana yang sudah terbaca dan mana yang belum.",
+    title: "Langkah 2: Tempel iklan lowongan",
+    body: "Masukkan judul posisi dan seluruh isi iklannya. Setelah dicocokkan, kamu akan melihat kata kunci mana yang sudah terbaca dan mana yang belum.",
     step: 2,
     next: "rewrite"
   },
   rewrite: {
-    title: "Perbaiki kalimat pengalaman",
-    body: "Setiap saran memakai kalimatmu sendiri dan mengikuti pola hasil, ukuran, dan cara kerja. Kalau datanya belum ada, sistem memintamu menambahkannya, bukan mengarang.",
+    title: "Langkah 3: Perbaiki kalimat pengalaman",
+    body: "Setiap saran memakai kalimatmu sendiri dan mengikuti pola tindakan, konteks, dan ukuran hasil (metode Google XYZ).",
     step: 3,
     next: "export"
   },
   export: {
-    title: "Unduh CV",
-    body: "Pilih format PDF atau DOCX, lalu unduh. Berkas dibuat di perangkat ini dan formatnya satu kolom supaya terbaca sistem pembaca lowongan.",
+    title: "Langkah 4: Unduh CV siap kirim",
+    body: "Pilih format PDF atau DOCX, lalu unduh. Berkas dibuat di perangkat ini dengan format satu kolom supaya aman untuk ATS.",
     step: 4
   }
 };
 
 export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) => {
   const [mounted, setMounted] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [confirmReset, setConfirmReset] = useState(false);
-  const resetAll = useCvStore((state) => state.resetAll);
+  const [previewOpenDesktop, setPreviewOpenDesktop] = useState(true);
+  const [modalPreviewOpen, setModalPreviewOpen] = useState(false);
+
   const resumeProfile = useCvStore((state) => state.resumeProfile);
   const job = useCvStore((state) => state.jobTarget);
   const analytics = useCvStore((state) => state.matchAnalytics);
@@ -111,7 +111,8 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
   const completeness = getResumeCompleteness(resumeProfile);
   const analyzed = analytics.keywordMatches.length > 0;
   const pendingSuggestions = suggestions.filter((item) => item.status === "pending").length;
-  const current = steps.find((step) => step.id === currentPage);
+
+  const currentStep = steps.find((step) => step.id === currentPage);
   const copy = pageCopy[currentPage];
   const nextStep = copy.next ? steps.find((step) => step.id === copy.next) : undefined;
 
@@ -130,25 +131,43 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
       };
     }
     if (id === "rewrite") {
-      if (!suggestions.length) return { text: "Belum ada saran", short: "Belum ada saran", done: false };
+      if (!suggestions.length) return { text: "Belum ada saran", short: "Belum ada", done: false };
       if (pendingSuggestions) {
         return {
           text: `${pendingSuggestions} saran menunggu keputusanmu`,
-          short: `${pendingSuggestions} saran menunggu`,
+          short: `${pendingSuggestions} saran`,
           done: false
         };
       }
-      return { text: `${suggestions.length} saran sudah diputuskan`, short: `${suggestions.length} saran selesai`, done: true };
+      return { text: `${suggestions.length} saran sudah diputuskan`, short: "Selesai", done: true };
     }
-    return { text: "Siap diunduh dalam format PDF atau DOCX", short: "Siap diunduh", done: false };
+    return { text: "Siap diunduh dalam format PDF atau DOCX", short: "Siap", done: false };
   };
 
   const focusStep = steps.find((step) => !stepStatus(step.id).done) ?? steps[steps.length - 1];
 
   const metricCards: Array<{ label: string; value: string; help: string; href: string; color: string }> = [
-    { label: "Data CV", value: `${completeness}%`, help: "semakin tinggi, semakin lengkap", href: "/master-cv", color: "bg-[#fff0a8]" },
-    { label: "Skor kecocokan", value: analyzed ? `${analytics.overallScore}%` : "Belum ada", help: "dari kata kunci iklan lowongan", href: "/lowongan", color: "bg-[#e0f6fb]" },
-    { label: "Saran siap", value: String(suggestions.length), help: pendingSuggestions ? `${pendingSuggestions} menunggu keputusan` : "semua sudah diputuskan", href: "/optimasi", color: "bg-[#e4f6df]" }
+    {
+      label: "Kelengkapan data CV",
+      value: `${completeness}%`,
+      help: completeness >= 80 ? "Sudah lengkap untuk diproses" : "Perlu dilengkapi di Langkah 1",
+      href: "/master-cv",
+      color: "bg-[#fff0a8]"
+    },
+    {
+      label: "Skor kecocokan ATS",
+      value: analyzed ? `${analytics.overallScore}%` : "Belum ada",
+      help: analyzed ? `Dari kata kunci ${job.jobTitle || "lowongan"}` : "Tempel iklan di Langkah 2",
+      href: "/lowongan",
+      color: "bg-[#e0f6fb]"
+    },
+    {
+      label: "Saran perbaikan",
+      value: String(suggestions.length),
+      help: pendingSuggestions ? `${pendingSuggestions} menunggu keputusanmu` : "Semua saran sudah selesai",
+      href: "/optimasi",
+      color: "bg-[#e4f6df]"
+    }
   ];
 
   useEffect(() => {
@@ -156,279 +175,285 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
   }, []);
 
   useEffect(() => {
-    if (!previewOpen) return;
+    if (!modalPreviewOpen) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPreviewOpen(false);
+      if (event.key === "Escape") setModalPreviewOpen(false);
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [previewOpen]);
+  }, [modalPreviewOpen]);
 
-  // Latar tidak boleh ikut bergeser saat drawer terbuka.
+  // Lock background scroll when modal preview is open
   useEffect(() => {
-    if (!previewOpen) return;
+    if (!modalPreviewOpen) return;
 
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previous;
     };
-  }, [previewOpen]);
+  }, [modalPreviewOpen]);
 
   if (!mounted) {
     return (
-      <main className="doodle-stage min-h-screen p-4 sm:p-6">
-        <div className="mx-auto grid min-h-[70vh] max-w-2xl place-items-center">
-          <div className="doodle-card bg-[var(--paper-strong)] p-6 text-center">
-            <p className="text-sm font-black uppercase tracking-[0.12em] text-[#57443b]">QuickTailor CV</p>
-            <h1 className="mt-2 text-2xl font-black text-ink">Menyiapkan ruang kerja</h1>
-            <p className="mt-3 text-sm font-semibold leading-6 text-[#4d3b33]">Data CV dimuat dari penyimpanan perangkat ini. Tunggu sebentar.</p>
-          </div>
+      <main className="doodle-stage min-h-screen p-4 sm:p-6 grid place-items-center">
+        <div className="doodle-card bg-[var(--paper-strong)] p-8 text-center max-w-md">
+          <p className="text-xs font-black uppercase tracking-widest text-[#57443b]">QuickTailor CV</p>
+          <h1 className="mt-2 text-2xl font-bold text-ink">Menyiapkan ruang kerja</h1>
+          <p className="mt-2 text-sm text-[#5c4a40]">Memuat data lokal dari perangkatmu...</p>
         </div>
       </main>
     );
   }
 
-  const resetControl = confirmReset ? (
-    <div className="rounded-[18px_13px_20px_14px] border-2 border-dashed border-line bg-[#ffe1d6] p-3">
-      <p className="text-xs font-black text-[#7b1f14]">Hapus semua data CV di perangkat ini?</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="danger"
-          onClick={() => {
-            resetAll();
-            setConfirmReset(false);
-          }}
-        >
-          Ya, hapus semua
-        </Button>
-        <Button type="button" variant="secondary" onClick={() => setConfirmReset(false)}>
-          Batal
-        </Button>
-      </div>
-    </div>
-  ) : (
-    <Button type="button" variant="danger" className="w-full" onClick={() => setConfirmReset(true)}>
-      Hapus semua data
-    </Button>
-  );
+  const isDashboard = currentPage === "dashboard";
 
   return (
-    <main className="doodle-stage min-h-screen">
-      <Header />
-      <section className="mx-auto grid max-w-[1500px] gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[245px_minmax(0,1fr)] lg:items-start lg:px-8 xl:grid-cols-[245px_minmax(0,1fr)_minmax(380px,0.92fr)]">
-        <aside className="min-w-0">
-          {/* Layar kecil: stepper mendatar, bukan daftar panjang yang mendorong isi ke bawah. */}
-          <div className="lg:hidden">
-            <p className="text-xs font-black uppercase tracking-[0.12em] text-[#57443b]">Langkah kerja</p>
-            <nav aria-label="Langkah kerja" className="mt-2 flex snap-x gap-2 overflow-x-auto pb-2">
-              <Link
-                href="/"
-                aria-current={currentPage === "dashboard" ? "page" : undefined}
-                className={`flex min-h-11 shrink-0 snap-start items-center rounded-[14px_10px_16px_12px] border-2 border-line px-3 text-sm font-black shadow-[2px_3px_0_rgba(37,24,19,0.14)] ${currentPage === "dashboard" ? "bg-white ring-4 ring-[#251813]/10" : "bg-[#fffaf0]"}`}
-              >
-                Ringkasan
-              </Link>
-              {steps.map((step) => {
-                const status = stepStatus(step.id);
-                const selected = currentPage === step.id;
-                return (
-                  <Link
-                    key={step.id}
-                    href={step.href}
-                    aria-label={`Langkah ${step.order}: ${step.title}. ${status.done ? "Sudah selesai." : status.text}`}
-                    aria-current={selected ? "page" : undefined}
-                    className={`flex min-h-11 shrink-0 snap-start items-center gap-2 rounded-[14px_10px_16px_12px] border-2 border-line px-3 text-sm font-black shadow-[2px_3px_0_rgba(37,24,19,0.14)] ${selected ? `${step.color} ring-4 ring-[#251813]/10` : "bg-white"}`}
-                  >
-                    <span aria-hidden="true">{status.done ? "✓" : step.order}</span>
-                    <span aria-hidden="true">{step.short}</span>
-                  </Link>
-                );
-              })}
-            </nav>
-            <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)]">
-              <Button type="button" variant="secondary" onClick={() => setPreviewOpen(true)}>
-                Lihat CV
-              </Button>
-              {resetControl}
-            </div>
-          </div>
+    <div className="doodle-stage min-h-screen flex flex-col">
+      <Header
+        currentPage={currentPage}
+        previewOpenDesktop={previewOpenDesktop}
+        onTogglePreviewDesktop={() => setPreviewOpenDesktop((prev) => !prev)}
+        onOpenMobilePreview={() => setModalPreviewOpen(true)}
+      />
 
-          {/* Layar besar: rail ringkas, satu baris per langkah, dengan pengaman tinggi viewport. */}
-          <div className="hidden lg:block lg:sticky lg:top-5 lg:max-h-[calc(100dvh-2.5rem)] lg:overflow-y-auto">
-            <div className="doodle-card bg-[var(--paper-strong)] p-3">
-              <div className="mb-3">
-                <p className="text-xs font-black uppercase tracking-[0.12em] text-[#57443b]">Alur kerja</p>
-                <h2 className="mt-1 text-lg font-black leading-tight text-ink"><span className="doodle-title-mark">Langkah kerja</span></h2>
+      <main className="flex-1 w-full mx-auto max-w-[1560px] px-4 py-6 sm:px-6 lg:px-8">
+        {isDashboard ? (
+          /* Dashboard Layout: Spacious 1-column Command Center */
+          <div className="mx-auto max-w-5xl grid gap-7 py-2 sm:py-4">
+            {/* Welcoming Hero Banner */}
+            <div className="doodle-card bg-[var(--paper-strong)] p-6 sm:p-8">
+              <div className="grid gap-6 lg:grid-cols-[1fr_260px] lg:items-center">
+                <div>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#fff0a8] text-[#57443b] border border-line/20 mb-3">
+                    🚀 Ruang Kerja Cepat & Privat
+                  </span>
+                  <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-ink leading-tight">
+                    Susun CV yang cocok dengan lowongan impianmu
+                  </h1>
+                  <p className="mt-3 text-sm sm:text-base leading-relaxed text-[#57443b] max-w-2xl">
+                    Cocokkan kata kunci lowongan, perbaiki butir pengalaman kerja dengan metode Google XYZ, dan unduh dokumen siap lolos saringan ATS. Semua data 100% tersimpan aman di browser perangkatmu.
+                  </p>
+                  <div className="mt-5 flex flex-wrap items-center gap-3">
+                    <Link
+                      href={focusStep.href}
+                      className="btn doodle-btn bg-moss text-white hover:bg-[#154538] px-5 py-2.5 text-sm font-bold shadow-[2px_3px_0_rgba(37,24,19,0.18)]"
+                    >
+                      Lanjutkan Langkah {focusStep.order}: {focusStep.short} ➔
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setModalPreviewOpen(true)}
+                      className="btn doodle-btn bg-white text-ink hover:bg-[#fff0a8]/60 px-4 py-2.5 text-sm font-bold"
+                    >
+                      Lihat Lembar CV Saat Ini
+                    </button>
+                  </div>
+                </div>
+
+                <div className="hidden lg:block h-44 rounded-2xl border-2 border-line/60 bg-[#fff0a8]/80 p-3 shadow-2xs">
+                  <DoodleArt />
+                </div>
               </div>
-              <nav aria-label="Langkah kerja" className="grid gap-1.5">
-                <Link
-                  href="/"
-                  aria-current={currentPage === "dashboard" ? "page" : undefined}
-                  className={`flex min-h-11 items-center rounded-[14px_10px_16px_12px] border-2 border-line px-3 text-sm font-black shadow-[2px_3px_0_rgba(37,24,19,0.12)] transition hover:-translate-y-0.5 ${currentPage === "dashboard" ? "bg-white ring-4 ring-[#251813]/10" : "bg-[#fffaf0]"}`}
-                >
-                  Ringkasan
-                </Link>
+            </div>
+
+            {/* Quick Metrics Grid */}
+            <section aria-label="Ringkasan kemajuan" className="grid gap-4 sm:grid-cols-3">
+              {metricCards.map((metric, index) => (
+                <Reveal key={metric.label} delay={index * 50}>
+                  <Link
+                    href={metric.href}
+                    className={`block h-full rounded-2xl border-2 border-line p-5 shadow-[3px_4px_0_rgba(37,24,19,0.10)] transition-all hover:-translate-y-1 ${metric.color}`}
+                  >
+                    <span className="block text-xs font-bold uppercase tracking-wider text-[#57443b]">{metric.label}</span>
+                    <span className="mt-2 block text-3xl sm:text-4xl font-black text-ink">{metric.value}</span>
+                    <span className="mt-2 block text-xs font-medium text-[#4d3b33] leading-relaxed">{metric.help}</span>
+                  </Link>
+                </Reveal>
+              ))}
+            </section>
+
+            {/* 4 Steps Interactive Roadmap */}
+            <section aria-label="Alur 4 Langkah Kerja" className="grid gap-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-ink">Alur 4 Langkah Kerja</h2>
+                  <p className="text-xs sm:text-sm text-[#57443b] mt-0.5">Selesaikan berurutan untuk hasil CV terbaik</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {steps.map((step) => {
                   const status = stepStatus(step.id);
-                  const selected = currentPage === step.id;
-                  const isFocus = focusStep.id === step.id && !selected;
+                  const isCurrentFocus = focusStep.id === step.id;
                   return (
-                    <Link
+                    <div
                       key={step.id}
-                      href={step.href}
-                      aria-current={selected ? "page" : undefined}
-                      className={`grid min-h-11 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-[14px_10px_16px_12px] border-2 border-line px-2 py-1.5 shadow-[2px_3px_0_rgba(37,24,19,0.12)] transition hover:-translate-y-0.5 ${selected ? `${step.color} ring-4 ring-[#251813]/10` : "bg-white"}`}
+                      className={`rounded-2xl border-2 border-line p-5 flex flex-col justify-between shadow-[2px_3px_0_rgba(37,24,19,0.08)] transition-all ${
+                        isCurrentFocus ? "bg-white ring-4 ring-moss/20" : "bg-white/90"
+                      }`}
                     >
-                      <span
-                        aria-hidden="true"
-                        className={`grid h-8 w-8 shrink-0 place-items-center rounded-[13px_9px_14px_10px] border-2 border-line text-xs font-black shadow-[2px_2px_0_rgba(37,24,19,0.16)] ${status.done ? "bg-moss text-white" : "bg-[#fffaf0] text-ink"}`}
-                      >
-                        {status.done ? "✓" : step.order}
-                      </span>
-                      <span className="min-w-0 text-xs leading-4">
-                        <span className="block font-black text-ink">{step.title}</span>
-                        <span className="block font-semibold text-[#57443b]">
-                          {isFocus ? <span className="font-black text-moss">Mulai di sini. </span> : null}
-                          {status.short}
-                        </span>
-                      </span>
-                    </Link>
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <span
+                            className={`grid h-8 w-8 place-items-center rounded-xl border-2 border-line text-xs font-black shadow-2xs ${
+                              status.done ? "bg-moss text-white" : `${step.color} text-ink`
+                            }`}
+                          >
+                            {status.done ? "✓" : step.order}
+                          </span>
+                          <span
+                            className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                              status.done
+                                ? "bg-[#dff4dc] text-[#155436] border-[#b2e5ac]"
+                                : isCurrentFocus
+                                ? "bg-[#fff0a8] text-[#604200] border-[#edd072]"
+                                : "bg-stone-100 text-[#5c4a40] border-stone-200"
+                            }`}
+                          >
+                            {status.done ? "Selesai" : isCurrentFocus ? "Titik Mulai" : "Belum"}
+                          </span>
+                        </div>
+                        <h3 className="text-base font-bold text-ink">{step.title}</h3>
+                        <p className="mt-1.5 text-xs text-[#57443b] leading-relaxed">{step.body}</p>
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t border-line/10">
+                        <Link
+                          href={step.href}
+                          className={`btn doodle-btn w-full min-h-[38px] text-xs font-bold justify-center ${
+                            isCurrentFocus
+                              ? "bg-moss text-white hover:bg-[#154538]"
+                              : "bg-[#fffdf7] text-ink hover:bg-[#fff0a8]"
+                          }`}
+                        >
+                          Buka Langkah {step.order}
+                        </Link>
+                      </div>
+                    </div>
                   );
                 })}
-              </nav>
-              <div className="mt-3 grid gap-2">
-                <Button type="button" className="w-full" onClick={() => setPreviewOpen(true)}>
-                  Lihat CV sekarang
-                </Button>
-                {resetControl}
+              </div>
+            </section>
+          </div>
+        ) : (
+          /* Workspace Steps Layout: Spacious 2-Column or Focused 1-Column */
+          <div>
+            {/* Step Context Sub-header Banner */}
+            <div className={`doodle-card mb-6 p-4 sm:p-5 ${currentStep ? currentStep.color : "bg-[#fff0a8]"}`}>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-white text-ink border border-line/30 shadow-2xs">
+                      Langkah {copy.step} dari 4
+                    </span>
+                    <span className="text-xs font-bold text-[#57443b]">• {currentStep?.short}</span>
+                  </div>
+                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-ink">{copy.title}</h1>
+                  <p className="mt-1 text-xs sm:text-sm text-[#57443b] leading-relaxed max-w-2xl">{copy.body}</p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {nextStep ? (
+                    <Link
+                      href={nextStep.href}
+                      className="btn doodle-btn min-h-[42px] bg-moss text-white hover:bg-[#154538] px-4 py-2 text-xs sm:text-sm font-bold shadow-[2px_2px_0_rgba(37,24,19,0.18)]"
+                    >
+                      Lanjut ke Langkah {nextStep.order}: {nextStep.short} ➔
+                    </Link>
+                  ) : null}
+                </div>
               </div>
             </div>
-          </div>
-        </aside>
 
-        <section className="min-w-0">
-          <div className={`no-print doodle-card mb-5 p-5 ${current ? current.color : "bg-[#e0f6fb]"}`}>
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="max-w-3xl">
-                <p className="text-xs font-black uppercase tracking-[0.12em] text-[#57443b]">
-                  {copy.step ? `Langkah ${copy.step} dari ${steps.length}` : "Ringkasan"}
-                </p>
-                <h2 className="mt-1 text-2xl font-black leading-tight text-ink sm:text-3xl">{copy.title}</h2>
-                <p className="mt-2 text-sm font-semibold leading-6 text-[#4d3b33]">{copy.body}</p>
+            {/* Main Content Area */}
+            <div
+              className={`grid gap-6 items-start ${
+                previewOpenDesktop
+                  ? "lg:grid-cols-[minmax(0,1fr)_420px] xl:grid-cols-[minmax(0,1fr)_460px] 2xl:grid-cols-[minmax(0,1fr)_500px]"
+                  : "max-w-4xl mx-auto"
+              }`}
+            >
+              {/* Left Column: Spacious Form / Tool */}
+              <div className="min-w-0 grid gap-6">
+                {currentPage === "master" ? (
+                  <div className="grid gap-6">
+                    <ImportPanel />
+                    <MasterCvEditor />
+                  </div>
+                ) : null}
+
+                {currentPage === "target" ? (
+                  <div className="grid gap-6">
+                    <JobAnalyzer />
+                    <MatchDashboard />
+                  </div>
+                ) : null}
+
+                {currentPage === "rewrite" ? <BulletRewriter /> : null}
+
+                {currentPage === "export" ? <ExportPanel /> : null}
+
+                {/* Banner when desktop preview is closed */}
+                {!previewOpenDesktop ? (
+                  <div className="rounded-2xl border-2 border-dashed border-line/30 bg-white/70 p-4 text-center">
+                    <p className="text-xs text-[#57443b]">
+                      Pratinjau CV sedang disembunyikan untuk ruang menulis yang lebih luas.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewOpenDesktop(true)}
+                      className="mt-2 text-xs font-bold text-moss hover:underline"
+                    >
+                      Tampilkan Pratinjau Berdampingan
+                    </button>
+                  </div>
+                ) : null}
               </div>
-              {nextStep ? (
-                <Link
-                  className="btn doodle-btn min-h-11 border-2 border-line bg-moss px-4 py-2 text-sm font-black text-white hover:bg-[#154538]"
-                  href={nextStep.href}
-                >
-                  Lanjut ke langkah {nextStep.order}
-                </Link>
+
+              {/* Right Column: Sticky Live CV Preview (Zero scrollbar clutter!) */}
+              {previewOpenDesktop ? (
+                <div className="hidden lg:block sticky top-20">
+                  <CvPreview onOpenModal={() => setModalPreviewOpen(true)} />
+                </div>
               ) : null}
             </div>
           </div>
+        )}
+      </main>
 
-          <div key={currentPage} className="motion-panel grid gap-5">
-            {currentPage === "dashboard" ? (
-              <Dashboard focusStep={focusStep} metrics={metricCards} />
-            ) : null}
-            {currentPage === "master" ? (
-              <div className="grid gap-5">
-                <ImportPanel />
-                <MasterCvEditor />
-              </div>
-            ) : null}
-            {currentPage === "target" ? (
-              <div className="grid gap-5">
-                <JobAnalyzer />
-                <MatchDashboard />
-              </div>
-            ) : null}
-            {currentPage === "rewrite" ? <BulletRewriter /> : null}
-            {currentPage === "export" ? <ExportPanel /> : null}
-          </div>
-        </section>
-
-        <div className="hidden min-w-0 xl:block xl:sticky xl:top-5">
-          <CvPreview />
-        </div>
-      </section>
-
-      {previewOpen ? (
+      {/* Fullscreen / Drawer Modal for CV Preview (Accessible on mobile or when enlarged) */}
+      {modalPreviewOpen ? (
         <div
-          className="motion-backdrop fixed inset-0 z-50 grid bg-black/45 p-3 sm:p-5"
+          className="motion-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-6"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="preview-title"
-          onClick={() => setPreviewOpen(false)}
+          aria-labelledby="modal-preview-title"
+          onClick={() => setModalPreviewOpen(false)}
         >
           <div
-            className="motion-drawer ml-auto flex h-full w-full max-w-4xl flex-col gap-3 overflow-hidden rounded-[30px_22px_34px_24px] border-2 border-line bg-[var(--paper)] p-3 shadow-panel"
+            className="motion-rise is-visible flex h-full max-h-[94vh] w-full max-w-4xl flex-col rounded-2xl border-2 border-line bg-[var(--paper-strong)] p-4 sm:p-5 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 px-2">
+            <div className="flex items-center justify-between border-b border-line/15 pb-3 mb-3">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.12em] text-[#57443b]">Pratinjau</p>
-                <h2 id="preview-title" className="text-xl font-black text-ink">CV kamu saat ini</h2>
+                <h2 id="modal-preview-title" className="text-lg font-bold text-ink">
+                  Pratinjau Lengkap Lembar CV
+                </h2>
+                <p className="text-xs text-[#57443b]">Dokumen A4 sesuai standar sistem pembaca lowongan (ATS)</p>
               </div>
-              <Button type="button" variant="secondary" autoFocus onClick={() => setPreviewOpen(false)}>
-                Tutup pratinjau
+              <Button type="button" variant="secondary" autoFocus onClick={() => setModalPreviewOpen(false)}>
+                Tutup Pratinjau
               </Button>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto pr-1">
-              <CvPreview />
+            <div className="flex-1 min-h-0">
+              <CvPreview isModal={true} />
             </div>
           </div>
         </div>
       ) : null}
-    </main>
+    </div>
   );
 };
-
-const Dashboard = ({
-  focusStep,
-  metrics
-}: {
-  focusStep: Step;
-  metrics: Array<{ label: string; value: string; help: string; href: string; color: string }>;
-}) => (
-  <div className="grid gap-5">
-    <Reveal>
-      <section className={`doodle-card p-5 ${focusStep.color}`}>
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.12em] text-[#57443b]">Kerjakan ini dulu</p>
-            <h3 className="mt-2 text-2xl font-black leading-tight text-ink">
-              <span className="doodle-title-mark">Langkah {focusStep.order}: {focusStep.title}</span>
-            </h3>
-            <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-[#4d3b33]">{focusStep.body}</p>
-          </div>
-          <Link
-            className="btn doodle-btn min-h-11 border-2 border-line bg-moss px-5 py-3 text-sm font-black text-white hover:bg-[#154538]"
-            href={focusStep.href}
-          >
-            Buka langkah ini
-          </Link>
-        </div>
-      </section>
-    </Reveal>
-
-    <section aria-label="Ringkasan kemajuan" className="grid gap-3 sm:grid-cols-3">
-      {metrics.map((metric, index) => (
-        <Reveal key={metric.label} delay={index * 60}>
-          <Link
-            href={metric.href}
-            className={`block h-full rounded-[24px_17px_26px_19px] border-2 border-line p-4 shadow-[4px_5px_0_rgba(37,24,19,0.12)] transition hover:-translate-y-0.5 ${metric.color}`}
-          >
-            <span className="block text-sm font-black text-[#57443b]">{metric.label}</span>
-            <span className="mt-2 block text-3xl font-black text-ink">{metric.value}</span>
-            <span className="mt-2 block text-xs font-semibold leading-5 text-[#4d3b33]">{metric.help}</span>
-          </Link>
-        </Reveal>
-      ))}
-    </section>
-  </div>
-);

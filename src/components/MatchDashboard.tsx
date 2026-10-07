@@ -23,22 +23,22 @@ const categoryLabels: Record<KeywordMatch["category"], string> = {
 const verdictFor = (score: number) => {
   if (score >= 75) {
     return {
-      label: "Sudah kuat",
+      label: "Kecocokan Sangat Kuat",
       note: "green" as const,
-      body: "Kata kunci utama lowongan ini sebagian besar sudah terbaca di CV kamu. Periksa sekali lagi sebelum mengirim."
+      body: "Sebagian besar kata kunci kualifikasi utama lowongan ini sudah terbaca jelas di CV kamu. Peluang lolos saringan awal ATS sangat tinggi."
     };
   }
   if (score >= 50) {
     return {
-      label: "Masih setengah jalan",
+      label: "Kecocokan Cukup Baik",
       note: "yellow" as const,
-      body: "Sebagian kata kunci sudah terbaca, sebagian belum. Menambahkan beberapa yang memang kamu kuasai biasanya cukup untuk menaikkan skor."
+      body: "Sebagian kata kunci sudah ada, tetapi masih ada beberapa yang belum muncul. Menambahkan keahlian yang relevan akan mendongkrak skor."
     };
   }
   return {
-    label: "Masih jauh",
+    label: "Perlu Peningkatan",
     note: "red" as const,
-    body: "Banyak kata kunci utama belum ada di CV kamu, jadi sistem pembaca lowongan berisiko melewatkan CV ini. Mulai dari daftar Belum ada di CV di bawah."
+    body: "Banyak kata kunci inti lowongan belum ditemukan di CV kamu. Sistem ATS berisiko melewatkan berkasmu. Lihat daftar kata kunci yang hilang di bawah."
   };
 };
 
@@ -48,15 +48,10 @@ export const MatchDashboard = () => {
 
   if (!hasKeywords) {
     return (
-      <SectionCard title="Skor kecocokan CV" description="Skor muncul setelah kamu menempelkan iklan lowongan di langkah 2.">
+      <SectionCard title="Skor kecocokan CV" description="Skor muncul setelah kamu menempelkan teks lowongan kerja di atas.">
         <EmptyState
-          title="Belum ada skor"
-          description="Isi data CV lebih dulu, lalu tempel iklan lowongan dan tekan Cocokkan dengan CV saya. Skor dan daftar kata kunci akan muncul di sini."
-          action={
-            <Link className="btn doodle-btn min-h-11 border-2 border-line bg-moss px-4 py-2 text-sm font-black text-white hover:bg-[#154538]" href="/lowongan">
-              Buka langkah 2
-            </Link>
-          }
+          title="Belum ada skor kecocokan"
+          description="Tempel isi iklan lowongan di bagian atas dan tekan tombol Cocokkan dengan CV saya. Skor kalkulasi ATS dan rincian kata kunci akan muncul di sini."
         />
       </SectionCard>
     );
@@ -74,66 +69,78 @@ export const MatchDashboard = () => {
 
   return (
     <SectionCard
-      title="Skor kecocokan CV"
-      description="Skor dihitung dari tiga hal: kata kunci yang persis sama, kata yang hanya serupa, dan kerapian format. Angka ini berasal dari perhitungan, bukan tebakan acak."
+      title="Skor kecocokan CV terhadap lowongan"
+      description="Skor dihitung secara transparan: 50% kecocokan kata kunci eksak, 30% kedekatan semantik, dan 20% kualitas format struktural dokumen."
     >
-      <div className="grid gap-4">
-        <div className={`doodle-card p-5 ${noteClass[verdict.note]}`}>
-          <div className="grid gap-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-5">
-            <div>
-              <p className="text-sm font-black text-[#4d3b33]">Skor total</p>
-              <AnimatedScore value={analytics.overallScore} className="mt-1 block text-5xl font-black leading-none text-ink" />
+      <div className="grid gap-5">
+        {/* Main Verdict Card */}
+        <div className={`doodle-card p-6 sm:p-7 ${noteClass[verdict.note]}`}>
+          <div className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-6">
+            <div className="text-center sm:text-left border-b sm:border-b-0 sm:border-r border-line/20 pb-3 sm:pb-0 sm:pr-6">
+              <p className="text-xs font-bold uppercase tracking-wider text-[#57443b]">Skor total ATS</p>
+              <AnimatedScore value={analytics.overallScore} className="mt-1 block text-5xl sm:text-6xl font-black leading-none text-ink" />
             </div>
             <div>
-              <p className="text-sm font-black text-ink">{verdict.label}</p>
-              <p className="mt-1 text-sm font-semibold leading-6 text-[#4d3b33]">{verdict.body}</p>
-              <p className="mt-2 text-sm font-bold text-[#4d3b33]">
-                {analytics.matchedKeywords.length} kata kunci sudah persis sama, {missing.length} belum ada.
+              <div className="flex items-center gap-2">
+                <span className="text-base sm:text-lg font-extrabold text-ink">{verdict.label}</span>
+              </div>
+              <p className="mt-1.5 text-sm text-[#4d3b33] leading-relaxed max-w-xl">{verdict.body}</p>
+              <p className="mt-2 text-xs font-bold text-[#57443b]">
+                ✓ {analytics.matchedKeywords.length} kata kunci cocok • {missing.length} belum ada di CV
               </p>
             </div>
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <ScoreCard label="Kata persis sama" value={analytics.exactMatchRate} help="Ditulis dengan istilah yang sama seperti di iklan." tone="green" />
-          <ScoreCard label="Kata serupa" value={analytics.semanticProximity} help="Sudah ada padanannya, tapi istilahnya berbeda." tone="blue" />
-          <ScoreCard label="Kerapian format" value={analytics.formatQualityScore} help="Kelengkapan kontak, format tanggal, dan angka di poin pengalaman." tone="yellow" />
+        {/* 3 Metric Breakdown Cards */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <ScoreCard label="Kata persis sama (50%)" value={analytics.exactMatchRate} help="Kata kunci yang identik dengan teks lowongan." tone="green" />
+          <ScoreCard label="Kata serupa (30%)" value={analytics.semanticProximity} help="Ada padanan istilah atau sinonim di CV kamu." tone="blue" />
+          <ScoreCard label="Format dokumen (20%)" value={analytics.formatQualityScore} help="Kelengkapan kontak, format tanggal, dan angka hasil." tone="yellow" />
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-3">
-          <KeywordList title="Sudah ada di CV" items={analytics.matchedKeywords} tone="match" note="green" empty="Belum ada yang persis sama." />
-          <KeywordList title="Ada padanannya" items={analytics.semanticKeywords} tone="semantic" note="yellow" empty="Tidak ada padanan." />
-          <KeywordList title="Belum ada di CV" items={missing.map((item) => item.keyword)} tone="missing" note="red" empty="Semua kata kunci sudah ada." />
+        {/* Keyword Lists in 3 Columns */}
+        <div>
+          <h3 className="text-sm font-bold text-ink mb-3">Status kata kunci yang ditemukan:</h3>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <KeywordList title="Sudah ada di CV" items={analytics.matchedKeywords} tone="match" note="green" empty="Belum ada kata kunci yang persis." />
+            <KeywordList title="Ada padanannya" items={analytics.semanticKeywords} tone="semantic" note="yellow" empty="Tidak ada padanan serupa." />
+            <KeywordList title="Belum ada di CV" items={missing.map((item) => item.keyword)} tone="missing" note="red" empty="Semua kata kunci utama sudah terpenuhi!" />
+          </div>
         </div>
 
+        {/* Actionable guidance for missing keywords */}
         {missingGroups.length ? (
-          <div className="rounded-[19px_14px_21px_16px] border-2 border-line bg-white p-4 shadow-[3px_4px_0_rgba(37,24,19,0.10)]">
-            <h3 className="text-sm font-black text-ink">Cara memasukkan kata kunci yang belum ada</h3>
-            <p className="mt-1 text-sm leading-6 text-[#57443b]">
-              Jangan hanya menempelkan katanya di akhir kalimat. Sebutkan di kalimat yang menjelaskan apa yang kamu kerjakan, dan hanya kalau kamu memang pernah melakukannya.
+          <div className="rounded-2xl border-2 border-line bg-white p-5 sm:p-6 shadow-[2px_3px_0_rgba(37,24,19,0.08)]">
+            <h3 className="text-base font-bold text-ink">Rekomendasi penempatan kata kunci yang belum ada</h3>
+            <p className="mt-1 text-xs sm:text-sm leading-relaxed text-[#57443b]">
+              Masukkan kata-kata ini ke dalam kalimat pengalaman nyata atau bagian keahlian. Hindari sekadar menumpuk kata kunci tanpa konteks yang bisa dipertanggungjawabkan saat wawancara.
             </p>
-            <div className="mt-3 grid gap-3">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {missingGroups.map((group) => (
-                <div key={group.category} className="rounded-[16px_12px_18px_13px] border-2 border-dashed border-line p-3">
-                  <p className="text-xs font-black uppercase tracking-[0.08em] text-[#57443b]">{group.label}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                <div key={group.category} className="rounded-xl border-2 border-dashed border-line/40 p-4 bg-[#fffdfa]">
+                  <p className="text-xs font-bold uppercase tracking-wider text-[#57443b]">{group.label}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     {group.items.map((item) => (
                       <Tag key={item.keyword} tone="missing">{item.keyword}</Tag>
                     ))}
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-[#4d3b33]">{describeKeywordAction(group.items[0])}</p>
+                  <p className="mt-2.5 text-xs text-[#5c4a40] leading-relaxed border-t border-line/10 pt-2">
+                    {describeKeywordAction(group.items[0])}
+                  </p>
                 </div>
               ))}
             </div>
           </div>
         ) : null}
 
-        <div className="rounded-[19px_14px_21px_16px] border-2 border-line bg-white p-3 text-sm leading-6 text-[#4d3b33] shadow-[3px_4px_0_rgba(37,24,19,0.10)]">
-          <p className="font-black text-ink">Catatan format</p>
+        {/* Structural format note */}
+        <div className="rounded-2xl border-2 border-line bg-white p-4 sm:p-5 text-xs sm:text-sm leading-relaxed text-[#4d3b33] shadow-[2px_3px_0_rgba(37,24,19,0.06)]">
+          <p className="font-bold text-ink mb-0.5">Evaluasi format standar ATS:</p>
           <p>
             {analytics.formatCheckPassed
-              ? "Struktur dasar sudah baik. Periksa lagi format tanggal MM/YYYY dan pastikan setiap poin pengalaman punya ukuran hasil."
-              : "Masih ada bagian format yang belum lengkap: kontak, ringkasan, daftar keahlian, format tanggal MM/YYYY, atau poin pengalaman yang belum memuat angka."}
+              ? "✓ Format dasar sudah sesuai standar ATS (satu kolom, judul baku, format tanggal konsisten)."
+              : "Periksa kelengkapan kontak, ringkasan profil, format tanggal (MM/YYYY), dan pastikan poin pengalaman kerja mencantumkan metrik terukur."}
           </p>
         </div>
       </div>
@@ -141,7 +148,6 @@ export const MatchDashboard = () => {
   );
 };
 
-/** Angka skor naik dari nol supaya mata pengguna berhenti di satu angka terpenting halaman ini. */
 const AnimatedScore = ({ value, className }: { value: number; className?: string }) => {
   const [shown, setShown] = useState(0);
 
@@ -170,10 +176,10 @@ const AnimatedScore = ({ value, className }: { value: number; className?: string
 };
 
 const ScoreCard = ({ label, value, help, tone }: { label: string; value: number; help: string; tone: keyof typeof noteClass }) => (
-  <div className={`doodle-score p-4 ${noteClass[tone]}`}>
-    <p className="text-sm font-black text-[#4d3b33]">{label}</p>
-    <p className="mt-2 text-3xl font-black text-ink">{value}%</p>
-    <p className="mt-2 text-xs font-semibold leading-5 text-[#4d3b33]">{help}</p>
+  <div className={`rounded-2xl border-2 border-line p-5 shadow-[2px_3px_0_rgba(37,24,19,0.08)] ${noteClass[tone]}`}>
+    <p className="text-xs font-bold uppercase tracking-wider text-[#57443b]">{label}</p>
+    <p className="mt-2 text-3xl sm:text-4xl font-black text-ink">{value}%</p>
+    <p className="mt-1.5 text-xs text-[#57443b] leading-relaxed">{help}</p>
   </div>
 );
 
@@ -190,12 +196,17 @@ const KeywordList = ({
   note: keyof typeof noteClass;
   empty: string;
 }) => (
-  <div className={`rounded-[19px_14px_21px_16px] border-2 border-line p-3 shadow-[3px_4px_0_rgba(37,24,19,0.10)] ${noteClass[note]}`}>
-    <h3 className="text-sm font-black text-ink">
-      {title} <span className="font-bold">({items.length})</span>
-    </h3>
-    <div className="mt-3 flex flex-wrap gap-2">
-      {items.length ? items.map((item) => <Tag key={item} tone={tone}>{item}</Tag>) : <p className="text-sm font-semibold text-[#57443b]">{empty}</p>}
+  <div className={`rounded-2xl border-2 border-line p-4 sm:p-5 shadow-[2px_3px_0_rgba(37,24,19,0.08)] ${noteClass[note]}`}>
+    <div className="flex items-center justify-between mb-2.5">
+      <h4 className="text-sm font-bold text-ink">{title}</h4>
+      <span className="text-xs font-bold text-[#57443b]">({items.length})</span>
+    </div>
+    <div className="flex flex-wrap gap-1.5">
+      {items.length ? (
+        items.map((item) => <Tag key={item} tone={tone}>{item}</Tag>)
+      ) : (
+        <p className="text-xs text-[#57443b]">{empty}</p>
+      )}
     </div>
   </div>
 );

@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { parseResumeInput } from "@/lib/importers";
 import { useCvStore } from "@/lib/store";
@@ -16,26 +18,33 @@ export const ImportPanel = () => {
 
   return (
     <SectionCard
-      title="Punya CV lama? Tempel di sini"
-      description="Sistem akan mencoba memisahkan kontak, pengalaman, dan pendidikan secara otomatis. Kalau belum punya CV, lewati bagian ini dan langsung isi formulir di bawah. Semua diproses di perangkat ini."
-      actions={<Button type="button" variant="secondary" onClick={() => setRaw("")}>Kosongkan kotak</Button>}
-    >
-      <div className="grid gap-3">
-        <div className="rounded-[20px_14px_22px_16px] border-2 border-line bg-[#fff0a8] p-3">
-          <TextArea
-            rows={6}
-            value={raw}
-            onChange={(event) => setRaw(event.target.value)}
-            placeholder="Tempel isi CV lama kamu di sini."
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" onClick={handleImport} disabled={!raw.trim()}>
-            Isi otomatis dari teks ini
+      title="Punya CV lama? Tempel untuk isi otomatis"
+      description="Sistem akan mengekstrak kontak, ringkasan, riwayat kerja, dan pendidikan secara otomatis. Jika belum punya CV lama, kamu bisa langsung mengisi formulir di bawah."
+      actions={
+        raw ? (
+          <Button type="button" variant="secondary" onClick={() => setRaw("")}>
+            Kosongkan teks
           </Button>
+        ) : null
+      }
+    >
+      <div className="grid gap-4">
+        <TextArea
+          rows={5}
+          value={raw}
+          onChange={(event) => setRaw(event.target.value)}
+          placeholder="Tempel seluruh isi teks CV lama kamu di sini (dari file Word, PDF, atau catatan lama)..."
+        />
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" onClick={handleImport} disabled={!raw.trim()}>
+            Ekstrak dan isi formulir otomatis ➔
+          </Button>
+          <span className="text-xs text-[#57443b]">Semua diproses langsung di browsermu</span>
         </div>
+
         <div role="status" aria-live="polite">
-          {message ? <EmptyState title="Hasil pemisahan otomatis" description={message} /> : null}
+          {message ? <EmptyState title="Hasil Pemisahan Otomatis" description={message} /> : null}
         </div>
       </div>
     </SectionCard>

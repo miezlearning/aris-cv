@@ -1,53 +1,102 @@
+"use client";
+
 import { buildResumeDocument, getMissingParts } from "@/lib/resume-document";
 import { useCvStore } from "@/lib/store";
 
-export const CvPreview = () => {
+export const CvPreview = ({
+  onOpenModal,
+  isModal = false
+}: {
+  onOpenModal?: () => void;
+  isModal?: boolean;
+}) => {
   const resume = useCvStore((state) => state.resumeProfile);
   const document = buildResumeDocument(resume);
   const missing = getMissingParts(resume);
 
   return (
-    <aside className="preview-shell max-h-none overflow-visible rounded-[34px_24px_36px_22px] border-2 border-line bg-[#fff0a8] p-4 shadow-panel lg:max-h-[calc(100dvh-2.5rem)] lg:overflow-auto lg:p-5">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 text-sm font-black text-ink">
+    <aside
+      className={`doodle-card bg-[var(--paper-strong)] flex flex-col ${
+        isModal
+          ? "h-full border-0 shadow-none p-2 sm:p-4"
+          : "h-full max-h-[calc(100dvh-5.25rem)] p-4 sm:p-5"
+      }`}
+    >
+      {/* Header bar of preview */}
+      <div className="mb-3.5 flex flex-wrap items-center justify-between gap-2 border-b border-line/15 pb-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.12em] text-[#57443b]">Pratinjau langsung</p>
-          <span className="text-lg">Lembar CV kamu</span>
-          <p className="mt-1 max-w-md text-xs font-semibold leading-5 text-[#57443b]">
-            Lembar ini persis isi berkas yang akan diunduh, termasuk urutan bagian dan judulnya. Judul bagian memakai istilah Inggris (Summary, Experience, Education, Skills) karena itu yang dikenali sistem pembaca lowongan.
-          </p>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-bold text-ink">Lembar CV kamu</h2>
+            <span className="rounded-full border border-line/30 bg-[#e4f6df] px-2.5 py-0.5 text-[11px] font-bold text-[#155436]">
+              Standar ATS
+            </span>
+          </div>
+          <p className="mt-0.5 text-xs text-[#57443b]">Format 1 kolom linear (Summary, Experience, Education, Skills)</p>
         </div>
-        <span className="rounded-[999px_12px_999px_14px] border-2 border-line bg-white px-3 py-1 text-xs shadow-[2px_3px_0_rgba(37,24,19,0.12)]">Satu kolom</span>
+
+        {onOpenModal && !isModal ? (
+          <button
+            type="button"
+            onClick={onOpenModal}
+            className="flex items-center gap-1.5 rounded-xl border border-line/40 bg-white px-2.5 py-1 text-xs font-bold text-ink shadow-2xs hover:bg-[#fff0a8]/60 transition"
+            title="Buka tampilan layar penuh"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 3 21 3 21 9" />
+              <polyline points="9 21 3 21 3 15" />
+              <line x1="21" y1="3" x2="14" y2="10" />
+              <line x1="3" y1="21" x2="10" y2="14" />
+            </svg>
+            <span>Perbesar</span>
+          </button>
+        ) : null}
       </div>
 
-      <div className="rounded-[24px_18px_28px_20px] border-2 border-line bg-[#251813] p-3 shadow-[4px_5px_0_rgba(37,24,19,0.12)] sm:p-4">
-        {/* Padding 9% meniru margin 0,75 inci pada berkas PDF, jadi lebar teks di
-            pratinjau sama dengan lebar teks di dokumen jadi. */}
-        <div className="cv-paper mx-auto min-h-[1050px] w-full max-w-[760px] rounded-[12px] border border-[#d7d7d7] p-[9%] shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
+      {/* CV Paper Workspace Frame (Scrollable vertically with sleek bar, zero horizontal scroll) */}
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded-xl border-2 border-line/20 bg-[#f4ece1]/80 p-2 sm:p-4">
+        <div className="cv-paper mx-auto w-full max-w-[720px] min-h-[720px] rounded-lg border border-stone-300 bg-white p-6 sm:p-9 shadow-md text-ink break-words">
           {document.isEmpty ? (
-            <p className="text-sm leading-6 text-[#4b5563]">
-              Lembar CV masih kosong. Isi data di langkah 1, lalu isinya akan muncul di sini dan ikut terunduh.
-            </p>
+            <div className="grid place-items-center py-16 text-center">
+              <div className="grid h-12 w-12 place-items-center rounded-full bg-[#fff0a8] text-ink mb-3 border border-line/30">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="12" y1="18" x2="12" y2="12" />
+                  <line x1="9" y1="15" x2="15" y2="15" />
+                </svg>
+              </div>
+              <p className="text-base font-bold text-ink">Lembar CV masih kosong</p>
+              <p className="mt-1 max-w-sm text-xs leading-relaxed text-[#6b584d]">
+                Isi data di <span className="font-bold text-ink">Langkah 1 (Data CV)</span>. Teks akan langsung muncul di lembar ini secara real-time.
+              </p>
+            </div>
           ) : (
             <>
-              {/* Garis pemisah dan tanggal rata kanan di bawah ini sama persis dengan
-                  yang digambar PDF dan DOCX, supaya pratinjau tidak pernah menipu. */}
+              {/* Header: Name and Contact */}
               {document.name || document.contact ? (
-                <header className="border-b-2 border-[#333333] pb-2">
+                <header className="border-b-2 border-[#222222] pb-2.5">
                   {document.name ? (
-                    <h2 className="text-[26px] font-bold leading-tight tracking-[0.01em] text-[#111111]">{document.name}</h2>
+                    <h1 className="text-2xl sm:text-[26px] font-bold leading-tight tracking-[0.01em] text-[#111111]">
+                      {document.name}
+                    </h1>
                   ) : null}
-                  {document.contact ? <p className="mt-0.5 text-[12px] text-[#444444]">{document.contact}</p> : null}
+                  {document.contact ? (
+                    <p className="mt-1 text-xs sm:text-[12px] text-[#444444] leading-relaxed">
+                      {document.contact}
+                    </p>
+                  ) : null}
                 </header>
               ) : null}
 
+              {/* Sections */}
               {document.sections.map((section) => (
                 <section key={section.heading} className="mt-4">
-                  <h3 className="border-b border-[#9AA0A6] pb-1 text-sm font-bold uppercase tracking-[0.06em] text-[#111111]">
+                  <h2 className="border-b border-[#888888] pb-1 text-xs sm:text-sm font-bold uppercase tracking-[0.06em] text-[#111111]">
                     {section.heading}
-                  </h3>
+                  </h2>
 
                   {section.paragraphs.map((paragraph, index) => (
-                    <p key={index} className="mt-1.5 text-sm leading-6 text-[#111111]">
+                    <p key={index} className="mt-1.5 text-xs sm:text-sm leading-relaxed text-[#111111]">
                       {paragraph}
                     </p>
                   ))}
@@ -55,17 +104,23 @@ export const CvPreview = () => {
                   {section.entries.map((entry, index) => (
                     <div key={index} className="mt-2.5">
                       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                        {entry.title ? <h4 className="text-[15px] font-bold text-[#111111]">{entry.title}</h4> : null}
-                        {entry.meta ? <p className="text-[12px] text-[#444444]">{entry.meta}</p> : null}
+                        {entry.title ? (
+                          <h3 className="text-xs sm:text-[14px] font-bold text-[#111111]">{entry.title}</h3>
+                        ) : null}
+                        {entry.meta ? (
+                          <p className="text-[11px] sm:text-[12px] text-[#555555]">{entry.meta}</p>
+                        ) : null}
                       </div>
                       {entry.bullets.length ? (
-                        <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm leading-6 text-[#111111]">
+                        <ul className="mt-1 list-disc space-y-0.5 pl-4 sm:pl-5 text-xs sm:text-sm leading-relaxed text-[#111111]">
                           {entry.bullets.map((bullet, bulletIndex) => (
                             <li key={bulletIndex}>{bullet}</li>
                           ))}
                         </ul>
                       ) : null}
-                      {entry.note ? <p className="mt-1 text-sm text-[#111111]">{entry.note}</p> : null}
+                      {entry.note ? (
+                        <p className="mt-1 text-xs text-[#444444]">{entry.note}</p>
+                      ) : null}
                     </div>
                   ))}
                 </section>
@@ -75,15 +130,18 @@ export const CvPreview = () => {
         </div>
       </div>
 
-      {missing.length ? (
-        <p className="mt-3 rounded-[18px_14px_20px_16px] border-2 border-dashed border-line bg-white p-3 text-xs font-semibold leading-5 text-[#4d3b33]">
-          Belum diisi: {missing.join(", ")}. Bagian yang kosong tidak muncul di lembar ini dan tidak ikut terunduh.
-        </p>
-      ) : (
-        <p className="mt-3 rounded-[18px_14px_20px_16px] border-2 border-dashed border-line bg-[#e4f6df] p-3 text-xs font-bold leading-5 text-[#155436]">
-          Semua bagian dasar sudah terisi.
-        </p>
-      )}
+      {/* Footer status summary */}
+      <div className="mt-3 pt-2 border-t border-line/10">
+        {missing.length ? (
+          <p className="text-[11px] font-semibold text-[#8a3319] leading-snug">
+            <span className="font-bold">Perlu dilengkapi:</span> {missing.join(", ")}.
+          </p>
+        ) : (
+          <p className="text-[11px] font-bold text-[#155436] flex items-center gap-1">
+            <span>✓</span> Semua bagian dasar sudah terisi dan siap diekspor.
+          </p>
+        )}
+      </div>
     </aside>
   );
 };
