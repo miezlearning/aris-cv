@@ -1,22 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { KumoTabs, type TabItem } from "@/components/KumoTabs";
 import { Button, Field, SectionCard, TextArea, TextInput } from "@/components/ui";
-import { useCvStore } from "@/lib/store";
+import { useCvStore, type MasterTab } from "@/lib/store";
 import { splitList } from "@/lib/text";
 
-type MasterTab = "contact" | "summary" | "experience" | "education" | "skills";
-
-const masterTabs: Array<{ id: MasterTab; label: string; color: string }> = [
-  { id: "contact", label: "Kontak", color: "bg-[#fff0a8]" },
-  { id: "summary", label: "Ringkasan", color: "bg-[#e0f6fb]" },
-  { id: "experience", label: "Pengalaman", color: "bg-[#e4f6df]" },
-  { id: "education", label: "Pendidikan", color: "bg-[#ffe1d6]" },
-  { id: "skills", label: "Keahlian", color: "bg-white" }
+const masterTabs: Array<TabItem<MasterTab>> = [
+  { value: "contact", label: "Kontak" },
+  { value: "summary", label: "Ringkasan" },
+  { value: "experience", label: "Pengalaman" },
+  { value: "education", label: "Pendidikan" },
+  { value: "skills", label: "Keahlian" }
 ];
 
 export const MasterCvEditor = () => {
-  const [activeTab, setActiveTab] = useState<MasterTab>("contact");
+  const activeTab = useCvStore((state) => state.activeMasterTab);
+  const setActiveTab = useCvStore((state) => state.setActiveMasterTab);
   const resume = useCvStore((state) => state.resumeProfile);
   const updateContact = useCvStore((state) => state.updateContact);
   const updateSummary = useCvStore((state) => state.updateSummary);
@@ -33,32 +32,16 @@ export const MasterCvEditor = () => {
 
   return (
     <div className="grid gap-5">
-      {/* Clean Segmented Tab Navigation - No horizontal scrollbar! */}
+      {/* Kumo-style Segmented Tab Navigation with Persistent State & Smooth Sliding Indicator */}
       <div className="doodle-card bg-[var(--paper-strong)] p-4 sm:p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-          <p className="text-sm font-bold text-ink">Pilih bagian data CV:</p>
-          <span className="text-xs text-[#6b584d]">5 bagian standar format ATS</span>
-        </div>
-        <div className="flex flex-wrap gap-2 sm:gap-2.5" role="group" aria-label="Bagian data CV">
-          {masterTabs.map((tab) => {
-            const selected = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => setActiveTab(tab.id)}
-                className={`min-h-[44px] px-4 sm:px-5 py-2 rounded-xl text-sm font-bold border-2 border-line transition-all ${
-                  selected
-                    ? `${tab.color} shadow-[2px_3px_0_rgba(37,24,19,0.18)] translate-y-[-1px] ring-2 ring-line/20`
-                    : "bg-white text-ink/80 hover:bg-[#fffdf7] hover:-translate-y-0.5"
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+        <p className="text-sm font-bold text-ink mb-3">Pilih bagian data CV:</p>
+        <KumoTabs<MasterTab>
+          tabs={masterTabs}
+          value={activeTab}
+          onValueChange={setActiveTab}
+          layoutId="master-editor-tabs-pill"
+          ariaLabel="Pilihan bagian data CV"
+        />
       </div>
 
       {/* Active Tab Panel */}
@@ -72,6 +55,9 @@ export const MasterCvEditor = () => {
               <Field label="Nama lengkap">
                 <TextInput value={resume.contact.fullName} onChange={(event) => updateContact("fullName", event.target.value)} placeholder="Nama sesuai CV" />
               </Field>
+              <Field label="Gelar / Headline profesional" hint="Contoh: Informatics Student | Full-Stack Developer">
+                <TextInput value={resume.contact.headline || ""} onChange={(event) => updateContact("headline", event.target.value)} placeholder="Informatics Student | Full-Stack Developer" />
+              </Field>
               <Field label="Email" hint="Pakai email yang kamu periksa setiap hari.">
                 <TextInput type="email" value={resume.contact.email} onChange={(event) => updateContact("email", event.target.value)} placeholder="email@example.com" />
               </Field>
@@ -82,9 +68,9 @@ export const MasterCvEditor = () => {
                 <TextInput value={resume.contact.location} onChange={(event) => updateContact("location", event.target.value)} placeholder="Kota, Provinsi" />
               </Field>
               <Field label="LinkedIn" hint="Kosongkan kalau belum punya.">
-                <TextInput value={resume.contact.linkedinUrl} onChange={(event) => updateContact("linkedinUrl", event.target.value)} placeholder="https://linkedin.com/in/..." />
+                <TextInput value={resume.contact.linkedinUrl} onChange={(event) => updateContact("linkedinUrl", event.target.value)} placeholder="linkedin.com/in/..." />
               </Field>
-              <Field label="Portofolio" hint="Kosongkan kalau belum punya.">
+              <Field label="Portofolio / Website" hint="Kosongkan kalau belum punya.">
                 <TextInput value={resume.contact.portfolioUrl} onChange={(event) => updateContact("portfolioUrl", event.target.value)} placeholder="https://..." />
               </Field>
             </div>
@@ -135,12 +121,17 @@ export const MasterCvEditor = () => {
                     <Field label="Posisi atau jabatan">
                       <TextInput value={experience.role} onChange={(event) => updateExperience(experience.id, { role: event.target.value })} placeholder="Posisi atau jabatan" />
                     </Field>
-                    <Field label="Bulan mulai" hint="Format MM/YYYY, contoh: 01/2023.">
-                      <TextInput value={experience.startDate} onChange={(event) => updateExperience(experience.id, { startDate: event.target.value })} placeholder="MM/YYYY" />
+                    <Field label="Kota / Lokasi perusahaan" hint="Contoh: Samarinda atau Yogyakarta.">
+                      <TextInput value={experience.location || ""} onChange={(event) => updateExperience(experience.id, { location: event.target.value })} placeholder="Kota, Provinsi (opsional)" />
                     </Field>
-                    <Field label="Bulan selesai" hint="Format MM/YYYY, atau tulis 'Present'.">
-                      <TextInput value={experience.endDate} onChange={(event) => updateExperience(experience.id, { endDate: event.target.value, isCurrent: event.target.value.toLowerCase() === "present" })} placeholder="MM/YYYY atau Present" />
-                    </Field>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field label="Mulai" hint="Contoh: Jan 2024">
+                        <TextInput value={experience.startDate} onChange={(event) => updateExperience(experience.id, { startDate: event.target.value })} placeholder="Jan 2024" />
+                      </Field>
+                      <Field label="Selesai" hint="Contoh: Present">
+                        <TextInput value={experience.endDate} onChange={(event) => updateExperience(experience.id, { endDate: event.target.value, isCurrent: event.target.value.toLowerCase() === "present" })} placeholder="Present" />
+                      </Field>
+                    </div>
                   </div>
 
                   <div className="mt-5 border-t border-line/10 pt-4 grid gap-3">

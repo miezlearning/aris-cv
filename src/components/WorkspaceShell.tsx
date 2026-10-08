@@ -6,13 +6,11 @@ import { BulletRewriter } from "@/components/BulletRewriter";
 import { CvPreview } from "@/components/CvPreview";
 import { DoodleArt } from "@/components/DoodleArt";
 import { ExportPanel } from "@/components/ExportPanel";
-import { Header } from "@/components/Header";
 import { ImportPanel } from "@/components/ImportPanel";
 import { JobAnalyzer } from "@/components/JobAnalyzer";
 import { MasterCvEditor } from "@/components/MasterCvEditor";
 import { MatchDashboard } from "@/components/MatchDashboard";
 import { Reveal } from "@/components/Reveal";
-import { Button } from "@/components/ui";
 import { getResumeCompleteness } from "@/lib/analyzer";
 import { useCvStore } from "@/lib/store";
 
@@ -98,10 +96,18 @@ const pageCopy: Record<WorkspacePage, { title: string; body: string; step?: numb
   }
 };
 
+let hasHydratedOnce = false;
+
 export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) => {
-  const [mounted, setMounted] = useState(false);
-  const [previewOpenDesktop, setPreviewOpenDesktop] = useState(true);
-  const [modalPreviewOpen, setModalPreviewOpen] = useState(false);
+  const isHydrated = useCvStore((state) => state.hydrated);
+  const [mounted, setMounted] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return hasHydratedOnce || isHydrated;
+  });
+
+  const previewOpenDesktop = useCvStore((state) => state.previewOpenDesktop);
+  const setPreviewOpenDesktop = useCvStore((state) => state.setPreviewOpenDesktop);
+  const setModalPreviewOpen = useCvStore((state) => state.setModalPreviewOpen);
 
   const resumeProfile = useCvStore((state) => state.resumeProfile);
   const job = useCvStore((state) => state.jobTarget);
@@ -171,55 +177,26 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
   ];
 
   useEffect(() => {
+    hasHydratedOnce = true;
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (!modalPreviewOpen) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setModalPreviewOpen(false);
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [modalPreviewOpen]);
-
-  // Lock background scroll when modal preview is open
-  useEffect(() => {
-    if (!modalPreviewOpen) return;
-
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, [modalPreviewOpen]);
-
   if (!mounted) {
     return (
-      <main className="doodle-stage min-h-screen p-4 sm:p-6 grid place-items-center">
+      <div className="flex-1 w-full min-h-[60vh] p-4 sm:p-6 grid place-items-center">
         <div className="doodle-card bg-[var(--paper-strong)] p-8 text-center max-w-md">
           <p className="text-xs font-black uppercase tracking-widest text-[#57443b]">QuickTailor CV</p>
           <h1 className="mt-2 text-2xl font-bold text-ink">Menyiapkan ruang kerja</h1>
           <p className="mt-2 text-sm text-[#5c4a40]">Memuat data lokal dari perangkatmu...</p>
         </div>
-      </main>
+      </div>
     );
   }
 
   const isDashboard = currentPage === "dashboard";
 
   return (
-    <div className="doodle-stage min-h-screen flex flex-col">
-      <Header
-        currentPage={currentPage}
-        previewOpenDesktop={previewOpenDesktop}
-        onTogglePreviewDesktop={() => setPreviewOpenDesktop((prev) => !prev)}
-        onOpenMobilePreview={() => setModalPreviewOpen(true)}
-      />
-
-      <main className="flex-1 w-full mx-auto max-w-[1560px] px-4 py-6 sm:px-6 lg:px-8">
+    <main className="flex-1 w-full mx-auto max-w-[1560px] px-4 py-6 sm:px-6 lg:px-8">
         {isDashboard ? (
           /* Dashboard Layout: Spacious 1-column Command Center */
           <div className="mx-auto max-w-5xl grid gap-7 py-2 sm:py-4">
@@ -227,9 +204,6 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
             <div className="doodle-card bg-[var(--paper-strong)] p-6 sm:p-8">
               <div className="grid gap-6 lg:grid-cols-[1fr_260px] lg:items-center">
                 <div>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#fff0a8] text-[#57443b] border border-line/20 mb-3">
-                    🚀 Ruang Kerja Cepat & Privat
-                  </span>
                   <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-ink leading-tight">
                     Susun CV yang cocok dengan lowongan impianmu
                   </h1>
@@ -241,7 +215,7 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
                       href={focusStep.href}
                       className="btn doodle-btn bg-moss text-white hover:bg-[#154538] px-5 py-2.5 text-sm font-bold shadow-[2px_3px_0_rgba(37,24,19,0.18)]"
                     >
-                      Lanjutkan Langkah {focusStep.order}: {focusStep.short} ➔
+                      Lanjutkan Langkah {focusStep.order}: {focusStep.short}
                     </Link>
                     <button
                       type="button"
@@ -302,18 +276,10 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
                               status.done ? "bg-moss text-white" : `${step.color} text-ink`
                             }`}
                           >
-                            {status.done ? "✓" : step.order}
+                            {step.order}
                           </span>
-                          <span
-                            className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-                              status.done
-                                ? "bg-[#dff4dc] text-[#155436] border-[#b2e5ac]"
-                                : isCurrentFocus
-                                ? "bg-[#fff0a8] text-[#604200] border-[#edd072]"
-                                : "bg-stone-100 text-[#5c4a40] border-stone-200"
-                            }`}
-                          >
-                            {status.done ? "Selesai" : isCurrentFocus ? "Titik Mulai" : "Belum"}
+                          <span className="text-xs font-semibold text-[#57443b]">
+                            {status.done ? "Selesai" : isCurrentFocus ? "Fokus saat ini" : "Belum mulai"}
                           </span>
                         </div>
                         <h3 className="text-base font-bold text-ink">{step.title}</h3>
@@ -345,12 +311,9 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
             <div className={`doodle-card mb-6 p-4 sm:p-5 ${currentStep ? currentStep.color : "bg-[#fff0a8]"}`}>
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-white text-ink border border-line/30 shadow-2xs">
-                      Langkah {copy.step} dari 4
-                    </span>
-                    <span className="text-xs font-bold text-[#57443b]">• {currentStep?.short}</span>
-                  </div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-[#57443b] mb-1">
+                    Langkah {copy.step} dari 4 : {currentStep?.short}
+                  </p>
                   <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-ink">{copy.title}</h1>
                   <p className="mt-1 text-xs sm:text-sm text-[#57443b] leading-relaxed max-w-2xl">{copy.body}</p>
                 </div>
@@ -361,7 +324,7 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
                       href={nextStep.href}
                       className="btn doodle-btn min-h-[42px] bg-moss text-white hover:bg-[#154538] px-4 py-2 text-xs sm:text-sm font-bold shadow-[2px_2px_0_rgba(37,24,19,0.18)]"
                     >
-                      Lanjut ke Langkah {nextStep.order}: {nextStep.short} ➔
+                      Lanjut ke Langkah {nextStep.order}: {nextStep.short}
                     </Link>
                   ) : null}
                 </div>
@@ -423,37 +386,5 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
           </div>
         )}
       </main>
-
-      {/* Fullscreen / Drawer Modal for CV Preview (Accessible on mobile or when enlarged) */}
-      {modalPreviewOpen ? (
-        <div
-          className="motion-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-6"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="modal-preview-title"
-          onClick={() => setModalPreviewOpen(false)}
-        >
-          <div
-            className="motion-rise is-visible flex h-full max-h-[94vh] w-full max-w-4xl flex-col rounded-2xl border-2 border-line bg-[var(--paper-strong)] p-4 sm:p-5 shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-line/15 pb-3 mb-3">
-              <div>
-                <h2 id="modal-preview-title" className="text-lg font-bold text-ink">
-                  Pratinjau Lengkap Lembar CV
-                </h2>
-                <p className="text-xs text-[#57443b]">Dokumen A4 sesuai standar sistem pembaca lowongan (ATS)</p>
-              </div>
-              <Button type="button" variant="secondary" autoFocus onClick={() => setModalPreviewOpen(false)}>
-                Tutup Pratinjau
-              </Button>
-            </div>
-            <div className="flex-1 min-h-0">
-              <CvPreview isModal={true} />
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-};
+    );
+  };

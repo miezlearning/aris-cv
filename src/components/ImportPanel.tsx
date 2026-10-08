@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { parseResumeInput } from "@/lib/importers";
+import { sampleDemoProfile } from "@/lib/defaults";
 import { useCvStore } from "@/lib/store";
 import { Button, EmptyState, SectionCard, TextArea } from "@/components/ui";
 
@@ -16,21 +17,32 @@ export const ImportPanel = () => {
     setMessage(result.message);
   };
 
+  const handleLoadSample = () => {
+    const sample = sampleDemoProfile();
+    setResumeProfile(sample);
+    setMessage("Data contoh CV dummy (sesuai format referensi ATS) berhasil dimuat ke editor!");
+  };
+
   return (
     <SectionCard
       title="Punya CV lama? Tempel untuk isi otomatis"
-      description="Sistem akan mengekstrak kontak, ringkasan, riwayat kerja, dan pendidikan secara otomatis. Jika belum punya CV lama, kamu bisa langsung mengisi formulir di bawah."
+      description="Sistem akan mengekstrak kontak, ringkasan, riwayat kerja, dan pendidikan secara otomatis. Kamu juga bisa memuat data contoh dummy untuk mencoba fitur."
       actions={
-        raw ? (
-          <Button type="button" variant="secondary" onClick={() => setRaw("")}>
-            Kosongkan teks
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="secondary" onClick={handleLoadSample}>
+            Muat Contoh CV (Dummy Data)
           </Button>
-        ) : null
+          {raw ? (
+            <Button type="button" variant="secondary" onClick={() => setRaw("")}>
+              Kosongkan teks
+            </Button>
+          ) : null}
+        </div>
       }
     >
       <div className="grid gap-4">
         <TextArea
-          rows={5}
+          rows={4}
           value={raw}
           onChange={(event) => setRaw(event.target.value)}
           placeholder="Tempel seluruh isi teks CV lama kamu di sini (dari file Word, PDF, atau catatan lama)..."
@@ -38,13 +50,13 @@ export const ImportPanel = () => {
 
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" onClick={handleImport} disabled={!raw.trim()}>
-            Ekstrak dan isi formulir otomatis ➔
+            Ekstrak dan isi formulir otomatis
           </Button>
           <span className="text-xs text-[#57443b]">Semua diproses langsung di browsermu</span>
         </div>
 
         <div role="status" aria-live="polite">
-          {message ? <EmptyState title="Hasil Pemisahan Otomatis" description={message} /> : null}
+          {message ? <EmptyState title="Status Data CV" description={message} /> : null}
         </div>
       </div>
     </SectionCard>

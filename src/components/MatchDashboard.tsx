@@ -86,7 +86,7 @@ export const MatchDashboard = () => {
               </div>
               <p className="mt-1.5 text-sm text-[#4d3b33] leading-relaxed max-w-xl">{verdict.body}</p>
               <p className="mt-2 text-xs font-bold text-[#57443b]">
-                ✓ {analytics.matchedKeywords.length} kata kunci cocok • {missing.length} belum ada di CV
+                {analytics.matchedKeywords.length} kata kunci cocok, {missing.length} belum ada di CV
               </p>
             </div>
           </div>
@@ -139,7 +139,7 @@ export const MatchDashboard = () => {
           <p className="font-bold text-ink mb-0.5">Evaluasi format standar ATS:</p>
           <p>
             {analytics.formatCheckPassed
-              ? "✓ Format dasar sudah sesuai standar ATS (satu kolom, judul baku, format tanggal konsisten)."
+              ? "Format dasar sudah sesuai standar ATS (satu kolom, judul baku, format tanggal konsisten)."
               : "Periksa kelengkapan kontak, ringkasan profil, format tanggal (MM/YYYY), dan pastikan poin pengalaman kerja mencantumkan metrik terukur."}
           </p>
         </div>

@@ -22,27 +22,30 @@ const safeFileName = (value: string) =>
     .toLowerCase() || "quicktailor-cv";
 
 /**
- * Teks polos. Dipakai tombol TXT dan sebagai cadangan kalau PDF atau DOCX gagal dibuat.
- * Isinya berasal dari model dokumen yang sama dengan pratinjau, jadi tidak mungkin beda.
+ * Teks polos ATS standar. Dipakai untuk tombol TXT dan sistem cadangan.
  */
 export const buildPlainTextResume = (resume: ResumeProfile) => {
   const document = buildResumeDocument(resume);
   const blocks: string[] = [];
 
-  const header = compact([document.name, document.contact]);
+  const header = compact([document.name, document.headline, document.contact]);
   if (header.length) blocks.push(header.join("\n"));
 
   document.sections.forEach((section) => {
-    // Judul bagian huruf besar adalah bentuk paling aman untuk berkas teks polos.
     const lines: string[] = [section.heading.toUpperCase()];
     lines.push(...section.paragraphs);
 
     section.entries.forEach((entry) => {
-      if (entry.title) lines.push(entry.title);
-      if (entry.meta) lines.push(entry.meta);
-      // Tanda hubung, bukan bullet Unicode: aman di semua pengurai teks.
-      entry.bullets.forEach((bullet) => lines.push(`- ${bullet}`));
-      if (entry.note) lines.push(entry.note);
+      if (entry.title && entry.meta) {
+        lines.push(`${entry.title}    ${entry.meta}`);
+      } else if (entry.title) {
+        lines.push(entry.title);
+      } else if (entry.meta) {
+        lines.push(entry.meta);
+      }
+
+      entry.bullets.forEach((bullet) => lines.push(`  * ${bullet}`));
+      if (entry.note) lines.push(`  ${entry.note}`);
     });
 
     blocks.push(lines.join("\n"));
@@ -51,7 +54,12 @@ export const buildPlainTextResume = (resume: ResumeProfile) => {
   return `${blocks.join("\n\n")}\n`;
 };
 
-/** Pohon elemen PDF. Dipisah dari proses unduh supaya bisa diperiksa terpisah. */
+/**
+ * Pembuat dokumen PDF berstandar ATS (Sesuai Referensi Gambar).
+ * - Header Rata Tengah (Nama besar tebal, Gelar/Headline tebal, Kontak).
+ * - Garis horizontal hitam di setiap judul bagian.
+ * - Tanggal rata kanan sejajar dengan judul posisi.
+ */
 export const buildPdfDocument = async (resume: ResumeProfile): Promise<ReactElement> => {
   const React = await import("react");
   const { Document, Page, Text, View, StyleSheet } = await import("@react-pdf/renderer");
@@ -62,61 +70,158 @@ export const buildPdfDocument = async (resume: ResumeProfile): Promise<ReactElem
 
   const styles = StyleSheet.create({
     page: {
-      padding: DOC_STYLE.marginIn * 72,
-      fontSize: DOC_STYLE.bodySizePt,
+      paddingTop: 32,
+      paddingBottom: 32,
+      paddingLeft: 36,
+      paddingRight: 36,
+      fontSize: 9,
       fontFamily: DOC_STYLE.pdfFont,
-      color: DOC_STYLE.ink,
-      lineHeight: 1.3
+      color: "#000000",
+      lineHeight: 1.25
     },
     header: {
-      borderBottomWidth: 1,
-      borderBottomColor: DOC_STYLE.ruleStrong,
-      paddingBottom: 8,
-      marginBottom: 4
-    },
-    name: { fontSize: DOC_STYLE.nameSizePt, fontWeight: 700, letterSpacing: 0.6, marginBottom: 3 },
-    contact: { fontSize: DOC_STYLE.metaSizePt, color: DOC_STYLE.metaInk },
-    section: { marginTop: 14 },
-    headingRow: {
-      borderBottomWidth: 0.8,
-      borderBottomColor: DOC_STYLE.ruleSoft,
-      paddingBottom: 3,
+      textAlign: "center",
       marginBottom: 6
     },
-    heading: { fontSize: DOC_STYLE.headingSizePt, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase" },
-    entryRow: { flexDirection: "row", alignItems: "baseline", marginTop: 8 },
-    entryTitle: { flex: 1, fontSize: DOC_STYLE.titleSizePt, fontWeight: 700 },
-    entryMeta: { fontSize: DOC_STYLE.metaSizePt, color: DOC_STYLE.metaInk, marginLeft: 10 },
-    metaOnly: { fontSize: DOC_STYLE.metaSizePt, color: DOC_STYLE.metaInk, marginBottom: 2 },
-    paragraph: { marginBottom: 2 },
-    bulletRow: { flexDirection: "row", marginBottom: 2 },
-    bulletDot: { width: 12 },
-    bulletText: { flex: 1 },
-    note: { fontSize: DOC_STYLE.bodySizePt, marginTop: 2 }
+    name: {
+      fontSize: 18,
+      fontWeight: 700,
+      textAlign: "center",
+      color: "#000000",
+      marginBottom: 2
+    },
+    headline: {
+      fontSize: 10,
+      fontWeight: 700,
+      textAlign: "center",
+      color: "#000000",
+      marginBottom: 2
+    },
+    contact: {
+      fontSize: 9,
+      textAlign: "center",
+      color: "#222222",
+      marginBottom: 2
+    },
+    section: {
+      marginTop: 6
+    },
+    headingRow: {
+      borderBottomWidth: 0.8,
+      borderBottomColor: "#000000",
+      paddingBottom: 1.5,
+      marginBottom: 3
+    },
+    heading: {
+      fontSize: 9.5,
+      fontWeight: 700,
+      letterSpacing: 0.5,
+      textTransform: "uppercase",
+      color: "#000000"
+    },
+    entryRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "baseline",
+      marginTop: 3,
+      marginBottom: 1
+    },
+    entryTitle: {
+      flex: 1,
+      fontSize: 9,
+      fontWeight: 700,
+      color: "#000000"
+    },
+    entryMeta: {
+      fontSize: 9,
+      color: "#000000",
+      textAlign: "right"
+    },
+    metaOnly: {
+      fontSize: 8.5,
+      color: "#222222",
+      marginBottom: 1
+    },
+    paragraph: {
+      fontSize: 9,
+      lineHeight: 1.25,
+      color: "#000000",
+      marginBottom: 2
+    },
+    skillRow: {
+      flexDirection: "row",
+      fontSize: 9,
+      lineHeight: 1.25,
+      marginBottom: 1.5
+    },
+    skillLabel: {
+      fontWeight: 700,
+      color: "#000000"
+    },
+    skillContent: {
+      flex: 1,
+      color: "#000000"
+    },
+    bulletRow: {
+      flexDirection: "row",
+      marginBottom: 1.5,
+      paddingLeft: 10
+    },
+    bulletDot: {
+      width: 8,
+      fontSize: 9,
+      color: "#000000"
+    },
+    bulletText: {
+      flex: 1,
+      fontSize: 9,
+      lineHeight: 1.25,
+      color: "#000000"
+    },
+    note: {
+      fontSize: 8.5,
+      color: "#333333",
+      marginTop: 1
+    }
   });
 
   const children: ReactElement[] = [];
 
-  if (document.name || document.contact) {
+  // 1. Centered Header
+  if (document.name || document.headline || document.contact) {
     const headerBlocks: ReactElement[] = [];
     if (document.name) headerBlocks.push(el(Text, { key: "name", style: styles.name }, document.name));
+    if (document.headline) headerBlocks.push(el(Text, { key: "headline", style: styles.headline }, document.headline));
     if (document.contact) headerBlocks.push(el(Text, { key: "contact", style: styles.contact }, document.contact));
     children.push(el(View, { key: "header", style: styles.header }, ...headerBlocks));
   }
 
+  // 2. Sections
   document.sections.forEach((section, sectionIndex) => {
     const blocks: ReactElement[] = [
       el(View, { key: "heading-row", style: styles.headingRow }, el(Text, { style: styles.heading }, section.heading))
     ];
 
     section.paragraphs.forEach((paragraph, index) => {
-      blocks.push(el(Text, { key: `paragraph-${index}`, style: styles.paragraph }, paragraph));
+      const colonIndex = paragraph.indexOf(":");
+      if (colonIndex > 0 && colonIndex < 35) {
+        const label = paragraph.slice(0, colonIndex);
+        const rest = paragraph.slice(colonIndex + 1);
+        blocks.push(
+          el(
+            View,
+            { key: `skill-${index}`, style: styles.skillRow },
+            el(Text, { style: styles.skillLabel }, `${label}:`),
+            el(Text, { style: styles.skillContent }, rest)
+          )
+        );
+      } else {
+        blocks.push(el(Text, { key: `paragraph-${index}`, style: styles.paragraph }, paragraph));
+      }
     });
 
     section.entries.forEach((entry, entryIndex) => {
       if (entry.title && entry.meta) {
-        // Judul di kiri dan tanggal di kanan pada satu baris. Keduanya masih teks
-        // biasa dalam satu kolom, jadi pengurai tetap membacanya berurutan.
         blocks.push(
           el(
             View,
@@ -154,105 +259,130 @@ export const buildPdfDocument = async (resume: ResumeProfile): Promise<ReactElem
       title: document.name ? `CV ${document.name}` : "CV",
       author: document.name,
       subject: "Curriculum Vitae",
-      keywords: "CV, resume, curriculum vitae",
+      keywords: "CV, ATS resume, curriculum vitae",
       creator: "QuickTailor CV"
     },
     el(Page, { size: "A4", style: styles.page }, ...children)
   );
 };
 
-/** Dokumen Word. Dipisah dari proses unduh supaya bisa diperiksa terpisah. */
+/**
+ * Pembuat dokumen Microsoft Word (DOCX) berstandar ATS (Sesuai Referensi Gambar).
+ */
 export const buildDocxDocument = async (resume: ResumeProfile) => {
-  const { BorderStyle, Document, HeadingLevel, Paragraph, Tab, TabStopType, TextRun } = await import("docx");
+  const { AlignmentType, BorderStyle, Document, HeadingLevel, Paragraph, Tab, TabStopType, TextRun } = await import("docx");
   const document = buildResumeDocument(resume);
-  const margin = Math.round(DOC_STYLE.marginIn * 1440);
-  // Lebar area teks A4 setelah margin, dipakai sebagai posisi tab rata kanan.
+  const margin = Math.round(0.5 * 1440); // 0.5 in
   const contentWidth = 11906 - margin * 2;
-  // Warna di DOCX ditulis tanpa tanda pagar.
-  const ink = (value: string) => value.replace("#", "");
   const body: InstanceType<typeof Paragraph>[] = [];
 
+  // 1. Centered Header
   if (document.name) {
     body.push(
       new Paragraph({
+        alignment: AlignmentType.CENTER,
         children: [
-          new TextRun({ text: document.name, bold: true, size: DOC_STYLE.nameSizePt * 2, characterSpacing: 20 })
+          new TextRun({ text: document.name, bold: true, size: 36, font: "Arial" })
         ],
-        spacing: { after: 20 }
+        spacing: { after: 40 }
+      })
+    );
+  }
+
+  if (document.headline) {
+    body.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [
+          new TextRun({ text: document.headline, bold: true, size: 21, font: "Arial" })
+        ],
+        spacing: { after: 30 }
       })
     );
   }
 
   if (document.contact) {
-    // Garis pemisah dipasang sebagai batas bawah paragraf, jadi tidak ada tabel
-    // atau kotak teks yang bisa mengacaukan pembacaan ATS.
     body.push(
       new Paragraph({
-        children: [new TextRun({ text: document.contact, size: DOC_STYLE.metaSizePt * 2, color: ink(DOC_STYLE.metaInk) })],
-        spacing: { after: 240 },
-        border: { bottom: { color: ink(DOC_STYLE.ruleStrong), space: 6, style: BorderStyle.SINGLE, size: 8 } }
+        alignment: AlignmentType.CENTER,
+        children: [
+          new TextRun({ text: document.contact, size: 19, font: "Arial", color: "222222" })
+        ],
+        spacing: { after: 120 }
       })
     );
   }
 
+  // 2. Sections
   document.sections.forEach((section) => {
-    // Judul bagian memakai gaya Heading 1 yang asli supaya pengurai mengenali
-    // strukturnya, tetapi warnanya ditimpa jadi hitam lewat definisi gaya di bawah.
     body.push(
       new Paragraph({
-        text: section.heading,
+        text: section.heading.toUpperCase(),
         heading: HeadingLevel.HEADING_1,
-        border: { bottom: { color: ink(DOC_STYLE.ruleSoft), space: 3, style: BorderStyle.SINGLE, size: 6 } }
+        border: { bottom: { color: "000000", space: 2, style: BorderStyle.SINGLE, size: 6 } },
+        spacing: { before: 160, after: 60 }
       })
     );
 
     section.paragraphs.forEach((paragraph) => {
-      body.push(
-        new Paragraph({
-          children: [new TextRun({ text: paragraph, size: DOC_STYLE.bodySizePt * 2 })],
-          spacing: { after: 80 }
-        })
-      );
+      const colonIndex = paragraph.indexOf(":");
+      if (colonIndex > 0 && colonIndex < 35) {
+        const label = paragraph.slice(0, colonIndex);
+        const rest = paragraph.slice(colonIndex + 1);
+        body.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: `${label}:`, bold: true, size: 19, font: "Arial" }),
+              new TextRun({ text: rest, size: 19, font: "Arial" })
+            ],
+            spacing: { after: 40 }
+          })
+        );
+      } else {
+        body.push(
+          new Paragraph({
+            children: [new TextRun({ text: paragraph, size: 19, font: "Arial" })],
+            spacing: { after: 60 }
+          })
+        );
+      }
     });
 
     section.entries.forEach((entry) => {
       if (entry.title && entry.meta) {
-        // Tab rata kanan menaruh tanggal di ujung baris yang sama. Ini masih teks
-        // satu kolom, bukan tabel, dan cara ini dipakai hampir semua CV profesional.
         body.push(
           new Paragraph({
             tabStops: [{ type: TabStopType.RIGHT, position: contentWidth }],
             children: [
-              new TextRun({ text: entry.title, bold: true, size: DOC_STYLE.titleSizePt * 2 }),
+              new TextRun({ text: entry.title, bold: true, size: 20, font: "Arial" }),
               new Tab(),
-              new TextRun({ text: entry.meta, size: DOC_STYLE.metaSizePt * 2, color: ink(DOC_STYLE.metaInk) })
+              new TextRun({ text: entry.meta, size: 19, font: "Arial", color: "000000" })
             ],
-            spacing: { before: 160, after: 20 }
+            spacing: { before: 80, after: 20 }
           })
         );
       } else if (entry.title) {
         body.push(
           new Paragraph({
-            children: [new TextRun({ text: entry.title, bold: true, size: DOC_STYLE.titleSizePt * 2 })],
-            spacing: { before: 160, after: 20 }
+            children: [new TextRun({ text: entry.title, bold: true, size: 20, font: "Arial" })],
+            spacing: { before: 80, after: 20 }
           })
         );
       } else if (entry.meta) {
         body.push(
           new Paragraph({
-            children: [new TextRun({ text: entry.meta, size: DOC_STYLE.metaSizePt * 2, color: ink(DOC_STYLE.metaInk) })],
-            spacing: { after: 40 }
+            children: [new TextRun({ text: entry.meta, size: 19, font: "Arial", color: "222222" })],
+            spacing: { after: 20 }
           })
         );
       }
 
       entry.bullets.forEach((bullet) => {
-        // Daftar berbutir asli milik Word, bukan karakter tempelan. Pengurai
-        // mengenalinya sebagai butir daftar yang terstruktur.
         body.push(
           new Paragraph({
-            children: [new TextRun({ text: bullet, size: DOC_STYLE.bodySizePt * 2 })],
-            bullet: { level: 0 }
+            children: [new TextRun({ text: bullet, size: 19, font: "Arial" })],
+            bullet: { level: 0 },
+            spacing: { after: 20 }
           })
         );
       });
@@ -260,8 +390,8 @@ export const buildDocxDocument = async (resume: ResumeProfile) => {
       if (entry.note) {
         body.push(
           new Paragraph({
-            children: [new TextRun({ text: entry.note, size: DOC_STYLE.bodySizePt * 2 })],
-            spacing: { after: 40 }
+            children: [new TextRun({ text: entry.note, size: 18, font: "Arial" })],
+            spacing: { after: 20 }
           })
         );
       }
@@ -274,17 +404,17 @@ export const buildDocxDocument = async (resume: ResumeProfile) => {
     description: "Curriculum Vitae",
     styles: {
       default: {
-        document: { run: { font: DOC_STYLE.docxFont, size: DOC_STYLE.bodySizePt * 2, color: ink(DOC_STYLE.ink) } },
+        document: { run: { font: "Arial", size: 19, color: "000000" } },
         heading1: {
           run: {
-            font: DOC_STYLE.docxFont,
-            size: DOC_STYLE.headingSizePt * 2,
+            font: "Arial",
+            size: 21,
             bold: true,
-            color: ink(DOC_STYLE.ink),
+            color: "000000",
             allCaps: true,
-            characterSpacing: 20
+            characterSpacing: 10
           },
-          paragraph: { spacing: { before: 280, after: 60 } }
+          paragraph: { spacing: { before: 180, after: 40 } }
         }
       }
     },
@@ -292,8 +422,6 @@ export const buildDocxDocument = async (resume: ResumeProfile) => {
       {
         properties: {
           page: {
-            // A4 dalam twips, bukan Letter bawaan Word, karena pelamar Indonesia
-            // memakai A4 dan ukuran kertas ikut memengaruhi tata letak saat dicetak.
             size: { width: 11906, height: 16838 },
             margin: { top: margin, right: margin, bottom: margin, left: margin }
           }
@@ -307,8 +435,6 @@ export const buildDocxDocument = async (resume: ResumeProfile) => {
 export const exportPdf = async (resume: ResumeProfile) => {
   const { pdf } = await import("@react-pdf/renderer");
   const document = await buildPdfDocument(resume);
-  // Pohon elemen dibangun secara dinamis, jadi tipenya lebih umum daripada tipe
-  // Document yang diminta react-pdf.
   const blob = await pdf(document as Parameters<typeof pdf>[0]).toBlob();
   downloadBlob(blob, `${safeFileName(resume.contact.fullName)}.pdf`);
 };

@@ -4,11 +4,19 @@ import { get, set, del } from "idb-keyval";
 import type { Education, JobTarget, MatchAnalytics, ResumeProfile, RewriteSuggestion, WorkExperience } from "@/types/resume";
 import { emptyAnalytics, emptyJobTarget, emptyResumeProfile, createId } from "@/lib/defaults";
 
+export type MasterTab = "contact" | "summary" | "experience" | "education" | "skills";
+
 type AppState = {
   resumeProfile: ResumeProfile;
   jobTarget: JobTarget;
   matchAnalytics: MatchAnalytics;
   suggestions: RewriteSuggestion[];
+  activeMasterTab: MasterTab;
+  setActiveMasterTab: (tab: MasterTab) => void;
+  previewOpenDesktop: boolean;
+  setPreviewOpenDesktop: (open: boolean | ((prev: boolean) => boolean)) => void;
+  modalPreviewOpen: boolean;
+  setModalPreviewOpen: (open: boolean) => void;
   hydrated: boolean;
   setHydrated: (value: boolean) => void;
   updateContact: (field: keyof ResumeProfile["contact"], value: string) => void;
@@ -53,6 +61,15 @@ export const useCvStore = create<AppState>()(
       jobTarget: emptyJobTarget(),
       matchAnalytics: emptyAnalytics(),
       suggestions: [],
+      activeMasterTab: "contact",
+      setActiveMasterTab: (tab) => set({ activeMasterTab: tab }),
+      previewOpenDesktop: true,
+      setPreviewOpenDesktop: (open) =>
+        set((state) => ({
+          previewOpenDesktop: typeof open === "function" ? open(state.previewOpenDesktop) : open
+        })),
+      modalPreviewOpen: false,
+      setModalPreviewOpen: (open) => set({ modalPreviewOpen: open }),
       hydrated: false,
       setHydrated: (value) => set({ hydrated: value }),
       updateContact: (field, value) =>
@@ -194,7 +211,10 @@ export const useCvStore = create<AppState>()(
           resumeProfile: emptyResumeProfile(),
           jobTarget: emptyJobTarget(),
           matchAnalytics: emptyAnalytics(),
-          suggestions: []
+          suggestions: [],
+          activeMasterTab: "contact",
+          previewOpenDesktop: true,
+          modalPreviewOpen: false
         })
     }),
     {
@@ -204,7 +224,9 @@ export const useCvStore = create<AppState>()(
         resumeProfile: state.resumeProfile,
         jobTarget: state.jobTarget,
         matchAnalytics: state.matchAnalytics,
-        suggestions: state.suggestions
+        suggestions: state.suggestions,
+        activeMasterTab: state.activeMasterTab,
+        previewOpenDesktop: state.previewOpenDesktop
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHydrated(true);

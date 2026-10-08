@@ -77,7 +77,7 @@ export const Tag = ({ tone, children }: { tone: "match" | "semantic" | "missing"
   };
 
   return (
-    <span className={`inline-flex items-center px-3 py-1 text-xs font-bold rounded-full border shadow-2xs ${styles[tone]}`}>
+    <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-lg border-2 shadow-[1.5px_2px_0_rgba(37,24,19,0.10)] ${styles[tone]}`}>
       {children}
     </span>
   );

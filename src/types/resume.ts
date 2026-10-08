@@ -1,5 +1,6 @@
 export type Contact = {
   fullName: string;
+  headline?: string;
   email: string;
   phone: string;
   location: string;
@@ -11,6 +12,7 @@ export type WorkExperience = {
   id: string;
   company: string;
   role: string;
+  location?: string;
   startDate: string;
   endDate: string;
   isCurrent: boolean;
@@ -38,6 +40,7 @@ export type ResumeProfile = {
   workExperience: WorkExperience[];
   education: Education[];
   skills: Skills;
+  certifications?: string[];
 };
 
 export type ExtractedKeywords = {
