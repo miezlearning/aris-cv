@@ -1,5 +1,5 @@
 import type { ResumeProfile } from "@/types/resume";
-import { translateFieldToEnglish, translateFieldToIndonesian, translateProfileDeterministic } from "@/lib/ats/translator";
+import { translateProfileDeterministic } from "@/lib/ats/translator";
 import { runLocalChatCompletion, type ActiveLocalAiConfig } from "@/lib/local-ai/engine";
 
 const stripWrapperQuotes = (text: string): string =>
@@ -59,8 +59,8 @@ Original Bullet: ${params.bullet}`;
   return {
     suggestion: cleaned,
     note: hasNumber
-      ? "Disusun ulang oleh AI lokal selaras lowongan Langkah 2 dengan mempertahankan data aslimu."
-      : "Disusun ulang oleh AI lokal. Jika ada angka atau cakupan nyata dari pengalamanmu, kamu bisa menambahkannya manual."
+      ? "Disusun ulang oleh AI selaras lowongan Langkah 2 dengan mempertahankan data aslimu."
+      : "Disusun ulang oleh AI. Jika ada angka atau cakupan nyata dari pengalamanmu, kamu bisa menambahkannya manual."
   };
 };
 
@@ -120,68 +120,76 @@ const translateTextWithModel = async (
       { role: "system", content: systemPrompt },
       { role: "user", content: clean }
     ],
-    { temperature: 0.15, maxTokens: 280 }
+    { temperature: 0.15, maxTokens: 320 }
   );
 
   const cleaned = stripWrapperQuotes(raw);
-  return cleaned.length >= 3 ? cleaned : clean;
+  return cleaned.length >= 2 ? cleaned : clean;
 };
 
-const translateBulletsChunk = async (
+const translateIndexedChunk = async (
   config: ActiveLocalAiConfig,
-  bullets: string[],
-  fallbackBullets: string[],
+  sources: string[],
+  fallbacks: string[],
   targetLang: "id" | "en"
 ): Promise<string[]> => {
   const nonEmptyIndices: number[] = [];
-  bullets.forEach((b, idx) => {
+  sources.forEach((b, idx) => {
     if (b.trim()) nonEmptyIndices.push(idx);
   });
-  if (!nonEmptyIndices.length) return bullets;
+  if (!nonEmptyIndices.length) return sources;
 
   const targetName = targetLang === "en" ? "natural, ATS-industry English" : "Bahasa Indonesia baku standar ATS";
-  const numberedInput = nonEmptyIndices
-    .map((idx, pos) => `[${pos}] ${bullets[idx].trim()}`)
-    .join("\n");
+  const result = [...fallbacks];
+  const CHUNK_SIZE = 10;
 
-  try {
-    const raw = await runLocalChatCompletion(
-      config,
-      [
-        {
-          role: "system",
-          content: `Translate each numbered CV bullet point to ${targetName}. Keep exact [0], [1], ... prefixes on separate lines. Preserve all technical stack names, metrics, and numbers. Return ONLY the numbered lines.`
-        },
-        { role: "user", content: numberedInput }
-      ],
-      { temperature: 0.15, maxTokens: Math.min(700, 140 * nonEmptyIndices.length) }
-    );
+  for (let start = 0; start < nonEmptyIndices.length; start += CHUNK_SIZE) {
+    const slice = nonEmptyIndices.slice(start, start + CHUNK_SIZE);
+    const numberedInput = slice
+      .map((idx, pos) => `[${pos}] ${sources[idx].replace(/\s*\r?\n\s*/g, " ").trim()}`)
+      .join("\n");
 
-    const parsedMap = new Map<number, string>();
-    for (const line of raw.split(/\r?\n/)) {
-      const m = line.trim().match(/^\[(\d+)\]\s*(.+)$/);
-      if (m) {
-        parsedMap.set(Number(m[1]), stripWrapperQuotes(m[2]));
-      }
-    }
+    try {
+      const raw = await runLocalChatCompletion(
+        config,
+        [
+          {
+            role: "system",
+            content: `Translate each numbered CV entry to ${targetName}. Keep exact [0], [1], ... prefixes on separate lines. Preserve all proper organization/university names, technical stack names, numbers, and metrics. Return ONLY the numbered lines.`
+          },
+          { role: "user", content: numberedInput }
+        ],
+        { temperature: 0.15, maxTokens: Math.min(900, 140 * slice.length) }
+      );
 
-    if (parsedMap.size >= Math.ceil(nonEmptyIndices.length / 2)) {
-      const result = [...fallbackBullets];
-      nonEmptyIndices.forEach((origIdx, pos) => {
-        const translated = parsedMap.get(pos);
-        if (translated && translated.length >= 5) {
-          result[origIdx] = translated;
+      const parsedMap = new Map<number, string>();
+      for (const line of raw.split(/\r?\n/)) {
+        const m = line.trim().match(/^\[(\d+)\]\s*(.+)$/);
+        if (m) {
+          parsedMap.set(Number(m[1]), stripWrapperQuotes(m[2]));
         }
-      });
-      return result;
+      }
+
+      if (parsedMap.size >= Math.ceil(slice.length / 2)) {
+        slice.forEach((origIdx, pos) => {
+          const translated = parsedMap.get(pos);
+          if (translated && translated.length >= 2) {
+            result[origIdx] = translated;
+          }
+        });
+      }
+    } catch {
+      // Gunakan baseline deterministik jika chunk gagal
     }
-  } catch {
-    // Gunakan baseline deterministik jika chunk gagal
   }
 
-  return fallbackBullets;
+  return result;
 };
 
+/**
+ * Menerjemahkan seluruh bagian prosais CV secara menyeluruh menggunakan model AI aktif,
+ * dengan baseline deterministik sebagai pengaman anti-gagal di tiap kolom.
+ */
 export const translateProfileWithLocalAi = async (
   config: ActiveLocalAiConfig,
   resume: ResumeProfile,
@@ -189,8 +197,6 @@ export const translateProfileWithLocalAi = async (
   onProgress?: (statusText: string) => void
 ): Promise<ResumeProfile> => {
   const baseline = translateProfileDeterministic(resume, targetLang);
-  const translateShortFallback = (txt: string, fallback: string) =>
-    txt.trim() ? fallback : txt;
 
   onProgress?.("Menerjemahkan ringkasan & profil...");
   let headline = baseline.contact.headline ?? "";
@@ -198,12 +204,7 @@ export const translateProfileWithLocalAi = async (
     try {
       headline = await translateTextWithModel(config, resume.contact.headline, targetLang);
     } catch {
-      headline = translateShortFallback(
-        resume.contact.headline,
-        targetLang === "en"
-          ? translateFieldToEnglish(resume.contact.headline, "prose")
-          : translateFieldToIndonesian(resume.contact.headline, "prose")
-      );
+      headline = baseline.contact.headline ?? "";
     }
   }
 
@@ -216,12 +217,168 @@ export const translateProfileWithLocalAi = async (
     }
   }
 
-  const workExperience = [...baseline.workExperience];
+  onProgress?.("Menerjemahkan peran, pendidikan, judul proyek & sertifikasi...");
+  type MetadataSetter = {
+    source: string;
+    fallback: string;
+    apply: (val: string) => void;
+  };
+  const metaTasks: MetadataSetter[] = [];
+
+  const workExperience = baseline.workExperience.map((item) => ({ ...item }));
+  (resume.workExperience ?? []).forEach((src, i) => {
+    if (src.role.trim()) {
+      metaTasks.push({
+        source: src.role,
+        fallback: workExperience[i].role,
+        apply: (val) => {
+          workExperience[i].role = val;
+        }
+      });
+    }
+  });
+
+  const education = baseline.education.map((item) => ({ ...item }));
+  (resume.education ?? []).forEach((src, i) => {
+    if (src.degree.trim()) {
+      metaTasks.push({
+        source: src.degree,
+        fallback: education[i].degree,
+        apply: (val) => {
+          education[i].degree = val;
+        }
+      });
+    }
+    if (src.fieldOfStudy.trim()) {
+      metaTasks.push({
+        source: src.fieldOfStudy,
+        fallback: education[i].fieldOfStudy,
+        apply: (val) => {
+          education[i].fieldOfStudy = val;
+        }
+      });
+    }
+    if (src.thesisTitle?.trim()) {
+      metaTasks.push({
+        source: src.thesisTitle,
+        fallback: education[i].thesisTitle ?? src.thesisTitle,
+        apply: (val) => {
+          education[i].thesisTitle = val;
+        }
+      });
+    }
+    if (src.achievements?.trim()) {
+      metaTasks.push({
+        source: src.achievements,
+        fallback: education[i].achievements ?? src.achievements,
+        apply: (val) => {
+          education[i].achievements = val;
+        }
+      });
+    }
+    (src.relevantCoursework ?? []).forEach((cw, cIdx) => {
+      if (cw.trim()) {
+        metaTasks.push({
+          source: cw,
+          fallback: education[i].relevantCoursework?.[cIdx] ?? cw,
+          apply: (val) => {
+            const next = [...(education[i].relevantCoursework ?? [])];
+            next[cIdx] = val;
+            education[i].relevantCoursework = next;
+          }
+        });
+      }
+    });
+  });
+
+  const projects = baseline.projects.map((item) => ({ ...item }));
+  (resume.projects ?? []).forEach((src, i) => {
+    if (src.name.trim()) {
+      metaTasks.push({
+        source: src.name,
+        fallback: projects[i].name,
+        apply: (val) => {
+          projects[i].name = val;
+        }
+      });
+    }
+    if (src.role.trim()) {
+      metaTasks.push({
+        source: src.role,
+        fallback: projects[i].role,
+        apply: (val) => {
+          projects[i].role = val;
+        }
+      });
+    }
+    if (src.context.trim()) {
+      metaTasks.push({
+        source: src.context,
+        fallback: projects[i].context,
+        apply: (val) => {
+          projects[i].context = val;
+        }
+      });
+    }
+  });
+
+  const organizations = baseline.organizations.map((item) => ({ ...item }));
+  (resume.organizations ?? []).forEach((src, i) => {
+    if (src.role.trim()) {
+      metaTasks.push({
+        source: src.role,
+        fallback: organizations[i].role,
+        apply: (val) => {
+          organizations[i].role = val;
+        }
+      });
+    }
+  });
+
+  const certificationItems = baseline.certificationItems.map((item) => ({ ...item }));
+  (resume.certificationItems ?? []).forEach((src, i) => {
+    if (src.name.trim()) {
+      metaTasks.push({
+        source: src.name,
+        fallback: certificationItems[i].name,
+        apply: (val) => {
+          certificationItems[i].name = val;
+        }
+      });
+    }
+  });
+
+  const skills = {
+    ...baseline.skills,
+    groups: (baseline.skills.groups ?? []).map((g) => ({ ...g }))
+  };
+  (resume.skills.groups ?? []).forEach((srcGrp, i) => {
+    if (srcGrp.category.trim() && skills.groups[i]) {
+      metaTasks.push({
+        source: srcGrp.category,
+        fallback: skills.groups[i].category,
+        apply: (val) => {
+          skills.groups[i].category = val;
+        }
+      });
+    }
+  });
+
+  if (metaTasks.length > 0) {
+    const metaResults = await translateIndexedChunk(
+      config,
+      metaTasks.map((t) => t.source),
+      metaTasks.map((t) => t.fallback),
+      targetLang
+    );
+    metaTasks.forEach((t, idx) => t.apply(metaResults[idx]));
+  }
+
   for (let i = 0; i < (resume.workExperience ?? []).length; i += 1) {
     const src = resume.workExperience[i];
-    const base = baseline.workExperience[i];
+    const base = workExperience[i];
     onProgress?.(`Menerjemahkan pengalaman kerja ${i + 1}/${resume.workExperience.length}...`);
-    const bullets = await translateBulletsChunk(
+    const bullets = await translateIndexedChunk(
       config,
       src.bulletPoints ?? [],
       base.bulletPoints ?? [],
@@ -230,12 +387,11 @@ export const translateProfileWithLocalAi = async (
     workExperience[i] = { ...base, bulletPoints: bullets };
   }
 
-  const projects = [...baseline.projects];
   for (let i = 0; i < (resume.projects ?? []).length; i += 1) {
     const src = resume.projects[i];
-    const base = baseline.projects[i];
+    const base = projects[i];
     onProgress?.(`Menerjemahkan proyek ${i + 1}/${resume.projects.length}...`);
-    const bullets = await translateBulletsChunk(
+    const bullets = await translateIndexedChunk(
       config,
       src.bulletPoints ?? [],
       base.bulletPoints ?? [],
@@ -244,12 +400,11 @@ export const translateProfileWithLocalAi = async (
     projects[i] = { ...base, bulletPoints: bullets };
   }
 
-  const organizations = [...baseline.organizations];
   for (let i = 0; i < (resume.organizations ?? []).length; i += 1) {
     const src = resume.organizations[i];
-    const base = baseline.organizations[i];
+    const base = organizations[i];
     onProgress?.(`Menerjemahkan organisasi ${i + 1}/${resume.organizations.length}...`);
-    const bullets = await translateBulletsChunk(
+    const bullets = await translateIndexedChunk(
       config,
       src.bulletPoints ?? [],
       base.bulletPoints ?? [],
@@ -267,7 +422,10 @@ export const translateProfileWithLocalAi = async (
     },
     summary,
     workExperience,
+    education,
     projects,
-    organizations
+    organizations,
+    certificationItems,
+    skills
   };
 };
