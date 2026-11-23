@@ -1,4 +1,59 @@
-export type LocalAiProvider = "off" | "webllm" | "ollama" | "lmstudio";
+export type LocalAiProvider = "off" | "webllm" | "rest_api" | "ollama" | "lmstudio";
+
+export type RestApiFormat = "openai" | "gemini";
+export type RestApiPresetId = "gemini" | "openrouter" | "groq" | "openai" | "custom";
+
+export type RestApiPreset = {
+  id: RestApiPresetId;
+  label: string;
+  format: RestApiFormat;
+  baseUrl: string;
+  defaultModel: string;
+  keyPlaceholder: string;
+};
+
+export const REST_API_PRESETS: RestApiPreset[] = [
+  {
+    id: "gemini",
+    label: "Google Gemini",
+    format: "gemini",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    defaultModel: "gemini-2.5-flash",
+    keyPlaceholder: "AIza..."
+  },
+  {
+    id: "openrouter",
+    label: "OpenRouter",
+    format: "openai",
+    baseUrl: "https://openrouter.ai/api/v1",
+    defaultModel: "openai/gpt-4o-mini",
+    keyPlaceholder: "sk-or-..."
+  },
+  {
+    id: "groq",
+    label: "Groq (Cepat)",
+    format: "openai",
+    baseUrl: "https://api.groq.com/openai/v1",
+    defaultModel: "llama-3.3-70b-versatile",
+    keyPlaceholder: "gsk_..."
+  },
+  {
+    id: "openai",
+    label: "OpenAI",
+    format: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    defaultModel: "gpt-4o-mini",
+    keyPlaceholder: "sk-..."
+  },
+  {
+    id: "custom",
+    label: "Custom REST API (OpenAI-Compatible)",
+    format: "openai",
+    baseUrl: "",
+    defaultModel: "",
+    keyPlaceholder: "Opsional / Bearer token"
+  }
+];
 
 export type CuratedWebLlmModel = {
   id: string;
