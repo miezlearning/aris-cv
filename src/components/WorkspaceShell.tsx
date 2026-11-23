@@ -26,6 +26,8 @@ import { MasterCvEditor } from "@/components/MasterCvEditor";
 import { MatchDashboard } from "@/components/MatchDashboard";
 import { Reveal } from "@/components/Reveal";
 import { getResumeCompleteness } from "@/lib/analyzer";
+import { extractAllResumeBullets } from "@/lib/ats/rewriter";
+import { useLiveAts } from "@/lib/live-ats";
 import { useCvStore } from "@/lib/store";
 
 export type WorkspacePage = "dashboard" | "master" | "target" | "rewrite" | "export";
@@ -142,13 +144,13 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
 
   const resumeProfile = useCvStore((state) => state.resumeProfile);
   const job = useCvStore((state) => state.jobTarget);
-  const analytics = useCvStore((state) => state.matchAnalytics);
-  const suggestions = useCvStore((state) => state.suggestions);
+  const { analytics, effectiveResume } = useLiveAts();
   const activeMasterTab = useCvStore((state) => state.activeMasterTab);
 
   const completeness = getResumeCompleteness(resumeProfile);
   const analyzed = analytics.hasAnalyzed;
-  const pendingSuggestions = suggestions.filter((item) => item.status === "pending").length;
+  const liveBullets = extractAllResumeBullets(effectiveResume, analytics);
+  const pendingSuggestions = liveBullets.filter((item) => item.analysis.needsImprovement).length;
 
   const currentStep = steps.find((step) => step.id === currentPage);
   const copy = pageCopy[currentPage];
@@ -170,15 +172,15 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
     }
     if (id === "rewrite") {
       if (!analyzed) return { text: "Menunggu analisis lowongan", short: "Belum", done: false };
-      if (!suggestions.length) return { text: "Poin kalimat sudah rapi", short: "Rapi", done: true };
+      if (!liveBullets.length) return { text: "Belum ada poin kalimat tertulis", short: "Kosong", done: false };
       if (pendingSuggestions) {
         return {
-          text: `${pendingSuggestions} saran menunggu keputusan`,
-          short: `${pendingSuggestions} saran`,
+          text: `${pendingSuggestions} poin kalimat bisa diperkuat`,
+          short: `${pendingSuggestions} poin`,
           done: false
         };
       }
-      return { text: `${suggestions.length} saran selesai ditinjau`, short: "Selesai", done: true };
+      return { text: `${liveBullets.length} poin kalimat sudah kuat`, short: "Selesai", done: true };
     }
     return { text: "Siap diunduh dalam PDF atau DOCX", short: "Siap", done: false };
   };
@@ -195,21 +197,21 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
             : "Jalankan analisis iklan lowongan di Langkah 2"
       };
     }
-    if (!suggestions.length) {
+    if (!liveBullets.length) {
       return {
-        value: "0 saran",
-        help: "Semua poin kalimat sudah aktif atau belum ada poin yang ditulis"
+        value: "0 poin",
+        help: "Tambahkan poin pengalaman, proyek, atau organisasi di Langkah 1"
       };
     }
     if (pendingSuggestions > 0) {
       return {
-        value: `${pendingSuggestions} menunggu`,
-        help: `Dari total ${suggestions.length} saran kalimat di Langkah 3`
+        value: `${pendingSuggestions} perlu dioptimasi`,
+        help: `Dari total ${liveBullets.length} poin kalimat di Langkah 3`
       };
     }
     return {
-      value: "Selesai",
-      help: `Seluruh ${suggestions.length} saran sudah ditinjau`
+      value: "Siap & Kuat",
+      help: `Seluruh ${liveBullets.length} poin sudah kuat (tetap bisa disunting di Langkah 3)`
     };
   })();
 
