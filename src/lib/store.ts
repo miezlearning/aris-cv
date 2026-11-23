@@ -4,6 +4,7 @@ import { get, set, del } from "idb-keyval";
 import type {
   CertificationItem,
   CvLanguage,
+  CvTemplate,
   Education,
   ExperienceLevel,
   JobTarget,
@@ -12,6 +13,7 @@ import type {
   ProjectItem,
   ResumeProfile,
   RewriteSuggestion,
+  SkillGroup,
   WorkExperience
 } from "@/types/resume";
 import { emptyAnalytics, emptyJobTarget, emptyResumeProfile, createId } from "@/lib/defaults";
@@ -40,6 +42,8 @@ const VALID_TABS: MasterTab[] = [
   "skills"
 ];
 
+const VALID_TEMPLATES: CvTemplate[] = ["compact_centered", "classic_editorial", "executive_left"];
+
 type AppState = {
   resumeProfile: ResumeProfile;
   jobTarget: JobTarget;
@@ -49,6 +53,8 @@ type AppState = {
   setActiveMasterTab: (tab: MasterTab) => void;
   cvLanguage: CvLanguage;
   setCvLanguage: (lang: CvLanguage) => void;
+  cvTemplate: CvTemplate;
+  setCvTemplate: (template: CvTemplate) => void;
   autoTranslateContent: boolean;
   setAutoTranslateContent: (enabled: boolean) => void;
   aiTranslatedEnProfile: ResumeProfile | null;
@@ -91,7 +97,11 @@ type AppState = {
   updateCertification: (id: string, patch: Partial<CertificationItem>) => void;
   removeCertification: (id: string) => void;
   updateSkills: (field: keyof ResumeProfile["skills"], values: string[]) => void;
-  addSkillItem: (field: keyof ResumeProfile["skills"], skill: string) => void;
+  addSkillGroup: () => void;
+  updateSkillGroup: (id: string, patch: Partial<SkillGroup>) => void;
+  removeSkillGroup: (id: string) => void;
+  setSkillGroups: (groups: SkillGroup[]) => void;
+  addSkillItem: (field: "hardSkills" | "softSkills" | "tools", skill: string) => void;
   setResumeProfile: (profile: ResumeProfile) => void;
   updateJobTarget: (patch: Partial<JobTarget>) => void;
   setAnalytics: (analytics: MatchAnalytics) => void;
@@ -225,7 +235,14 @@ const migrateLegacyProfile = (raw?: Partial<ResumeProfile>): ResumeProfile => {
     skills: {
       hardSkills: Array.isArray(raw.skills?.hardSkills) ? raw.skills.hardSkills : [],
       softSkills: Array.isArray(raw.skills?.softSkills) ? raw.skills.softSkills : [],
-      tools: Array.isArray(raw.skills?.tools) ? raw.skills.tools : []
+      tools: Array.isArray(raw.skills?.tools) ? raw.skills.tools : [],
+      groups: Array.isArray(raw.skills?.groups)
+        ? raw.skills.groups.map((grp, idx) => ({
+            id: grp.id || `skill-grp-${idx + 1}`,
+            category: grp.category ?? "",
+            items: Array.isArray(grp.items) ? grp.items : []
+          }))
+        : []
     },
     certifications: []
   };
@@ -242,6 +259,8 @@ export const useCvStore = create<AppState>()(
       setActiveMasterTab: (tab) => set({ activeMasterTab: tab }),
       cvLanguage: "auto",
       setCvLanguage: (lang) => set({ cvLanguage: lang }),
+      cvTemplate: "compact_centered",
+      setCvTemplate: (template) => set({ cvTemplate: template }),
       autoTranslateContent: true,
       setAutoTranslateContent: (enabled) => set({ autoTranslateContent: enabled }),
       aiTranslatedEnProfile: null,
@@ -558,22 +577,90 @@ export const useCvStore = create<AppState>()(
             skills: { ...state.resumeProfile.skills, [field]: values }
           }
         })),
+      addSkillGroup: () =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            skills: {
+              ...state.resumeProfile.skills,
+              groups: [
+                ...(state.resumeProfile.skills.groups ?? []),
+                { id: createId(), category: "", items: [] }
+              ]
+            }
+          }
+        })),
+      updateSkillGroup: (id, patch) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            skills: {
+              ...state.resumeProfile.skills,
+              groups: (state.resumeProfile.skills.groups ?? []).map((grp) =>
+                grp.id === id ? { ...grp, ...patch } : grp
+              )
+            }
+          }
+        })),
+      removeSkillGroup: (id) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            skills: {
+              ...state.resumeProfile.skills,
+              groups: (state.resumeProfile.skills.groups ?? []).filter((grp) => grp.id !== id)
+            }
+          }
+        })),
+      setSkillGroups: (groups) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            skills: {
+              ...state.resumeProfile.skills,
+              groups
+            }
+          }
+        })),
       addSkillItem: (field, skill) => {
         const clean = skill.trim();
         if (!clean) return;
-        const current = getState().resumeProfile.skills[field] ?? [];
-        const exists = current.some((item) => normalizeForMatch(item) === normalizeForMatch(clean));
-        if (!exists) {
-          set((state) => ({
-            resumeProfile: {
-              ...state.resumeProfile,
-              skills: {
-                ...state.resumeProfile.skills,
-                [field]: [...state.resumeProfile.skills[field], clean]
-              }
-            }
-          }));
+        const currentProfile = getState().resumeProfile;
+        const current = currentProfile.skills[field] ?? [];
+        const normClean = normalizeForMatch(clean);
+        const existsFlat = current.some((item) => normalizeForMatch(item) === normClean);
+
+        const currentGroups = currentProfile.skills.groups ?? [];
+        let nextGroups = currentGroups;
+        if (currentGroups.length > 0) {
+          const existsInGroups = currentGroups.some((grp) =>
+            (grp.items ?? []).some((item) => normalizeForMatch(item) === normClean)
+          );
+          if (!existsInGroups) {
+            const targetIdx =
+              field === "tools"
+                ? currentGroups.findIndex((g) => /tool|framework|librar|database|software|platform|alat/i.test(g.category))
+                : field === "softSkills"
+                ? currentGroups.findIndex((g) => /soft|interpersonal|bahasa|language|other|lainnya/i.test(g.category))
+                : currentGroups.findIndex((g) => /other|lainnya|technical|programming|hard/i.test(g.category));
+            const resolvedIdx = targetIdx >= 0 ? targetIdx : currentGroups.length - 1;
+            nextGroups = currentGroups.map((grp, idx) =>
+              idx === resolvedIdx ? { ...grp, items: [...grp.items, clean] } : grp
+            );
+          }
         }
+
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            skills: {
+              ...state.resumeProfile.skills,
+              [field]: existsFlat ? current : [...current, clean],
+              groups: nextGroups
+            }
+          }
+        }));
+
         const { matchAnalytics, resumeProfile, jobTarget } = getState();
         if (matchAnalytics.hasAnalyzed && jobTarget.rawDescription.trim()) {
           set({ matchAnalytics: analyzeMatch(resumeProfile, jobTarget) });
@@ -639,6 +726,7 @@ export const useCvStore = create<AppState>()(
         suggestions: state.suggestions,
         activeMasterTab: state.activeMasterTab,
         cvLanguage: state.cvLanguage,
+        cvTemplate: state.cvTemplate,
         autoTranslateContent: state.autoTranslateContent,
         checkedAdminItems: state.checkedAdminItems,
         previewOpenDesktop: state.previewOpenDesktop
@@ -680,6 +768,10 @@ export const useCvStore = create<AppState>()(
           ? (persisted.activeMasterTab as MasterTab)
           : "contact";
 
+        const cvTemplate: CvTemplate = VALID_TEMPLATES.includes(persisted.cvTemplate as CvTemplate)
+          ? (persisted.cvTemplate as CvTemplate)
+          : "compact_centered";
+
         return {
           ...currentState,
           ...persisted,
@@ -688,6 +780,7 @@ export const useCvStore = create<AppState>()(
           suggestions,
           activeMasterTab,
           cvLanguage: persisted.cvLanguage ?? "auto",
+          cvTemplate,
           autoTranslateContent: persisted.autoTranslateContent ?? true,
           aiTranslatedEnProfile: null,
           aiTranslatedSourceHash: "",
