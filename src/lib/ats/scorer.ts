@@ -1,8 +1,10 @@
 import type {
+  DetectedLanguage,
   EducationCriterion,
   FormatCheckItem,
   JobTarget,
   KeywordMatch,
+  LanguageAlignmentInfo,
   MatchAnalytics,
   QualificationMatchItem,
   ResumeProfile,
@@ -10,11 +12,143 @@ import type {
 } from "@/types/resume";
 import { normalizeJobDescription, toLegacyExtractedKeywords } from "@/lib/ats/normalizer";
 import { containsTermBoundary, findSynonymMatch, getRelatedTerms, normalizeForMatch } from "@/lib/ats/synonyms";
+import { detectResumeProseLanguage } from "@/lib/resume-document";
 import { compact, toPercent } from "@/lib/text";
+
+export type AnalyzeMatchOptions = {
+  activeOutputLanguage?: "id" | "en";
+  effectiveProseLanguage?: DetectedLanguage;
+  translationCoverage?: number;
+};
 
 type ResumeCorpus = {
   full: string;
   sections: Array<{ label: string; text: string }>;
+};
+
+export const hasMetric = (value: string) => /\d|%|rp\s?\d/i.test(value);
+
+/** Pembuka pasif yang membuat poin terdengar seperti deskripsi tugas, bukan pencapaian. */
+export const FILLER_OPENERS = [
+  "bertanggung jawab untuk",
+  "bertanggung jawab atas",
+  "bertanggung jawab dalam",
+  "bertanggung jawab",
+  "ikut membantu dalam",
+  "ikut membantu",
+  "ikut serta dalam",
+  "ikut serta",
+  "membantu dalam",
+  "membantu untuk",
+  "terlibat dalam",
+  "berperan dalam",
+  "ditugaskan untuk",
+  "ditugaskan",
+  "tugas saya adalah",
+  "tugas saya",
+  "job desc",
+  "jobdesk",
+  "responsible for",
+  "helped with",
+  "assisted with",
+  "assisted in",
+  "worked on",
+  "tasked with"
+];
+
+/** Kata kerja lemah yang perlu ditingkatkan ke kata kerja aksi spesifik. */
+export const WEAK_VERB_MAP: Record<string, string> = {
+  membuat: "Menyusun",
+  buat: "Menyusun",
+  bikin: "Menyusun",
+  mengurus: "Mengelola",
+  mengatur: "Mengelola",
+  membantu: "Mendukung",
+  menolong: "Mendukung",
+  mengecek: "Memeriksa",
+  memberi: "Memberikan",
+  melakukan: "Menjalankan",
+  melaksanakan: "Menjalankan",
+  mengerjakan: "Menyelesaikan",
+  bantu: "Mendukung",
+  helped: "Supported",
+  assisted: "Supported",
+  made: "Built",
+  created: "Developed",
+  handled: "Managed",
+  did: "Executed",
+  worked: "Collaborated",
+  participated: "Contributed"
+};
+
+const STRONG_ENGLISH_VERBS = new Set([
+  "developed",
+  "built",
+  "engineered",
+  "designed",
+  "architected",
+  "implemented",
+  "integrated",
+  "managed",
+  "led",
+  "coordinated",
+  "optimized",
+  "analyzed",
+  "configured",
+  "automated",
+  "resolved",
+  "streamlined",
+  "delivered",
+  "authored",
+  "prepared",
+  "compiled",
+  "executed",
+  "tested",
+  "monitored",
+  "maintained",
+  "facilitated",
+  "organized",
+  "presented",
+  "reduced",
+  "improved",
+  "increased",
+  "processed",
+  "supported",
+  "guided",
+  "trained",
+  "supervised",
+  "audited",
+  "tracked",
+  "collaborated",
+  "contributed",
+  "cut",
+  "launched",
+  "published",
+  "consolidated"
+]);
+
+export const isStrongActionVerbToken = (word: string): boolean => {
+  const clean = word.toLowerCase().replace(/[^a-z]/g, "");
+  if (!clean || clean.length < 3) return false;
+  if (WEAK_VERB_MAP[clean]) return false;
+  if (STRONG_ENGLISH_VERBS.has(clean)) return true;
+  // Kata kerja aktif berimbuhan me-/meng-/mem-/men-/meny-/ber- dalam Bahasa Indonesia
+  if (/^(?:meng|meny|mem|men|me|ber)[a-z]{3,}$/.test(clean) && !WEAK_VERB_MAP[clean]) {
+    return true;
+  }
+  return false;
+};
+
+export const analyzeBulletSignals = (
+  bullet: string
+): { startsWithVerb: boolean; hasFiller: boolean; hasNumbers: boolean } => {
+  const stripped = bullet.trim().replace(/^[-•*\u2022\s]+/, "").trim();
+  const lower = stripped.toLowerCase();
+  const hasFiller = FILLER_OPENERS.some((opener) => lower.startsWith(opener));
+  const firstWord = stripped.split(/\s+/)[0] ?? "";
+  const startsWithVerb = !hasFiller && isStrongActionVerbToken(firstWord);
+  const hasNumbers = hasMetric(stripped);
+  return { startsWithVerb, hasFiller, hasNumbers };
 };
 
 const buildResumeCorpus = (resume: ResumeProfile): ResumeCorpus => {
@@ -91,10 +225,12 @@ const LEVEL_RANK: Record<string, number> = {
   "SMA/SMK": 1,
   SMK: 1,
   SMA: 1,
+  "HIGH SCHOOL": 1,
   D1: 2,
   D2: 2,
   D3: 3,
   DIPLOMA: 3,
+  ASSOCIATE: 3,
   D4: 4,
   S1: 4,
   SARJANA: 4,
@@ -110,6 +246,28 @@ const LEVEL_RANK: Record<string, number> = {
   S2: 5,
   MAGISTER: 5,
   MASTER: 5
+};
+
+const MAJOR_TRANSLATION_EQUIVALENTS: Record<string, string[]> = {
+  "Teknik Informatika": ["teknik informatika", "informatics engineering", "informatics"],
+  "Ilmu Komputer": ["ilmu komputer", "computer science"],
+  "Sistem Informasi": ["sistem informasi", "information systems"],
+  "Teknologi Informasi": ["teknologi informasi", "information technology"],
+  "Rekayasa Perangkat Lunak": ["rekayasa perangkat lunak", "software engineering"],
+  "Teknik Komputer & Jaringan (TKJ)": [
+    "teknik komputer dan jaringan",
+    "computer & network engineering",
+    "computer network engineering",
+    "computer engineering",
+    "teknik komputer"
+  ],
+  Akuntansi: ["akuntansi", "accounting"],
+  "Manajemen / Bisnis": ["manajemen bisnis", "administrasi bisnis", "manajemen", "business management", "business administration", "management"],
+  "Ekonomi / Keuangan": ["ekonomi", "ekonomi pembangunan", "keuangan dan perbankan", "economics", "finance"],
+  "Administrasi Perkantoran": ["administrasi perkantoran", "office administration"],
+  "Desain Komunikasi Visual (DKV)": ["desain komunikasi visual", "dkv", "visual communication design", "graphic design"],
+  "Ilmu Komunikasi": ["ilmu komunikasi", "communication science"],
+  "Rekam Medis & Informasi Kesehatan": ["rekam medis dan informasi kesehatan", "medical records & health information", "medical records"]
 };
 
 const parseHighestUserDegreeRank = (resume: ResumeProfile): number => {
@@ -136,10 +294,17 @@ const parseUserGpa = (resume: ResumeProfile): number | undefined => {
   return undefined;
 };
 
+const hasLanguageMismatch = (jobLanguage: DetectedLanguage, effectiveProseLanguage: DetectedLanguage): boolean => {
+  if (jobLanguage === "mixed" || effectiveProseLanguage === "mixed") return false;
+  return jobLanguage !== effectiveProseLanguage;
+};
+
 const evaluateEducationCriterion = (
   criterion: EducationCriterion,
   resume: ResumeProfile,
-  corpus: ResumeCorpus
+  corpus: ResumeCorpus,
+  jobLanguage: DetectedLanguage,
+  effectiveProseLanguage: DetectedLanguage
 ): QualificationMatchItem => {
   const eduSectionText = corpus.sections.find((s) => s.label === "Pendidikan")?.text ?? "";
   const hasEduFilled = (resume.education ?? []).some((e) => e.institution.trim() || e.degree.trim() || e.fieldOfStudy.trim());
@@ -149,11 +314,11 @@ const evaluateEducationCriterion = (
       term: criterion.label,
       category: "education_criteria",
       status: "gap",
+      matchKind: "gap",
       guidance: "Lengkapi bagian Pendidikan (jenjang, jurusan, institusi, dan IPK) di Langkah 1 agar sistem dapat mencocokkannya."
     };
   }
 
-  // Check degree level
   const requiredRanks = criterion.levels
     .map((lvl) => LEVEL_RANK[lvl.toUpperCase()] ?? 0)
     .filter((rank) => rank > 0);
@@ -161,17 +326,17 @@ const evaluateEducationCriterion = (
   const userRank = parseHighestUserDegreeRank(resume);
   const levelOk = minRequiredRank === 0 || userRank >= minRequiredRank;
 
-  // Check GPA if specified
   const userGpa = parseUserGpa(resume);
   const gpaOk = criterion.minGpa === undefined || (userGpa !== undefined && userGpa >= criterion.minGpa);
 
-  // Check majors (exact or cluster synonym)
   let majorStatus: "matched" | "partial" | "gap" | "not_required" = criterion.majors.length ? "gap" : "not_required";
   let matchedMajorVia: string | undefined;
 
   if (criterion.majors.length) {
     for (const major of criterion.majors) {
-      if (containsTermBoundary(eduSectionText, major)) {
+      const directEquivs = MAJOR_TRANSLATION_EQUIVALENTS[major] ?? [major];
+      const exactOrTranslatedHit = directEquivs.some((eq) => containsTermBoundary(eduSectionText, eq));
+      if (exactOrTranslatedHit) {
         majorStatus = "matched";
         matchedMajorVia = major;
         break;
@@ -185,11 +350,26 @@ const evaluateEducationCriterion = (
     }
   }
 
+  const mismatch = hasLanguageMismatch(jobLanguage, effectiveProseLanguage);
+
   if (levelOk && gpaOk && (majorStatus === "matched" || majorStatus === "not_required")) {
+    if (mismatch) {
+      return {
+        term: criterion.label,
+        category: "education_criteria",
+        status: "partial",
+        matchKind: "cross_language",
+        matchedVia: `Pendidikan sesuai (beda bahasa CV: ${effectiveProseLanguage.toUpperCase()} vs Iklan: ${jobLanguage.toUpperCase()})`,
+        evidenceLocation: "Pendidikan",
+        guidance: "Jenjang & jurusanmu cocok, tetapi masih berbeda bahasa dengan iklan lowongan. Terjemahkan CV agar terbaca langsung oleh ATS."
+      };
+    }
+
     return {
       term: criterion.label,
       category: "education_criteria",
       status: "matched",
+      matchKind: "exact",
       evidenceLocation: "Pendidikan",
       guidance: "Latar belakang pendidikan di CV sudah memenuhi kualifikasi lowongan."
     };
@@ -203,6 +383,7 @@ const evaluateEducationCriterion = (
       term: criterion.label,
       category: "education_criteria",
       status: "partial",
+      matchKind: mismatch ? "cross_language" : "synonym",
       matchedVia: matchedMajorVia,
       evidenceLocation: "Pendidikan",
       guidance: `${note} Tonjolkan tugas akhir atau mata kuliah yang relevan dengan posisi ini.`
@@ -213,6 +394,7 @@ const evaluateEducationCriterion = (
     term: criterion.label,
     category: "education_criteria",
     status: "gap",
+    matchKind: "gap",
     guidance:
       "Jika jurusan berbeda, kamu tetap dapat menonjolkan proyek, mata kuliah relevan, atau sertifikasi yang membuktikan kesiapanmu pada posisi ini."
   };
@@ -222,7 +404,9 @@ const evaluateTermMatch = (
   term: string,
   category: "explicit_hard_skills_and_tools" | "soft_skills_and_work_traits",
   corpus: ResumeCorpus,
-  experienceLevel: ResumeProfile["experienceLevel"]
+  experienceLevel: ResumeProfile["experienceLevel"],
+  jobLanguage: DetectedLanguage,
+  effectiveProseLanguage: DetectedLanguage
 ): QualificationMatchItem => {
   if (containsTermBoundary(corpus.full, term)) {
     const location = findEvidenceSection(corpus, term) ?? "CV";
@@ -230,23 +414,28 @@ const evaluateTermMatch = (
       term,
       category,
       status: "matched",
+      matchKind: "exact",
       evidenceLocation: location,
       guidance: `Sudah terbaca langsung di bagian ${location}.`
     };
   }
 
-  // Cek sinonim / singkatan / lintas bahasa (ID <-> EN)
   const syn = findSynonymMatch(corpus.full, term);
   if (syn) {
     const location = findEvidenceSection(corpus, syn.matchedTerm) ?? "CV";
-    const relationText = syn.kind === "cross_language" ? "Padanan lintas bahasa" : "Sinonim istilah";
+    const mismatch = hasLanguageMismatch(jobLanguage, effectiveProseLanguage);
+    const isCrossLang = syn.kind === "cross_language" && mismatch;
+    const relationText = isCrossLang ? "Padanan lintas bahasa" : "Sinonim istilah";
     return {
       term,
       category,
       status: "partial",
+      matchKind: isCrossLang ? "cross_language" : "synonym",
       matchedVia: `${relationText}: ${syn.matchedTerm}`,
       evidenceLocation: location,
-      guidance: `Ditemukan padanan "${syn.matchedTerm}" di bagian ${location}. Jika sesuai dengan bahasamu, kamu bisa menambahkan istilah "${term}" secara berdampingan.`
+      guidance: isCrossLang
+        ? `Ditemukan padanan "${syn.matchedTerm}" di bagian ${location} (berbeda bahasa dengan iklan). Terjemahkan CV atau tambahkan istilah "${term}".`
+        : `Ditemukan padanan "${syn.matchedTerm}" di bagian ${location}. Jika sesuai, kamu bisa menambahkan istilah "${term}".`
     };
   }
 
@@ -262,6 +451,7 @@ const evaluateTermMatch = (
       term,
       category,
       status: "gap",
+      matchKind: "gap",
       guidance: `${freshNote} Jangan mencantumkan keahlian yang belum pernah kamu praktikkan.`
     };
   }
@@ -270,6 +460,7 @@ const evaluateTermMatch = (
     term,
     category,
     status: "gap",
+    matchKind: "gap",
     guidance: `Tunjukkan karakter kerja "${term}" melalui tindakan nyata di poin pengalaman, proyek, atau organisasi (bukan sekadar daftar kata sifat).`
   };
 };
@@ -313,7 +504,15 @@ export const evaluateFormatQuality = (resume: ResumeProfile): { score: number; c
   const hasEducation = (resume.education ?? []).some((e) => e.institution.trim() || e.degree.trim() || e.fieldOfStudy.trim());
   const hasGpaOrThesis = (resume.education ?? []).some((e) => Boolean(e.gpa?.trim() || e.thesisTitle?.trim()));
 
-  const checks: FormatCheckItem[] = [
+  const bulletSignals = allBullets.map(analyzeBulletSignals);
+  const strongVerbBullets = bulletSignals.filter((s) => s.startsWithVerb).length;
+  const metricBullets = bulletSignals.filter((s) => s.hasNumbers).length;
+  const activeVerbRatio = allBullets.length ? strongVerbBullets / allBullets.length : 0;
+  const metricRatio = allBullets.length
+    ? Math.min(1, metricBullets / Math.max(1, Math.ceil(allBullets.length * 0.6)))
+    : 0;
+
+  const structuralChecks: FormatCheckItem[] = [
     {
       id: "contact-complete",
       label: "Kontak utama lengkap (Nama, Email valid, Telepon)",
@@ -349,12 +548,6 @@ export const evaluateFormatQuality = (resume: ResumeProfile): { score: number; c
         : "Tambahkan minimal 2 poin pencapaian pada pengalaman kerja."
     },
     {
-      id: "impact-metric",
-      label: "Ada ukuran hasil terukur (angka, %, atau jumlah) di poin CV",
-      passed: allBullets.some((b) => /\d/.test(b)),
-      tip: "Jika memang ada datanya, tambahkan angka nyata seperti jumlah peserta, waktu, atau persentase."
-    },
-    {
       id: "skills-minimum",
       label: "Daftar keahlian teknis / alat kerja minimal 3 item",
       passed: skillCount >= 3,
@@ -368,10 +561,129 @@ export const evaluateFormatQuality = (resume: ResumeProfile): { score: number; c
     }
   ];
 
-  const passedCount = checks.filter((c) => c.passed).length;
+  const impactChecks: FormatCheckItem[] = [
+    {
+      id: "active-action-verbs",
+      label: `Poin diawali kata kerja aksi aktif (${strongVerbBullets}/${allBullets.length} poin)`,
+      passed: allBullets.length > 0 && activeVerbRatio >= 0.75,
+      tip: "Ganti pembuka pasif seperti 'Bertanggung jawab...' atau 'Membantu...' di Langkah 3 agar skor langsung naik."
+    },
+    {
+      id: "impact-metric",
+      label: `Poin memuat ukuran hasil nyata (${metricBullets}/${allBullets.length} poin)`,
+      passed: metricRatio >= 0.65 && metricBullets >= 1,
+      tip: "Jika datanya ada, tambahkan angka nyata (jumlah modul, pengguna, %, atau waktu) di beberapa poin utama."
+    }
+  ];
+
+  const checks = [...structuralChecks, ...impactChecks];
+  const structuralPassed = structuralChecks.filter((c) => c.passed).length;
+  const structuralRatio = structuralChecks.length ? structuralPassed / structuralChecks.length : 0;
+
+  const continuousScore = structuralRatio * 0.55 + activeVerbRatio * 0.25 + metricRatio * 0.2;
+
   return {
-    score: checks.length ? passedCount / checks.length : 0,
+    score: Math.max(0, Math.min(1, continuousScore)),
     checks
+  };
+};
+
+const evaluateLanguageAlignment = (
+  resume: ResumeProfile,
+  jobLanguage: DetectedLanguage,
+  options?: AnalyzeMatchOptions
+): LanguageAlignmentInfo => {
+  const effectiveProse = options?.effectiveProseLanguage ?? detectResumeProseLanguage(resume);
+  const activeOutputLanguage: "id" | "en" =
+    options?.activeOutputLanguage ?? (effectiveProse === "en" ? "en" : "id");
+  const coverage = Math.max(0, Math.min(1, options?.translationCoverage ?? 1));
+
+  if (jobLanguage === "mixed") {
+    return {
+      score: 92,
+      cvLanguage: effectiveProse,
+      activeOutputLanguage,
+      jobLanguage,
+      status: "aligned",
+      note: "Iklan bersifat dwibahasa (ID-EN); bahasa CV kamu kompatibel dengan posisi ini."
+    };
+  }
+
+  if (jobLanguage === "en") {
+    if (effectiveProse === "en" && activeOutputLanguage === "en") {
+      const score = Math.round(75 + 25 * coverage);
+      return {
+        score,
+        cvLanguage: effectiveProse,
+        activeOutputLanguage,
+        jobLanguage,
+        status: coverage >= 0.85 ? "aligned" : "partial",
+        note:
+          coverage >= 0.85
+            ? "Bahasa isi CV dan judul seksi sudah selaras dengan iklan berbahasa Inggris."
+            : "Bahasa utama CV sudah English, masih ada beberapa frasa yang perlu diperiksa di modal Teks Asli vs Translate."
+      };
+    }
+
+    if (effectiveProse === "mixed") {
+      const score = Math.round(52 + 28 * coverage);
+      return {
+        score,
+        cvLanguage: effectiveProse,
+        activeOutputLanguage,
+        jobLanguage,
+        status: "partial",
+        note: "Sebagian isi CV masih berbahasa Indonesia untuk lowongan English. Perhalus atau sunting frasa yang tertinggal agar skor naik maksimal."
+      };
+    }
+
+    const score = activeOutputLanguage === "en" ? 35 : 20;
+    return {
+      score,
+      cvLanguage: effectiveProse,
+      activeOutputLanguage,
+      jobLanguage,
+      status: "mismatch",
+      note: "Iklan lowongan berbahasa Inggris, sedangkan isi CV saat ini berbahasa Indonesia. Ubah bahasa CV ke EN (English ATS) agar terbaca optimal oleh sistem ATS."
+    };
+  }
+
+  // jobLanguage === "id"
+  if (effectiveProse === "id" && activeOutputLanguage === "id") {
+    const score = Math.round(75 + 25 * coverage);
+    return {
+      score,
+      cvLanguage: effectiveProse,
+      activeOutputLanguage,
+      jobLanguage,
+      status: coverage >= 0.85 ? "aligned" : "partial",
+      note:
+        coverage >= 0.85
+          ? "Bahasa isi CV dan judul seksi selaras dengan iklan lowongan berbahasa Indonesia."
+          : "Bahasa utama sudah Indonesia, periksa beberapa istilah asing yang belum diterjemahkan."
+    };
+  }
+
+  if (effectiveProse === "mixed") {
+    const score = Math.round(55 + 25 * coverage);
+    return {
+      score,
+      cvLanguage: effectiveProse,
+      activeOutputLanguage,
+      jobLanguage,
+      status: "partial",
+      note: "Isi CV campuran ID-EN pada lowongan berbahasa Indonesia."
+    };
+  }
+
+  const score = activeOutputLanguage === "id" ? 55 : 45;
+  return {
+    score,
+    cvLanguage: effectiveProse,
+    activeOutputLanguage,
+    jobLanguage,
+    status: "mismatch",
+    note: "Iklan lowongan berbahasa Indonesia, sedangkan isi CV masih berbahasa Inggris."
   };
 };
 
@@ -379,44 +691,78 @@ const ratioForMatches = (items: QualificationMatchItem[]): number | null => {
   if (!items.length) return null;
   const total = items.reduce((sum, item) => {
     if (item.status === "matched") return sum + 1.0;
-    if (item.status === "partial") return sum + 0.75;
+    if (item.matchKind === "cross_language") return sum + 0.45;
+    if (item.status === "partial") return sum + 0.8;
     return sum;
   }, 0);
   return total / items.length;
 };
 
-export const analyzeMatch = (resume: ResumeProfile, job: JobTarget): MatchAnalytics => {
+export const analyzeMatch = (
+  resume: ResumeProfile,
+  job: JobTarget,
+  options?: AnalyzeMatchOptions
+): MatchAnalytics => {
   const normalized =
     job.normalized ?? normalizeJobDescription(job.rawDescription, job.jobTitle);
   const corpus = buildResumeCorpus(resume);
+  const effectiveProseLanguage = options?.effectiveProseLanguage ?? detectResumeProseLanguage(resume);
 
   const hardMatches: QualificationMatchItem[] = normalized.explicit_hard_skills_and_tools.map((term) =>
-    evaluateTermMatch(term, "explicit_hard_skills_and_tools", corpus, resume.experienceLevel)
+    evaluateTermMatch(
+      term,
+      "explicit_hard_skills_and_tools",
+      corpus,
+      resume.experienceLevel,
+      normalized.detectedLanguage,
+      effectiveProseLanguage
+    )
   );
   const eduMatches: QualificationMatchItem[] = normalized.education_criteria.map((criterion) =>
-    evaluateEducationCriterion(criterion, resume, corpus)
+    evaluateEducationCriterion(
+      criterion,
+      resume,
+      corpus,
+      normalized.detectedLanguage,
+      effectiveProseLanguage
+    )
   );
   const softMatches: QualificationMatchItem[] = normalized.soft_skills_and_work_traits.map((term) =>
-    evaluateTermMatch(term, "soft_skills_and_work_traits", corpus, resume.experienceLevel)
+    evaluateTermMatch(
+      term,
+      "soft_skills_and_work_traits",
+      corpus,
+      resume.experienceLevel,
+      normalized.detectedLanguage,
+      effectiveProseLanguage
+    )
   );
 
   const qualificationMatches = [...hardMatches, ...eduMatches, ...softMatches];
   const formatEval = evaluateFormatQuality(resume);
+  const languageAlignment = evaluateLanguageAlignment(resume, normalized.detectedLanguage, {
+    ...options,
+    effectiveProseLanguage
+  });
 
-  // Kalibrasi skor berbobot dengan re-normalisasi dinamis jika salah satu kategori kosong di iklan
+  // Kalibrasi skor berbobot dengan re-normalisasi dinamis
   const rawHard = ratioForMatches(hardMatches);
   const rawEdu = ratioForMatches(eduMatches);
   const rawSoft = ratioForMatches(softMatches);
   const rawFormat = formatEval.score;
+  const rawLang = languageAlignment.score / 100;
 
   const activeComponents: Array<{
-    key: "hardSkills" | "educationAndDomain" | "structureAndImpact" | "softSkills";
+    key: "hardSkills" | "educationAndDomain" | "structureAndImpact" | "languageAlignment" | "softSkills";
     baseWeight: number;
     score: number;
-  }> = [{ key: "structureAndImpact", baseWeight: 0.15, score: rawFormat }];
+  }> = [
+    { key: "structureAndImpact", baseWeight: 0.2, score: rawFormat },
+    { key: "languageAlignment", baseWeight: 0.1, score: rawLang }
+  ];
 
-  if (rawHard !== null) activeComponents.push({ key: "hardSkills", baseWeight: 0.55, score: rawHard });
-  if (rawEdu !== null) activeComponents.push({ key: "educationAndDomain", baseWeight: 0.25, score: rawEdu });
+  if (rawHard !== null) activeComponents.push({ key: "hardSkills", baseWeight: 0.45, score: rawHard });
+  if (rawEdu !== null) activeComponents.push({ key: "educationAndDomain", baseWeight: 0.2, score: rawEdu });
   if (rawSoft !== null) activeComponents.push({ key: "softSkills", baseWeight: 0.05, score: rawSoft });
 
   const totalBaseWeight = activeComponents.reduce((sum, item) => sum + item.baseWeight, 0) || 1;
@@ -424,6 +770,7 @@ export const analyzeMatch = (resume: ResumeProfile, job: JobTarget): MatchAnalyt
     hardSkills: 0,
     educationAndDomain: 0,
     structureAndImpact: 0,
+    languageAlignment: 0,
     softSkills: 0
   };
 
@@ -438,11 +785,11 @@ export const analyzeMatch = (resume: ResumeProfile, job: JobTarget): MatchAnalyt
     hardSkillsScore: rawHard !== null ? toPercent(rawHard) : 0,
     educationAndDomainScore: rawEdu !== null ? toPercent(rawEdu) : 0,
     structureAndImpactScore: toPercent(rawFormat),
+    languageAlignmentScore: languageAlignment.score,
     softSkillsScore: rawSoft !== null ? toPercent(rawSoft) : 0,
     weights
   };
 
-  // Hitung metrik kompatibilitas untuk UI / dashboard lama
   const matchedKeywords = qualificationMatches.filter((m) => m.status === "matched").map((m) => m.term);
   const semanticKeywords = qualificationMatches.filter((m) => m.status === "partial").map((m) => m.term);
   const missingKeywords = qualificationMatches.filter((m) => m.status === "gap").map((m) => m.term);
@@ -484,6 +831,7 @@ export const analyzeMatch = (resume: ResumeProfile, job: JobTarget): MatchAnalyt
     formatCheckPassed: rawFormat >= 0.75,
     keywordMatches,
     breakdown,
+    languageAlignment,
     qualificationMatches,
     administrativeItems: normalized.administrative_requirements,
     implicitSuggestions,
@@ -504,5 +852,4 @@ export const describeKeywordAction = (match: KeywordMatch): string => {
 };
 
 export { toLegacyExtractedKeywords };
-export const hasMetric = (value: string) => /\d|%|rp\s?\d/i.test(value);
 export const compactTokens = compact;
