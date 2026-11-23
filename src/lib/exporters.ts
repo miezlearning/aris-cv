@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import type { ResumeProfile } from "@/types/resume";
+import type { CvTemplate, ResumeProfile } from "@/types/resume";
 import { DOC_STYLE, buildResumeDocument, type ResumeBuildOptions } from "@/lib/resume-document";
 import { compact } from "@/lib/text";
 
@@ -20,6 +20,94 @@ const safeFileName = (value: string) =>
     .replace(/[^a-z0-9]+/gi, "-")
     .replace(/^-|-$/g, "")
     .toLowerCase() || "quicktailor-cv";
+
+type PdfMetrics = {
+  padV: number;
+  padH: number;
+  fontFamily: string;
+  bodySize: number;
+  lineHeight: number;
+  nameSize: number;
+  headlineSize: number;
+  contactSize: number;
+  headingSize: number;
+  entrySize: number;
+  metaSize: number;
+  noteSize: number;
+  sectionTop: number;
+  headingBottom: number;
+  entryTop: number;
+  bulletBottom: number;
+  alignHeader: "center" | "left";
+  headerDivider: boolean;
+  twoTierEntry: boolean;
+};
+
+const PDF_TEMPLATE_METRICS: Record<CvTemplate, PdfMetrics> = {
+  compact_centered: {
+    padV: 28,
+    padH: 34,
+    fontFamily: DOC_STYLE.pdfFont,
+    bodySize: 8.5,
+    lineHeight: 1.24,
+    nameSize: 16.5,
+    headlineSize: 9.2,
+    contactSize: 8.3,
+    headingSize: 9.2,
+    entrySize: 8.7,
+    metaSize: 8.3,
+    noteSize: 8.2,
+    sectionTop: 5,
+    headingBottom: 2.5,
+    entryTop: 2.5,
+    bulletBottom: 1.2,
+    alignHeader: "center",
+    headerDivider: false,
+    twoTierEntry: false
+  },
+  classic_editorial: {
+    padV: 38,
+    padH: 42,
+    fontFamily: DOC_STYLE.pdfFont,
+    bodySize: 9.5,
+    lineHeight: 1.32,
+    nameSize: 18,
+    headlineSize: 10,
+    contactSize: 9,
+    headingSize: 10,
+    entrySize: 9.5,
+    metaSize: 9,
+    noteSize: 9,
+    sectionTop: 7,
+    headingBottom: 4,
+    entryTop: 4,
+    bulletBottom: 2,
+    alignHeader: "center",
+    headerDivider: false,
+    twoTierEntry: false
+  },
+  executive_left: {
+    padV: 42,
+    padH: 46,
+    fontFamily: DOC_STYLE.pdfSerifFont,
+    bodySize: 9.5,
+    lineHeight: 1.34,
+    nameSize: 19,
+    headlineSize: 10,
+    contactSize: 9,
+    headingSize: 10,
+    entrySize: 9.5,
+    metaSize: 9,
+    noteSize: 9,
+    sectionTop: 8,
+    headingBottom: 4,
+    entryTop: 4.5,
+    bulletBottom: 2.2,
+    alignHeader: "left",
+    headerDivider: true,
+    twoTierEntry: true
+  }
+};
 
 /**
  * Teks polos ATS standar. Dipakai untuk tombol TXT dan pengecekan parsing linear.
@@ -70,58 +158,66 @@ export const buildPdfDocument = async (
   const React = await import("react");
   const { Document, Page, Text, View, StyleSheet } = await import("@react-pdf/renderer");
   const document = buildResumeDocument(resume, lang, options);
+  const m = PDF_TEMPLATE_METRICS[document.template];
 
   const el = (type: unknown, props: Record<string, unknown> | null, ...children: ReactNode[]) =>
     React.createElement(type as never, props as never, ...children);
 
   const styles = StyleSheet.create({
     page: {
-      paddingTop: 38,
-      paddingBottom: 38,
-      paddingLeft: 42,
-      paddingRight: 42,
-      fontSize: 9.5,
-      fontFamily: DOC_STYLE.pdfFont,
+      paddingTop: m.padV,
+      paddingBottom: m.padV,
+      paddingLeft: m.padH,
+      paddingRight: m.padH,
+      fontSize: m.bodySize,
+      fontFamily: m.fontFamily,
       color: "#000000",
-      lineHeight: 1.32
+      lineHeight: m.lineHeight
     },
     header: {
-      textAlign: "center",
-      marginBottom: 8
+      textAlign: m.alignHeader,
+      marginBottom: m.headerDivider ? 8 : m.padV <= 30 ? 5 : 8,
+      ...(m.headerDivider
+        ? {
+            borderBottomWidth: 1.1,
+            borderBottomColor: "#000000",
+            paddingBottom: 6
+          }
+        : {})
     },
     name: {
-      fontSize: 18,
+      fontSize: m.nameSize,
       fontWeight: 700,
-      textAlign: "center",
+      textAlign: m.alignHeader,
       color: "#000000",
-      marginBottom: 3
+      marginBottom: 2.5
     },
     headline: {
-      fontSize: 10,
+      fontSize: m.headlineSize,
       fontWeight: 700,
-      textAlign: "center",
+      textAlign: m.alignHeader,
       color: "#000000",
-      marginBottom: 3
+      marginBottom: 2.5
     },
     contact: {
-      fontSize: 9,
-      textAlign: "center",
+      fontSize: m.contactSize,
+      textAlign: m.alignHeader,
       color: "#222222",
-      marginBottom: 2
+      marginBottom: 1.5
     },
     section: {
-      marginTop: 7
+      marginTop: m.sectionTop
     },
     headingRow: {
       borderBottomWidth: 0.8,
       borderBottomColor: "#000000",
-      paddingBottom: 2,
-      marginBottom: 4
+      paddingBottom: 1.5,
+      marginBottom: m.headingBottom
     },
     heading: {
-      fontSize: 10,
+      fontSize: m.headingSize,
       fontWeight: 700,
-      letterSpacing: 0.4,
+      letterSpacing: 0.35,
       textTransform: "uppercase",
       color: "#000000"
     },
@@ -129,31 +225,44 @@ export const buildPdfDocument = async (
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "baseline",
-      marginTop: 4,
-      marginBottom: 1.5
+      marginTop: m.entryTop,
+      marginBottom: 1
     },
     entryTitle: {
       flex: 1,
-      fontSize: 9.5,
-      fontWeight: 700,
+      fontSize: m.entrySize,
       color: "#000000",
       paddingRight: 8
     },
+    entryTitleBold: {
+      fontWeight: 700,
+      color: "#000000"
+    },
+    entryTitleRegular: {
+      fontWeight: 400,
+      color: "#000000"
+    },
+    entrySecondaryLine: {
+      fontSize: m.noteSize,
+      fontStyle: "italic",
+      color: "#222222",
+      marginBottom: 1.5
+    },
     entryMeta: {
-      fontSize: 9,
+      fontSize: m.metaSize,
       color: "#000000",
       textAlign: "right"
     },
     metaOnly: {
-      fontSize: 9,
+      fontSize: m.metaSize,
       color: "#222222",
       marginBottom: 1.5
     },
     paragraph: {
-      fontSize: 9.5,
-      lineHeight: 1.32,
+      fontSize: m.bodySize,
+      lineHeight: m.lineHeight,
       color: "#000000",
-      marginBottom: 2.5
+      marginBottom: m.padV <= 30 ? 1.5 : 2.5
     },
     boldLabel: {
       fontWeight: 700,
@@ -161,22 +270,22 @@ export const buildPdfDocument = async (
     },
     bulletRow: {
       flexDirection: "row",
-      marginBottom: 2,
-      paddingLeft: 10
+      marginBottom: m.bulletBottom,
+      paddingLeft: m.padV <= 30 ? 8 : 10
     },
     bulletDot: {
-      width: 9,
-      fontSize: 9.5,
+      width: 8,
+      fontSize: m.bodySize,
       color: "#000000"
     },
     bulletText: {
       flex: 1,
-      fontSize: 9.5,
-      lineHeight: 1.32,
+      fontSize: m.bodySize,
+      lineHeight: m.lineHeight,
       color: "#000000"
     },
     note: {
-      fontSize: 9,
+      fontSize: m.noteSize,
       color: "#222222",
       marginBottom: 1.5
     }
@@ -202,7 +311,6 @@ export const buildPdfDocument = async (
       if (colonIndex > 0 && colonIndex < 38) {
         const label = paragraph.slice(0, colonIndex);
         const rest = paragraph.slice(colonIndex + 1);
-        // Gunakan satu elemen <Text> linear dengan anak <Text> tebal agar PDF parser membacanya sebagai satu baris utuh
         blocks.push(
           el(
             Text,
@@ -217,19 +325,54 @@ export const buildPdfDocument = async (
     });
 
     section.entries.forEach((entry, entryIndex) => {
-      if (entry.title && entry.meta) {
-        blocks.push(
-          el(
-            View,
-            { key: `entry-${entryIndex}`, style: styles.entryRow },
-            el(Text, { style: styles.entryTitle }, entry.title),
-            el(Text, { style: styles.entryMeta }, entry.meta)
-          )
-        );
-      } else if (entry.title) {
-        blocks.push(el(Text, { key: `entry-${entryIndex}`, style: styles.entryTitle }, entry.title));
-      } else if (entry.meta) {
-        blocks.push(el(Text, { key: `entry-${entryIndex}`, style: styles.metaOnly }, entry.meta));
+      if (m.twoTierEntry) {
+        const primaryLabel = entry.titlePrimary || entry.title;
+        if (primaryLabel && entry.meta) {
+          blocks.push(
+            el(
+              View,
+              { key: `entry-${entryIndex}`, style: styles.entryRow },
+              el(Text, { style: [styles.entryTitle, styles.entryTitleBold] }, primaryLabel),
+              el(Text, { style: styles.entryMeta }, entry.meta)
+            )
+          );
+        } else if (primaryLabel) {
+          blocks.push(
+            el(Text, { key: `entry-${entryIndex}`, style: [styles.entryTitle, styles.entryTitleBold] }, primaryLabel)
+          );
+        } else if (entry.meta) {
+          blocks.push(el(Text, { key: `entry-${entryIndex}`, style: styles.metaOnly }, entry.meta));
+        }
+
+        if (entry.titleSecondary) {
+          blocks.push(
+            el(Text, { key: `entry-sec-${entryIndex}`, style: styles.entrySecondaryLine }, entry.titleSecondary)
+          );
+        }
+      } else {
+        const titleChildren: ReactNode[] = entry.titlePrimary
+          ? [
+              el(Text, { key: "tp", style: styles.entryTitleBold }, entry.titlePrimary),
+              ...(entry.titleSecondary
+                ? [el(Text, { key: "ts", style: styles.entryTitleRegular }, ` | ${entry.titleSecondary}`)]
+                : [])
+            ]
+          : [entry.title];
+
+        if (entry.title && entry.meta) {
+          blocks.push(
+            el(
+              View,
+              { key: `entry-${entryIndex}`, style: styles.entryRow },
+              el(Text, { style: styles.entryTitle }, ...titleChildren),
+              el(Text, { style: styles.entryMeta }, entry.meta)
+            )
+          );
+        } else if (entry.title) {
+          blocks.push(el(Text, { key: `entry-${entryIndex}`, style: styles.entryTitle }, ...titleChildren));
+        } else if (entry.meta) {
+          blocks.push(el(Text, { key: `entry-${entryIndex}`, style: styles.metaOnly }, entry.meta));
+        }
       }
 
       const entryNotes = entry.notes?.length ? entry.notes : entry.note ? [entry.note] : [];
@@ -291,16 +434,31 @@ export const buildDocxDocument = async (
     "docx"
   );
   const document = buildResumeDocument(resume, lang, options);
-  const margin = Math.round(0.58 * 1440);
+  const template = document.template;
+  const isCompact = template === "compact_centered";
+  const isExecutive = template === "executive_left";
+
+  const margin = Math.round((isCompact ? 0.44 : isExecutive ? 0.62 : 0.58) * 1440);
   const contentWidth = 11906 - margin * 2;
+  const font = isExecutive ? DOC_STYLE.docxSerifFont : DOC_STYLE.docxFont;
+  const alignment = isExecutive ? AlignmentType.LEFT : AlignmentType.CENTER;
+
+  const nameSz = isCompact ? 34 : isExecutive ? 38 : 36;
+  const headlineSz = isCompact ? 18 : 21;
+  const contactSz = isCompact ? 17 : 19;
+  const headingSz = isCompact ? 18 : 20;
+  const entrySz = isCompact ? 18 : 20;
+  const bodySz = isCompact ? 17 : 19;
+  const noteSz = isCompact ? 17 : 18;
+
   const body: InstanceType<typeof Paragraph>[] = [];
 
   if (document.name) {
     body.push(
       new Paragraph({
-        alignment: AlignmentType.CENTER,
-        children: [new TextRun({ text: document.name, bold: true, size: 36, font: "Arial" })],
-        spacing: { after: 40 }
+        alignment,
+        children: [new TextRun({ text: document.name, bold: true, size: nameSz, font })],
+        spacing: { after: isCompact ? 25 : 40 }
       })
     );
   }
@@ -308,9 +466,9 @@ export const buildDocxDocument = async (
   if (document.headline) {
     body.push(
       new Paragraph({
-        alignment: AlignmentType.CENTER,
-        children: [new TextRun({ text: document.headline, bold: true, size: 21, font: "Arial" })],
-        spacing: { after: 35 }
+        alignment,
+        children: [new TextRun({ text: document.headline, bold: true, size: headlineSz, font })],
+        spacing: { after: isCompact ? 25 : 35 }
       })
     );
   }
@@ -318,9 +476,12 @@ export const buildDocxDocument = async (
   if (document.contact) {
     body.push(
       new Paragraph({
-        alignment: AlignmentType.CENTER,
-        children: [new TextRun({ text: document.contact, size: 19, font: "Arial", color: "222222" })],
-        spacing: { after: 140 }
+        alignment,
+        children: [new TextRun({ text: document.contact, size: contactSz, font, color: "222222" })],
+        ...(isExecutive
+          ? { border: { bottom: { color: "000000", space: 4, style: BorderStyle.SINGLE, size: 10 } } }
+          : {}),
+        spacing: { after: isCompact ? 80 : 140 }
       })
     );
   }
@@ -331,7 +492,7 @@ export const buildDocxDocument = async (
         text: section.heading.toUpperCase(),
         heading: HeadingLevel.HEADING_1,
         border: { bottom: { color: "000000", space: 2, style: BorderStyle.SINGLE, size: 6 } },
-        spacing: { before: 160, after: 70 }
+        spacing: { before: isCompact ? 110 : 160, after: isCompact ? 45 : 70 }
       })
     );
 
@@ -343,49 +504,98 @@ export const buildDocxDocument = async (
         body.push(
           new Paragraph({
             children: [
-              new TextRun({ text: `${label}:`, bold: true, size: 19, font: "Arial" }),
-              new TextRun({ text: rest, size: 19, font: "Arial" })
+              new TextRun({ text: `${label}:`, bold: true, size: bodySz, font }),
+              new TextRun({ text: rest, size: bodySz, font })
             ],
-            spacing: { after: 45 }
+            spacing: { after: isCompact ? 30 : 45 }
           })
         );
       } else {
         body.push(
           new Paragraph({
-            children: [new TextRun({ text: paragraph, size: 19, font: "Arial" })],
-            spacing: { after: 65 }
+            children: [new TextRun({ text: paragraph, size: bodySz, font })],
+            spacing: { after: isCompact ? 40 : 65 }
           })
         );
       }
     });
 
     section.entries.forEach((entry) => {
-      if (entry.title && entry.meta) {
-        body.push(
-          new Paragraph({
-            tabStops: [{ type: TabStopType.RIGHT, position: contentWidth }],
-            children: [
-              new TextRun({ text: entry.title, bold: true, size: 20, font: "Arial" }),
-              new Tab(),
-              new TextRun({ text: entry.meta, size: 19, font: "Arial", color: "000000" })
-            ],
-            spacing: { before: 90, after: 25 }
-          })
-        );
-      } else if (entry.title) {
-        body.push(
-          new Paragraph({
-            children: [new TextRun({ text: entry.title, bold: true, size: 20, font: "Arial" })],
-            spacing: { before: 90, after: 25 }
-          })
-        );
-      } else if (entry.meta) {
-        body.push(
-          new Paragraph({
-            children: [new TextRun({ text: entry.meta, size: 19, font: "Arial", color: "222222" })],
-            spacing: { after: 25 }
-          })
-        );
+      const primaryLabel = entry.titlePrimary || entry.title;
+      if (isExecutive) {
+        if (primaryLabel && entry.meta) {
+          body.push(
+            new Paragraph({
+              tabStops: [{ type: TabStopType.RIGHT, position: contentWidth }],
+              children: [
+                new TextRun({ text: primaryLabel, bold: true, size: entrySz, font }),
+                new Tab(),
+                new TextRun({ text: entry.meta, size: contactSz, font, color: "000000" })
+              ],
+              spacing: { before: 95, after: 15 }
+            })
+          );
+        } else if (primaryLabel) {
+          body.push(
+            new Paragraph({
+              children: [new TextRun({ text: primaryLabel, bold: true, size: entrySz, font })],
+              spacing: { before: 95, after: 15 }
+            })
+          );
+        } else if (entry.meta) {
+          body.push(
+            new Paragraph({
+              children: [new TextRun({ text: entry.meta, size: contactSz, font, color: "222222" })],
+              spacing: { after: 20 }
+            })
+          );
+        }
+
+        if (entry.titleSecondary) {
+          body.push(
+            new Paragraph({
+              children: [new TextRun({ text: entry.titleSecondary, italics: true, size: noteSz, font, color: "222222" })],
+              spacing: { after: 25 }
+            })
+          );
+        }
+      } else {
+        const titleRuns = entry.titlePrimary
+          ? [
+              new TextRun({ text: entry.titlePrimary, bold: true, size: entrySz, font }),
+              ...(entry.titleSecondary
+                ? [new TextRun({ text: ` | ${entry.titleSecondary}`, size: entrySz, font })]
+                : [])
+            ]
+          : [new TextRun({ text: entry.title, bold: true, size: entrySz, font })];
+
+        if (entry.title && entry.meta) {
+          body.push(
+            new Paragraph({
+              tabStops: [{ type: TabStopType.RIGHT, position: contentWidth }],
+              children: [
+                ...titleRuns,
+                new Tab(),
+                new TextRun({ text: entry.meta, size: contactSz, font, color: "000000" })
+              ],
+              spacing: { before: isCompact ? 55 : 90, after: isCompact ? 15 : 25 }
+            })
+          );
+        } else if (entry.title) {
+          body.push(
+            new Paragraph({
+              children: titleRuns,
+              spacing: { before: isCompact ? 55 : 90, after: isCompact ? 15 : 25 }
+            })
+          );
+        } else if (entry.meta) {
+          body.push(
+            new Paragraph({
+              children: [new TextRun({ text: entry.meta, size: contactSz, font, color: "222222" })],
+              spacing: { after: isCompact ? 15 : 25 }
+            })
+          );
+        }
       }
 
       const entryNotes = entry.notes?.length ? entry.notes : entry.note ? [entry.note] : [];
@@ -397,17 +607,17 @@ export const buildDocxDocument = async (
           body.push(
             new Paragraph({
               children: [
-                new TextRun({ text: `${label}:`, bold: true, size: 18, font: "Arial", color: "222222" }),
-                new TextRun({ text: rest, size: 18, font: "Arial", color: "222222" })
+                new TextRun({ text: `${label}:`, bold: true, size: noteSz, font, color: "222222" }),
+                new TextRun({ text: rest, size: noteSz, font, color: "222222" })
               ],
-              spacing: { after: 20 }
+              spacing: { after: isCompact ? 15 : 20 }
             })
           );
         } else {
           body.push(
             new Paragraph({
-              children: [new TextRun({ text: noteLine, size: 18, font: "Arial", color: "222222" })],
-              spacing: { after: 20 }
+              children: [new TextRun({ text: noteLine, size: noteSz, font, color: "222222" })],
+              spacing: { after: isCompact ? 15 : 20 }
             })
           );
         }
@@ -416,9 +626,9 @@ export const buildDocxDocument = async (
       entry.bullets.forEach((bullet) => {
         body.push(
           new Paragraph({
-            children: [new TextRun({ text: bullet, size: 19, font: "Arial" })],
+            children: [new TextRun({ text: bullet, size: bodySz, font })],
             bullet: { level: 0 },
-            spacing: { after: 25 }
+            spacing: { after: isCompact ? 15 : 25 }
           })
         );
       });
@@ -431,17 +641,17 @@ export const buildDocxDocument = async (
     description: "Curriculum Vitae",
     styles: {
       default: {
-        document: { run: { font: "Arial", size: 19, color: "000000" } },
+        document: { run: { font, size: bodySz, color: "000000" } },
         heading1: {
           run: {
-            font: "Arial",
-            size: 20,
+            font,
+            size: headingSz,
             bold: true,
             color: "000000",
             allCaps: true,
-            characterSpacing: 8
+            characterSpacing: 6
           },
-          paragraph: { spacing: { before: 180, after: 45 } }
+          paragraph: { spacing: { before: isCompact ? 110 : 180, after: isCompact ? 30 : 45 } }
         }
       }
     },
