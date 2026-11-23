@@ -17,6 +17,8 @@ import {
   Trash
 } from "@phosphor-icons/react";
 import { getResumeCompleteness } from "@/lib/analyzer";
+import { extractAllResumeBullets } from "@/lib/ats/rewriter";
+import { useLiveAts } from "@/lib/live-ats";
 import { useCvStore } from "@/lib/store";
 import type { WorkspacePage } from "@/components/WorkspaceShell";
 
@@ -63,8 +65,7 @@ export const Header = ({
 
   const hydrated = useCvStore((state) => state.hydrated);
   const resumeProfile = useCvStore((state) => state.resumeProfile);
-  const analytics = useCvStore((state) => state.matchAnalytics);
-  const suggestions = useCvStore((state) => state.suggestions);
+  const { analytics, effectiveResume } = useLiveAts();
   const resetAll = useCvStore((state) => state.resetAll);
   const storePreviewOpenDesktop = useCvStore((state) => state.previewOpenDesktop);
   const setStorePreviewOpenDesktop = useCvStore((state) => state.setPreviewOpenDesktop);
@@ -78,13 +79,16 @@ export const Header = ({
 
   const completeness = hydrated ? getResumeCompleteness(resumeProfile) : 0;
   const analyzed = hydrated ? analytics.hasAnalyzed : false;
-  const pendingSuggestions = hydrated ? suggestions.filter((item) => item.status === "pending").length : 0;
+  const liveWeakBullets = hydrated
+    ? extractAllResumeBullets(effectiveResume, analytics).filter((b) => b.analysis.needsImprovement).length
+    : 0;
+  const liveTotalBullets = hydrated ? extractAllResumeBullets(effectiveResume, analytics).length : 0;
 
   const isStepDone = (id: WorkspacePage): boolean => {
     if (!hydrated) return false;
     if (id === "master") return completeness >= 80;
     if (id === "target") return analyzed;
-    if (id === "rewrite") return analyzed && suggestions.length > 0 && pendingSuggestions === 0;
+    if (id === "rewrite") return analyzed && liveTotalBullets > 0 && liveWeakBullets === 0;
     return false;
   };
 
@@ -177,6 +181,19 @@ export const Header = ({
 
         {/* Right Controls */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Skor ATS Live Mini Badge */}
+          {analyzed ? (
+            <Link
+              href="/lowongan"
+              prefetch={true}
+              title="Skor kecocokan ATS Live saat ini"
+              className="hidden xl:flex min-h-[40px] items-center gap-1.5 rounded-xl border border-[#94D1DF] bg-[#ECF9FC] px-3 py-1 text-xs font-bold text-[#124959] hover:bg-[#D6F3FA] transition-colors whitespace-nowrap"
+            >
+              <span>ATS:</span>
+              <span className="font-black">{analytics.overallScore}%</span>
+            </Link>
+          ) : null}
+
           {/* Kelengkapan CV Mini Badge */}
           <Link
             href="/master-cv"
