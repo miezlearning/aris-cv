@@ -1,10 +1,44 @@
 import { create } from "zustand";
 import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 import { get, set, del } from "idb-keyval";
-import type { Education, JobTarget, MatchAnalytics, ResumeProfile, RewriteSuggestion, WorkExperience } from "@/types/resume";
+import type {
+  CertificationItem,
+  CvLanguage,
+  Education,
+  ExperienceLevel,
+  JobTarget,
+  MatchAnalytics,
+  OrganizationItem,
+  ProjectItem,
+  ResumeProfile,
+  RewriteSuggestion,
+  WorkExperience
+} from "@/types/resume";
 import { emptyAnalytics, emptyJobTarget, emptyResumeProfile, createId } from "@/lib/defaults";
+import { analyzeMatch } from "@/lib/ats/scorer";
+import { computeProfileContentHash, translateProfileToEnglish } from "@/lib/ats/translator";
+import { normalizeForMatch } from "@/lib/ats/synonyms";
 
-export type MasterTab = "contact" | "summary" | "experience" | "education" | "skills";
+export type MasterTab =
+  | "contact"
+  | "summary"
+  | "education"
+  | "projects"
+  | "experience"
+  | "organizations"
+  | "certifications"
+  | "skills";
+
+const VALID_TABS: MasterTab[] = [
+  "contact",
+  "summary",
+  "education",
+  "projects",
+  "experience",
+  "organizations",
+  "certifications",
+  "skills"
+];
 
 type AppState = {
   resumeProfile: ResumeProfile;
@@ -13,12 +47,23 @@ type AppState = {
   suggestions: RewriteSuggestion[];
   activeMasterTab: MasterTab;
   setActiveMasterTab: (tab: MasterTab) => void;
+  cvLanguage: CvLanguage;
+  setCvLanguage: (lang: CvLanguage) => void;
+  autoTranslateContent: boolean;
+  setAutoTranslateContent: (enabled: boolean) => void;
+  aiTranslatedEnProfile: ResumeProfile | null;
+  aiTranslatedSourceHash: string;
+  setAiTranslatedEn: (profile: ResumeProfile | null, sourceHash: string) => void;
+  applyEnglishTranslationToEditor: () => void;
+  checkedAdminItems: Record<string, boolean>;
+  toggleAdminItem: (id: string) => void;
   previewOpenDesktop: boolean;
   setPreviewOpenDesktop: (open: boolean | ((prev: boolean) => boolean)) => void;
   modalPreviewOpen: boolean;
   setModalPreviewOpen: (open: boolean) => void;
   hydrated: boolean;
   setHydrated: (value: boolean) => void;
+  setExperienceLevel: (level: ExperienceLevel) => void;
   updateContact: (field: keyof ResumeProfile["contact"], value: string) => void;
   updateSummary: (value: string) => void;
   addExperience: () => void;
@@ -30,7 +75,23 @@ type AppState = {
   addEducation: () => void;
   updateEducation: (id: string, patch: Partial<Education>) => void;
   removeEducation: (id: string) => void;
+  addProject: () => void;
+  updateProject: (id: string, patch: Partial<ProjectItem>) => void;
+  removeProject: (id: string) => void;
+  addProjectBullet: (projectId: string) => void;
+  updateProjectBullet: (projectId: string, index: number, value: string) => void;
+  removeProjectBullet: (projectId: string, index: number) => void;
+  addOrganization: () => void;
+  updateOrganization: (id: string, patch: Partial<OrganizationItem>) => void;
+  removeOrganization: (id: string) => void;
+  addOrganizationBullet: (orgId: string) => void;
+  updateOrganizationBullet: (orgId: string, index: number, value: string) => void;
+  removeOrganizationBullet: (orgId: string, index: number) => void;
+  addCertification: () => void;
+  updateCertification: (id: string, patch: Partial<CertificationItem>) => void;
+  removeCertification: (id: string) => void;
   updateSkills: (field: keyof ResumeProfile["skills"], values: string[]) => void;
+  addSkillItem: (field: keyof ResumeProfile["skills"], skill: string) => void;
   setResumeProfile: (profile: ResumeProfile) => void;
   updateJobTarget: (patch: Partial<JobTarget>) => void;
   setAnalytics: (analytics: MatchAnalytics) => void;
@@ -43,15 +104,131 @@ type AppState = {
 
 const indexedDbStorage: StateStorage = {
   getItem: async (name) => {
-    const value = await get<string>(name);
-    return value ?? null;
+    if (typeof window === "undefined") return null;
+    try {
+      const value = await get<string>(name);
+      return value ?? null;
+    } catch {
+      return null;
+    }
   },
   setItem: async (name, value) => {
-    await set(name, value);
+    if (typeof window === "undefined") return;
+    try {
+      await set(name, value);
+    } catch {
+      // Abaikan kegagalan storage pada mode private browser
+    }
   },
   removeItem: async (name) => {
-    await del(name);
+    if (typeof window === "undefined") return;
+    try {
+      await del(name);
+    } catch {
+      // Abaikan kegagalan storage
+    }
   }
+};
+
+const isBlankOrphanExperience = (item: Partial<WorkExperience>) =>
+  !item.company?.trim() &&
+  !item.role?.trim() &&
+  !item.startDate?.trim() &&
+  !(item.bulletPoints ?? []).some((bullet) => bullet?.trim()) &&
+  (!item.endDate?.trim() || item.endDate.trim().toLowerCase() === "present");
+
+const migrateLegacyProfile = (raw?: Partial<ResumeProfile>): ResumeProfile => {
+  const base = emptyResumeProfile();
+  if (!raw || typeof raw !== "object") return base;
+
+  const workExperience = Array.isArray(raw.workExperience)
+    ? raw.workExperience
+        .filter((item) => !isBlankOrphanExperience(item))
+        .map((item, idx) => ({
+          id: item.id || `exp-${idx + 1}`,
+          company: item.company ?? "",
+          role: item.role ?? "",
+          type: item.type,
+          location: item.location ?? "",
+          startDate: item.startDate ?? "",
+          endDate: item.endDate ?? "",
+          isCurrent: Boolean(item.isCurrent),
+          bulletPoints: Array.isArray(item.bulletPoints) && item.bulletPoints.length ? item.bulletPoints : [""]
+        }))
+    : [];
+
+  const education =
+    Array.isArray(raw.education) && raw.education.length
+      ? raw.education.map((item, idx) => ({
+          id: item.id || `edu-${idx + 1}`,
+          institution: item.institution ?? "",
+          degree: item.degree ?? "",
+          fieldOfStudy: item.fieldOfStudy ?? "",
+          gpa: item.gpa ?? "",
+          graduationDate: item.graduationDate ?? "",
+          thesisTitle: item.thesisTitle ?? "",
+          relevantCoursework: Array.isArray(item.relevantCoursework) ? item.relevantCoursework : [],
+          achievements: item.achievements ?? ""
+        }))
+      : base.education;
+
+  const projects: ProjectItem[] = Array.isArray(raw.projects)
+    ? raw.projects.map((item, idx) => ({
+        id: item.id || `proj-${idx + 1}`,
+        name: item.name ?? "",
+        role: item.role ?? "",
+        context: item.context ?? "",
+        period: item.period ?? "",
+        technologies: Array.isArray(item.technologies) ? item.technologies : [],
+        url: item.url ?? "",
+        bulletPoints: Array.isArray(item.bulletPoints) && item.bulletPoints.length ? item.bulletPoints : [""]
+      }))
+    : [];
+
+  const organizations: OrganizationItem[] = Array.isArray(raw.organizations)
+    ? raw.organizations.map((item, idx) => ({
+        id: item.id || `org-${idx + 1}`,
+        organization: item.organization ?? "",
+        role: item.role ?? "",
+        period: item.period ?? "",
+        bulletPoints: Array.isArray(item.bulletPoints) && item.bulletPoints.length ? item.bulletPoints : [""]
+      }))
+    : [];
+
+  let certificationItems: CertificationItem[] = Array.isArray(raw.certificationItems) ? raw.certificationItems : [];
+  if (!certificationItems.length && Array.isArray(raw.certifications) && raw.certifications.length) {
+    certificationItems = raw.certifications
+      .flatMap((line) => line.split(";"))
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .map((name, idx) => ({ id: `cert-migrated-${idx + 1}`, name, issuer: "", year: "" }));
+  }
+
+  const experienceLevel: ExperienceLevel =
+    raw.experienceLevel === "fresh_graduate" ||
+    raw.experienceLevel === "early_career" ||
+    raw.experienceLevel === "experienced"
+      ? raw.experienceLevel
+      : workExperience.length >= 2
+      ? "experienced"
+      : "fresh_graduate";
+
+  return {
+    experienceLevel,
+    contact: { ...base.contact, ...(raw.contact ?? {}) },
+    summary: raw.summary ?? "",
+    workExperience,
+    education,
+    projects,
+    organizations,
+    certificationItems,
+    skills: {
+      hardSkills: Array.isArray(raw.skills?.hardSkills) ? raw.skills.hardSkills : [],
+      softSkills: Array.isArray(raw.skills?.softSkills) ? raw.skills.softSkills : [],
+      tools: Array.isArray(raw.skills?.tools) ? raw.skills.tools : []
+    },
+    certifications: []
+  };
 };
 
 export const useCvStore = create<AppState>()(
@@ -63,6 +240,36 @@ export const useCvStore = create<AppState>()(
       suggestions: [],
       activeMasterTab: "contact",
       setActiveMasterTab: (tab) => set({ activeMasterTab: tab }),
+      cvLanguage: "auto",
+      setCvLanguage: (lang) => set({ cvLanguage: lang }),
+      autoTranslateContent: true,
+      setAutoTranslateContent: (enabled) => set({ autoTranslateContent: enabled }),
+      aiTranslatedEnProfile: null,
+      aiTranslatedSourceHash: "",
+      setAiTranslatedEn: (profile, sourceHash) =>
+        set({ aiTranslatedEnProfile: profile, aiTranslatedSourceHash: sourceHash }),
+      applyEnglishTranslationToEditor: () => {
+        const state = getState();
+        const currentHash = computeProfileContentHash(state.resumeProfile);
+        const enProfile =
+          state.aiTranslatedEnProfile && state.aiTranslatedSourceHash === currentHash
+            ? { ...state.aiTranslatedEnProfile, contact: { ...state.resumeProfile.contact, headline: state.aiTranslatedEnProfile.contact.headline } }
+            : translateProfileToEnglish(state.resumeProfile);
+        set({
+          resumeProfile: enProfile,
+          cvLanguage: "en",
+          aiTranslatedEnProfile: null,
+          aiTranslatedSourceHash: ""
+        });
+      },
+      checkedAdminItems: {},
+      toggleAdminItem: (id) =>
+        set((state) => ({
+          checkedAdminItems: {
+            ...state.checkedAdminItems,
+            [id]: !state.checkedAdminItems[id]
+          }
+        })),
       previewOpenDesktop: true,
       setPreviewOpenDesktop: (open) =>
         set((state) => ({
@@ -72,6 +279,10 @@ export const useCvStore = create<AppState>()(
       setModalPreviewOpen: (open) => set({ modalPreviewOpen: open }),
       hydrated: false,
       setHydrated: (value) => set({ hydrated: value }),
+      setExperienceLevel: (level) =>
+        set((state) => ({
+          resumeProfile: { ...state.resumeProfile, experienceLevel: level }
+        })),
       updateContact: (field, value) =>
         set((state) => ({
           resumeProfile: {
@@ -93,9 +304,11 @@ export const useCvStore = create<AppState>()(
                 id: createId(),
                 company: "",
                 role: "",
+                type: state.resumeProfile.experienceLevel === "fresh_graduate" ? "internship" : "fulltime",
+                location: "",
                 startDate: "",
-                endDate: "Present",
-                isCurrent: true,
+                endDate: "",
+                isCurrent: false,
                 bulletPoints: [""]
               }
             ]
@@ -161,7 +374,10 @@ export const useCvStore = create<AppState>()(
                 degree: "",
                 fieldOfStudy: "",
                 gpa: "",
-                graduationDate: ""
+                graduationDate: "",
+                thesisTitle: "",
+                relevantCoursework: [],
+                achievements: ""
               }
             ]
           }
@@ -180,6 +396,161 @@ export const useCvStore = create<AppState>()(
             education: state.resumeProfile.education.filter((item) => item.id !== id)
           }
         })),
+      addProject: () =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            projects: [
+              ...state.resumeProfile.projects,
+              {
+                id: createId(),
+                name: "",
+                role: "",
+                context: "Proyek Kuliah",
+                period: "",
+                technologies: [],
+                url: "",
+                bulletPoints: [""]
+              }
+            ]
+          }
+        })),
+      updateProject: (id, patch) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            projects: state.resumeProfile.projects.map((item) => (item.id === id ? { ...item, ...patch } : item))
+          }
+        })),
+      removeProject: (id) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            projects: state.resumeProfile.projects.filter((item) => item.id !== id)
+          }
+        })),
+      addProjectBullet: (projectId) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            projects: state.resumeProfile.projects.map((item) =>
+              item.id === projectId ? { ...item, bulletPoints: [...item.bulletPoints, ""] } : item
+            )
+          }
+        })),
+      updateProjectBullet: (projectId, index, value) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            projects: state.resumeProfile.projects.map((item) => {
+              if (item.id !== projectId) return item;
+              const bulletPoints = [...item.bulletPoints];
+              bulletPoints[index] = value;
+              return { ...item, bulletPoints };
+            })
+          }
+        })),
+      removeProjectBullet: (projectId, index) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            projects: state.resumeProfile.projects.map((item) => {
+              if (item.id !== projectId) return item;
+              const bulletPoints = item.bulletPoints.filter((_, idx) => idx !== index);
+              return { ...item, bulletPoints: bulletPoints.length ? bulletPoints : [""] };
+            })
+          }
+        })),
+      addOrganization: () =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            organizations: [
+              ...state.resumeProfile.organizations,
+              {
+                id: createId(),
+                organization: "",
+                role: "",
+                period: "",
+                bulletPoints: [""]
+              }
+            ]
+          }
+        })),
+      updateOrganization: (id, patch) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            organizations: state.resumeProfile.organizations.map((item) =>
+              item.id === id ? { ...item, ...patch } : item
+            )
+          }
+        })),
+      removeOrganization: (id) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            organizations: state.resumeProfile.organizations.filter((item) => item.id !== id)
+          }
+        })),
+      addOrganizationBullet: (orgId) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            organizations: state.resumeProfile.organizations.map((item) =>
+              item.id === orgId ? { ...item, bulletPoints: [...item.bulletPoints, ""] } : item
+            )
+          }
+        })),
+      updateOrganizationBullet: (orgId, index, value) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            organizations: state.resumeProfile.organizations.map((item) => {
+              if (item.id !== orgId) return item;
+              const bulletPoints = [...item.bulletPoints];
+              bulletPoints[index] = value;
+              return { ...item, bulletPoints };
+            })
+          }
+        })),
+      removeOrganizationBullet: (orgId, index) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            organizations: state.resumeProfile.organizations.map((item) => {
+              if (item.id !== orgId) return item;
+              const bulletPoints = item.bulletPoints.filter((_, idx) => idx !== index);
+              return { ...item, bulletPoints: bulletPoints.length ? bulletPoints : [""] };
+            })
+          }
+        })),
+      addCertification: () =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            certificationItems: [
+              ...state.resumeProfile.certificationItems,
+              { id: createId(), name: "", issuer: "", year: "" }
+            ]
+          }
+        })),
+      updateCertification: (id, patch) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            certificationItems: state.resumeProfile.certificationItems.map((item) =>
+              item.id === id ? { ...item, ...patch } : item
+            )
+          }
+        })),
+      removeCertification: (id) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            certificationItems: state.resumeProfile.certificationItems.filter((item) => item.id !== id)
+          }
+        })),
       updateSkills: (field, values) =>
         set((state) => ({
           resumeProfile: {
@@ -187,6 +558,27 @@ export const useCvStore = create<AppState>()(
             skills: { ...state.resumeProfile.skills, [field]: values }
           }
         })),
+      addSkillItem: (field, skill) => {
+        const clean = skill.trim();
+        if (!clean) return;
+        const current = getState().resumeProfile.skills[field] ?? [];
+        const exists = current.some((item) => normalizeForMatch(item) === normalizeForMatch(clean));
+        if (!exists) {
+          set((state) => ({
+            resumeProfile: {
+              ...state.resumeProfile,
+              skills: {
+                ...state.resumeProfile.skills,
+                [field]: [...state.resumeProfile.skills[field], clean]
+              }
+            }
+          }));
+        }
+        const { matchAnalytics, resumeProfile, jobTarget } = getState();
+        if (matchAnalytics.hasAnalyzed && jobTarget.rawDescription.trim()) {
+          set({ matchAnalytics: analyzeMatch(resumeProfile, jobTarget) });
+        }
+      },
       setResumeProfile: (profile) => set({ resumeProfile: profile }),
       updateJobTarget: (patch) =>
         set((state) => ({
@@ -202,8 +594,25 @@ export const useCvStore = create<AppState>()(
         const suggestion = getState().suggestions.find((item) => item.id === id);
         if (!suggestion) return;
         const finalValue = value ?? suggestion.suggestion;
-        getState().updateBullet(suggestion.experienceId, suggestion.bulletIndex, finalValue);
-        getState().updateSuggestion(id, { suggestion: finalValue, status: value ? "edited" : "accepted" });
+        const sourceId = suggestion.sourceId || suggestion.experienceId;
+
+        if (suggestion.sourceType === "project") {
+          getState().updateProjectBullet(sourceId, suggestion.bulletIndex, finalValue);
+        } else if (suggestion.sourceType === "organization") {
+          getState().updateOrganizationBullet(sourceId, suggestion.bulletIndex, finalValue);
+        } else {
+          getState().updateBullet(sourceId, suggestion.bulletIndex, finalValue);
+        }
+
+        getState().updateSuggestion(id, {
+          suggestion: finalValue,
+          status: value ? "edited" : "accepted"
+        });
+
+        const { matchAnalytics, resumeProfile, jobTarget } = getState();
+        if (matchAnalytics.hasAnalyzed && jobTarget.rawDescription.trim()) {
+          set({ matchAnalytics: analyzeMatch(resumeProfile, jobTarget) });
+        }
       },
       rejectSuggestion: (id) => getState().updateSuggestion(id, { status: "rejected" }),
       resetAll: () =>
@@ -212,6 +621,9 @@ export const useCvStore = create<AppState>()(
           jobTarget: emptyJobTarget(),
           matchAnalytics: emptyAnalytics(),
           suggestions: [],
+          aiTranslatedEnProfile: null,
+          aiTranslatedSourceHash: "",
+          checkedAdminItems: {},
           activeMasterTab: "contact",
           previewOpenDesktop: true,
           modalPreviewOpen: false
@@ -226,8 +638,62 @@ export const useCvStore = create<AppState>()(
         matchAnalytics: state.matchAnalytics,
         suggestions: state.suggestions,
         activeMasterTab: state.activeMasterTab,
+        cvLanguage: state.cvLanguage,
+        autoTranslateContent: state.autoTranslateContent,
+        checkedAdminItems: state.checkedAdminItems,
         previewOpenDesktop: state.previewOpenDesktop
       }),
+      merge: (persistedState, currentState) => {
+        const persisted = (persistedState ?? {}) as Partial<AppState>;
+        const resumeProfile = migrateLegacyProfile(persisted.resumeProfile);
+        const baseAnalytics = emptyAnalytics();
+        const rawAnalytics = persisted.matchAnalytics;
+        const matchAnalytics: MatchAnalytics = rawAnalytics
+          ? {
+              ...baseAnalytics,
+              ...rawAnalytics,
+              hasAnalyzed: Boolean(rawAnalytics.hasAnalyzed || (rawAnalytics.keywordMatches?.length ?? 0) > 0),
+              breakdown: rawAnalytics.breakdown ?? baseAnalytics.breakdown,
+              qualificationMatches: Array.isArray(rawAnalytics.qualificationMatches)
+                ? rawAnalytics.qualificationMatches
+                : [],
+              administrativeItems: Array.isArray(rawAnalytics.administrativeItems)
+                ? rawAnalytics.administrativeItems
+                : [],
+              implicitSuggestions: Array.isArray(rawAnalytics.implicitSuggestions)
+                ? rawAnalytics.implicitSuggestions
+                : [],
+              formatChecks: Array.isArray(rawAnalytics.formatChecks) ? rawAnalytics.formatChecks : []
+            }
+          : baseAnalytics;
+
+        const suggestions: RewriteSuggestion[] = Array.isArray(persisted.suggestions)
+          ? persisted.suggestions.map((item) => ({
+              ...item,
+              sourceType: item.sourceType ?? "work",
+              sourceId: item.sourceId ?? item.experienceId,
+              sourceLabel: item.sourceLabel ?? "Pengalaman Kerja"
+            }))
+          : [];
+
+        const activeMasterTab: MasterTab = VALID_TABS.includes(persisted.activeMasterTab as MasterTab)
+          ? (persisted.activeMasterTab as MasterTab)
+          : "contact";
+
+        return {
+          ...currentState,
+          ...persisted,
+          resumeProfile,
+          matchAnalytics,
+          suggestions,
+          activeMasterTab,
+          cvLanguage: persisted.cvLanguage ?? "auto",
+          autoTranslateContent: persisted.autoTranslateContent ?? true,
+          aiTranslatedEnProfile: null,
+          aiTranslatedSourceHash: "",
+          checkedAdminItems: persisted.checkedAdminItems ?? {}
+        };
+      },
       onRehydrateStorage: () => (state) => {
         state?.setHydrated(true);
       }
