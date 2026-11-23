@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@mlc-ai/web-llm": "^0.2.89",
     "@phosphor-icons/react": "^2.1.10",
     "@react-pdf/renderer": "^4.1.5",
     "docx": "^9.5.1",
