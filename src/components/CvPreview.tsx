@@ -10,7 +10,19 @@ import {
   resolveCvLanguage
 } from "@/lib/resume-document";
 import { useCvStore, type MasterTab } from "@/lib/store";
-import type { CvLanguage } from "@/types/resume";
+import type { CvLanguage, CvTemplate } from "@/types/resume";
+
+const TEMPLATE_PILLS: Array<{ value: CvTemplate; shortLabel: string; fullTitle: string }> = [
+  { value: "compact_centered", shortLabel: "Padat", fullTitle: "ATS Padat (Harvard / Tech, muat 1 halaman)" },
+  { value: "classic_editorial", shortLabel: "Standar", fullTitle: "ATS Standar (Klasik Lega untuk umum/korporat)" },
+  { value: "executive_left", shortLabel: "Formal", fullTitle: "ATS Formal (Rata kiri Serif 2 baris)" }
+];
+
+const TEMPLATE_NAMES: Record<CvTemplate, string> = {
+  compact_centered: "ATS Padat",
+  classic_editorial: "ATS Standar",
+  executive_left: "ATS Formal Serif"
+};
 
 export const CvPreview = ({
   onOpenModal,
@@ -25,6 +37,8 @@ export const CvPreview = ({
   const analytics = useCvStore((state) => state.matchAnalytics);
   const cvLanguage = useCvStore((state) => state.cvLanguage);
   const setCvLanguage = useCvStore((state) => state.setCvLanguage);
+  const cvTemplate = useCvStore((state) => state.cvTemplate);
+  const setCvTemplate = useCvStore((state) => state.setCvTemplate);
   const autoTranslateContent = useCvStore((state) => state.autoTranslateContent);
   const setAutoTranslateContent = useCvStore((state) => state.setAutoTranslateContent);
   const aiTranslatedEnProfile = useCvStore((state) => state.aiTranslatedEnProfile);
@@ -42,12 +56,15 @@ export const CvPreview = ({
     aiTranslatedEnProfile && aiTranslatedSourceHash === currentHash ? aiTranslatedEnProfile : null;
 
   const document = buildResumeDocument(resume, activeLang, {
+    template: cvTemplate,
     translateContent: autoTranslateContent,
     translatedOverride
   });
   const pageInfo = estimateA4Pages(document);
   const missing = getMissingParts(resume);
 
+  const isCompact = cvTemplate === "compact_centered";
+  const isExecutive = cvTemplate === "executive_left";
   const isFreshGradOverOnePage =
     !document.isEmpty && resume.experienceLevel === "fresh_graduate" && pageInfo.estimatedPages > 1;
 
@@ -77,11 +94,35 @@ export const CvPreview = ({
                 </span>
               ) : null}
             </div>
-            <p className="mt-0.5 text-xs text-[#59483F]">Satu kolom linear standar ATS</p>
+            <p className="mt-0.5 text-xs text-[#59483F]">Satu kolom linear standar ATS ({TEMPLATE_NAMES[cvTemplate]})</p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
+          {/* Switcher Jenis Gaya ATS */}
+          <div
+            role="group"
+            aria-label="Jenis template ATS"
+            className="inline-flex rounded-lg border border-[#D9CEBC] bg-[#F3E7C8] p-0.5 text-[11px] font-bold"
+          >
+            {TEMPLATE_PILLS.map((tpl) => (
+              <button
+                key={tpl.value}
+                type="button"
+                title={tpl.fullTitle}
+                onClick={() => setCvTemplate(tpl.value)}
+                aria-pressed={cvTemplate === tpl.value}
+                className={`min-h-[32px] rounded-md px-2 transition-colors ${
+                  cvTemplate === tpl.value
+                    ? "bg-white text-[#251813] shadow-2xs"
+                    : "text-[#4E3E36] hover:text-[#251813]"
+                }`}
+              >
+                {tpl.shortLabel}
+              </button>
+            ))}
+          </div>
+
           {/* Switcher Bahasa Cepat */}
           <div
             role="group"
@@ -93,6 +134,7 @@ export const CvPreview = ({
                 key={langOpt}
                 type="button"
                 onClick={() => setCvLanguage(langOpt)}
+                aria-pressed={cvLanguage === langOpt}
                 className={`min-h-[32px] rounded-md px-2 transition-colors ${
                   cvLanguage === langOpt
                     ? "bg-white text-[#251813] shadow-2xs"
@@ -181,7 +223,7 @@ export const CvPreview = ({
       {/* Peringatan batas 1 halaman untuk Fresh Graduate */}
       {isFreshGradOverOnePage ? (
         <div className="mb-2.5 rounded-xl border border-[#DFC25A] bg-[#FFF0A8] px-3 py-2 text-xs font-semibold text-[#4A3A2E]">
-          CV diperkirakan melewati 1 halaman A4. Untuk Fresh Graduate, ringkas poin yang kurang relevan agar tetap 1 halaman.
+          CV diperkirakan melewati 1 halaman A4. Coba pilih gaya <span className="font-bold">Padat</span> atau ringkas poin yang kurang relevan.
         </div>
       ) : null}
 
@@ -193,8 +235,14 @@ export const CvPreview = ({
       >
         <div
           className={`cv-paper relative mx-auto rounded-xs border border-stone-300 bg-white shadow-sm text-black break-words ${
+            isExecutive ? "font-serif" : ""
+          } ${
             zoomMode === "full"
-              ? "w-[720px] min-h-[1018px] p-10"
+              ? isCompact
+                ? "w-[720px] min-h-[1018px] p-7"
+                : "w-[720px] min-h-[1018px] p-10"
+              : isCompact
+              ? "w-full max-w-[720px] min-h-[760px] p-4 sm:p-6"
               : "w-full max-w-[720px] min-h-[760px] p-5 sm:p-8"
           }`}
         >
@@ -210,35 +258,48 @@ export const CvPreview = ({
           ) : null}
 
           {document.isEmpty ? (
-            <div className="grid place-items-center py-20 text-center">
+            <div className="grid place-items-center py-20 text-center font-sans">
               <div className="grid h-12 w-12 place-items-center rounded-xl bg-[#FFF0A8] text-[#251813] mb-3 border-2 border-[#251813]">
                 <FileText size={24} weight="duotone" aria-hidden="true" />
               </div>
               <p className="text-base font-bold text-[#251813]">Lembar CV masih kosong</p>
               <p className="mt-1 max-w-sm text-xs leading-relaxed text-[#59483F]">
-                Isi data di <span className="font-bold text-[#251813]">Langkah 1 (Data CV)</span> atau klik{" "}
-                <span className="font-bold text-[#251813]">Contoh Fresh Grad</span>. Dokumen akan langsung tersusun di sini.
+                Isi data di <span className="font-bold text-[#251813]">Langkah 1 (Data CV)</span> atau unggah berkas CV lamamu. Dokumen akan langsung tersusun di sini.
               </p>
             </div>
           ) : (
             <div className="text-[#000000]">
               <header
-                className={`text-center mb-3 rounded transition-colors ${
-                  highlightSection === "contact" ? "bg-[#FFF8DF] py-1.5 px-2 -mx-2 ring-1 ring-[#DFC25A]" : ""
-                }`}
+                className={`rounded transition-colors ${
+                  isExecutive ? "text-left mb-3 border-b-2 border-black pb-2" : "text-center mb-2.5"
+                } ${highlightSection === "contact" ? "bg-[#FFF8DF] py-1.5 px-2 -mx-2 ring-1 ring-[#DFC25A]" : ""}`}
               >
                 {document.name ? (
-                  <h1 className="text-lg sm:text-[22px] font-bold tracking-tight text-black leading-tight">
+                  <h1
+                    className={`font-bold tracking-tight text-black leading-tight ${
+                      isCompact ? "text-base sm:text-[19px]" : isExecutive ? "text-xl sm:text-[23px]" : "text-lg sm:text-[22px]"
+                    }`}
+                  >
                     {document.name}
                   </h1>
                 ) : null}
 
                 {document.headline ? (
-                  <p className="mt-1 text-xs sm:text-[12.5px] font-bold text-black">{document.headline}</p>
+                  <p
+                    className={`mt-0.5 font-bold text-black ${
+                      isCompact ? "text-[11px] sm:text-[11.5px]" : "text-xs sm:text-[12.5px]"
+                    }`}
+                  >
+                    {document.headline}
+                  </p>
                 ) : null}
 
                 {document.contact ? (
-                  <p className="mt-1 text-[10.5px] sm:text-[11px] text-[#222222] leading-relaxed">
+                  <p
+                    className={`mt-0.5 text-[#222222] leading-snug ${
+                      isCompact ? "text-[9.5px] sm:text-[10px]" : "text-[10.5px] sm:text-[11px]"
+                    }`}
+                  >
                     {document.contact}
                   </p>
                 ) : null}
@@ -249,23 +310,31 @@ export const CvPreview = ({
                 return (
                   <section
                     key={section.sectionKey}
-                    className={`mt-3.5 rounded transition-colors ${
+                    className={`${isCompact ? "mt-2" : "mt-3.5"} rounded transition-colors ${
                       isHighlighted ? "bg-[#FFF8DF]/80 py-1.5 px-2 -mx-2 ring-1 ring-[#DFC25A]" : ""
                     }`}
                   >
-                    <div className="border-b border-black pb-0.5 mb-1.5">
-                      <h2 className="text-[11px] sm:text-[12px] font-bold uppercase tracking-wider text-black">
+                    <div className={`border-b border-black pb-0.5 ${isCompact ? "mb-1" : "mb-1.5"}`}>
+                      <h2
+                        className={`font-bold uppercase tracking-wider text-black ${
+                          isCompact ? "text-[10.5px] sm:text-[11px]" : "text-[11px] sm:text-[12px]"
+                        }`}
+                      >
                         {section.heading}
                       </h2>
                     </div>
 
                     {section.paragraphs.map((paragraph, index) => {
                       const colonIndex = paragraph.indexOf(":");
+                      const pSize = isCompact
+                        ? "text-[10px] sm:text-[10.5px] leading-[1.3] my-0.5"
+                        : "text-[11px] sm:text-[11.5px] leading-[1.4] my-0.5";
+
                       if (colonIndex > 0 && colonIndex < 38) {
                         const label = paragraph.slice(0, colonIndex);
                         const rest = paragraph.slice(colonIndex + 1);
                         return (
-                          <p key={index} className="text-[11px] sm:text-[11.5px] leading-[1.4] text-black my-0.5">
+                          <p key={index} className={`${pSize} text-black`}>
                             <span className="font-bold">{label}:</span>
                             <span>{rest}</span>
                           </p>
@@ -273,7 +342,7 @@ export const CvPreview = ({
                       }
 
                       return (
-                        <p key={index} className="text-[11px] sm:text-[11.5px] leading-relaxed text-black my-1">
+                        <p key={index} className={`${pSize} text-black`}>
                           {paragraph}
                         </p>
                       );
@@ -281,21 +350,64 @@ export const CvPreview = ({
 
                     {section.entries.map((entry, index) => {
                       const entryNotes = entry.notes?.length ? entry.notes : entry.note ? [entry.note] : [];
+                      const entryTextSize = isCompact
+                        ? "text-[10px] sm:text-[10.5px] leading-snug"
+                        : "text-[11px] sm:text-[11.5px] leading-snug";
+                      const metaSize = isCompact
+                        ? "text-[9.5px] sm:text-[10px]"
+                        : "text-[10.5px] sm:text-[11px]";
+                      const bulletSize = isCompact
+                        ? "text-[10px] sm:text-[10.5px] leading-[1.28]"
+                        : "text-[11px] sm:text-[11.5px] leading-[1.35]";
+
                       return (
-                        <div key={index} className="mt-2 mb-1.5">
-                          {(entry.title || entry.meta) && (
-                            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                              {entry.title ? (
-                                <h3 className="text-[11px] sm:text-[11.5px] font-bold text-black leading-snug">
-                                  {entry.title}
-                                </h3>
+                        <div key={index} className={isCompact ? "mt-1.5 mb-1" : "mt-2 mb-1.5"}>
+                          {isExecutive ? (
+                            <>
+                              {(entry.titlePrimary || entry.title || entry.meta) && (
+                                <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                                  {(entry.titlePrimary || entry.title) ? (
+                                    <h3 className={`${entryTextSize} font-bold text-black`}>
+                                      {entry.titlePrimary || entry.title}
+                                    </h3>
+                                  ) : null}
+                                  {entry.meta ? (
+                                    <span className={`${metaSize} font-normal text-black shrink-0 text-right`}>
+                                      {entry.meta}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              )}
+                              {entry.titleSecondary ? (
+                                <p className="text-[10.5px] sm:text-[11px] italic text-[#222222] leading-snug">
+                                  {entry.titleSecondary}
+                                </p>
                               ) : null}
-                              {entry.meta ? (
-                                <span className="text-[10.5px] sm:text-[11px] font-normal text-black shrink-0 text-right">
-                                  {entry.meta}
-                                </span>
-                              ) : null}
-                            </div>
+                            </>
+                          ) : (
+                            (entry.title || entry.meta) && (
+                              <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                                {entry.title ? (
+                                  <h3 className={`${entryTextSize} text-black`}>
+                                    {entry.titlePrimary ? (
+                                      <>
+                                        <span className="font-bold">{entry.titlePrimary}</span>
+                                        {entry.titleSecondary ? (
+                                          <span className="font-normal"> | {entry.titleSecondary}</span>
+                                        ) : null}
+                                      </>
+                                    ) : (
+                                      <span className="font-bold">{entry.title}</span>
+                                    )}
+                                  </h3>
+                                ) : null}
+                                {entry.meta ? (
+                                  <span className={`${metaSize} font-normal text-black shrink-0 text-right`}>
+                                    {entry.meta}
+                                  </span>
+                                ) : null}
+                              </div>
+                            )
                           )}
 
                           {entryNotes.map((noteLine, nIdx) => {
@@ -304,21 +416,21 @@ export const CvPreview = ({
                               const label = noteLine.slice(0, colonIdx);
                               const rest = noteLine.slice(colonIdx + 1);
                               return (
-                                <p key={nIdx} className="mt-0.5 text-[10.5px] sm:text-[11px] text-[#222222] leading-snug">
+                                <p key={nIdx} className={`mt-0.5 ${metaSize} text-[#222222] leading-snug`}>
                                   <span className="font-bold text-black">{label}:</span>
                                   <span>{rest}</span>
                                 </p>
                               );
                             }
                             return (
-                              <p key={nIdx} className="mt-0.5 text-[10.5px] sm:text-[11px] text-[#222222] leading-snug">
+                              <p key={nIdx} className={`mt-0.5 ${metaSize} text-[#222222] leading-snug`}>
                                 {noteLine}
                               </p>
                             );
                           })}
 
                           {entry.bullets.length ? (
-                            <ul className="mt-0.5 list-disc space-y-0.5 pl-4 sm:pl-5 text-[11px] sm:text-[11.5px] leading-[1.35] text-black">
+                            <ul className={`mt-0.5 list-disc ${isCompact ? "space-y-0 pl-4" : "space-y-0.5 pl-4 sm:pl-5"} ${bulletSize} text-black`}>
                               {entry.bullets.map((bullet, bulletIndex) => (
                                 <li key={bulletIndex} className="text-black">
                                   {bullet}
@@ -345,7 +457,7 @@ export const CvPreview = ({
           </p>
         ) : (
           <p className="text-xs font-semibold text-[#144C32]">
-            Lembar CV terisi lengkap ({activeLang === "id" ? "Bahasa Indonesia" : "Full ATS English"}), siap diunduh gratis.
+            Lembar CV terisi lengkap ({TEMPLATE_NAMES[cvTemplate]} - {activeLang === "id" ? "Bahasa Indonesia" : "Full ATS English"}), siap diunduh gratis.
           </p>
         )}
       </div>
