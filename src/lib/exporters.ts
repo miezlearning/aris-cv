@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
 import type { ResumeProfile } from "@/types/resume";
-import { DOC_STYLE, buildResumeDocument } from "@/lib/resume-document";
+import { DOC_STYLE, buildResumeDocument, type ResumeBuildOptions } from "@/lib/resume-document";
 import { compact } from "@/lib/text";
 
 const downloadBlob = (blob: Blob, fileName: string) => {
@@ -22,10 +22,14 @@ const safeFileName = (value: string) =>
     .toLowerCase() || "quicktailor-cv";
 
 /**
- * Teks polos ATS standar. Dipakai untuk tombol TXT dan sistem cadangan.
+ * Teks polos ATS standar. Dipakai untuk tombol TXT dan pengecekan parsing linear.
  */
-export const buildPlainTextResume = (resume: ResumeProfile) => {
-  const document = buildResumeDocument(resume);
+export const buildPlainTextResume = (
+  resume: ResumeProfile,
+  lang: "id" | "en" = "id",
+  options?: ResumeBuildOptions
+) => {
+  const document = buildResumeDocument(resume, lang, options);
   const blocks: string[] = [];
 
   const header = compact([document.name, document.headline, document.contact]);
@@ -44,8 +48,9 @@ export const buildPlainTextResume = (resume: ResumeProfile) => {
         lines.push(entry.meta);
       }
 
+      const entryNotes = entry.notes?.length ? entry.notes : entry.note ? [entry.note] : [];
+      entryNotes.forEach((n) => lines.push(`  ${n}`));
       entry.bullets.forEach((bullet) => lines.push(`  * ${bullet}`));
-      if (entry.note) lines.push(`  ${entry.note}`);
     });
 
     blocks.push(lines.join("\n"));
@@ -55,47 +60,48 @@ export const buildPlainTextResume = (resume: ResumeProfile) => {
 };
 
 /**
- * Pembuat dokumen PDF berstandar ATS (Sesuai Referensi Gambar).
- * - Header Rata Tengah (Nama besar tebal, Gelar/Headline tebal, Kontak).
- * - Garis horizontal hitam di setiap judul bagian.
- * - Tanggal rata kanan sejajar dengan judul posisi.
+ * Pembuat dokumen PDF berstandar ATS (100% linear satu kolom, teks murni bisa diseleksi, tanpa tabel/ikon).
  */
-export const buildPdfDocument = async (resume: ResumeProfile): Promise<ReactElement> => {
+export const buildPdfDocument = async (
+  resume: ResumeProfile,
+  lang: "id" | "en" = "id",
+  options?: ResumeBuildOptions
+): Promise<ReactElement> => {
   const React = await import("react");
   const { Document, Page, Text, View, StyleSheet } = await import("@react-pdf/renderer");
-  const document = buildResumeDocument(resume);
+  const document = buildResumeDocument(resume, lang, options);
 
   const el = (type: unknown, props: Record<string, unknown> | null, ...children: ReactNode[]) =>
     React.createElement(type as never, props as never, ...children);
 
   const styles = StyleSheet.create({
     page: {
-      paddingTop: 32,
-      paddingBottom: 32,
-      paddingLeft: 36,
-      paddingRight: 36,
-      fontSize: 9,
+      paddingTop: 38,
+      paddingBottom: 38,
+      paddingLeft: 42,
+      paddingRight: 42,
+      fontSize: 9.5,
       fontFamily: DOC_STYLE.pdfFont,
       color: "#000000",
-      lineHeight: 1.25
+      lineHeight: 1.32
     },
     header: {
       textAlign: "center",
-      marginBottom: 6
+      marginBottom: 8
     },
     name: {
       fontSize: 18,
       fontWeight: 700,
       textAlign: "center",
       color: "#000000",
-      marginBottom: 2
+      marginBottom: 3
     },
     headline: {
       fontSize: 10,
       fontWeight: 700,
       textAlign: "center",
       color: "#000000",
-      marginBottom: 2
+      marginBottom: 3
     },
     contact: {
       fontSize: 9,
@@ -104,18 +110,18 @@ export const buildPdfDocument = async (resume: ResumeProfile): Promise<ReactElem
       marginBottom: 2
     },
     section: {
-      marginTop: 6
+      marginTop: 7
     },
     headingRow: {
       borderBottomWidth: 0.8,
       borderBottomColor: "#000000",
-      paddingBottom: 1.5,
-      marginBottom: 3
+      paddingBottom: 2,
+      marginBottom: 4
     },
     heading: {
-      fontSize: 9.5,
+      fontSize: 10,
       fontWeight: 700,
-      letterSpacing: 0.5,
+      letterSpacing: 0.4,
       textTransform: "uppercase",
       color: "#000000"
     },
@@ -123,14 +129,15 @@ export const buildPdfDocument = async (resume: ResumeProfile): Promise<ReactElem
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "baseline",
-      marginTop: 3,
-      marginBottom: 1
+      marginTop: 4,
+      marginBottom: 1.5
     },
     entryTitle: {
       flex: 1,
-      fontSize: 9,
+      fontSize: 9.5,
       fontWeight: 700,
-      color: "#000000"
+      color: "#000000",
+      paddingRight: 8
     },
     entryMeta: {
       fontSize: 9,
@@ -138,56 +145,45 @@ export const buildPdfDocument = async (resume: ResumeProfile): Promise<ReactElem
       textAlign: "right"
     },
     metaOnly: {
-      fontSize: 8.5,
+      fontSize: 9,
       color: "#222222",
-      marginBottom: 1
-    },
-    paragraph: {
-      fontSize: 9,
-      lineHeight: 1.25,
-      color: "#000000",
-      marginBottom: 2
-    },
-    skillRow: {
-      flexDirection: "row",
-      fontSize: 9,
-      lineHeight: 1.25,
       marginBottom: 1.5
     },
-    skillLabel: {
-      fontWeight: 700,
-      color: "#000000"
+    paragraph: {
+      fontSize: 9.5,
+      lineHeight: 1.32,
+      color: "#000000",
+      marginBottom: 2.5
     },
-    skillContent: {
-      flex: 1,
+    boldLabel: {
+      fontWeight: 700,
       color: "#000000"
     },
     bulletRow: {
       flexDirection: "row",
-      marginBottom: 1.5,
+      marginBottom: 2,
       paddingLeft: 10
     },
     bulletDot: {
-      width: 8,
-      fontSize: 9,
+      width: 9,
+      fontSize: 9.5,
       color: "#000000"
     },
     bulletText: {
       flex: 1,
-      fontSize: 9,
-      lineHeight: 1.25,
+      fontSize: 9.5,
+      lineHeight: 1.32,
       color: "#000000"
     },
     note: {
-      fontSize: 8.5,
-      color: "#333333",
-      marginTop: 1
+      fontSize: 9,
+      color: "#222222",
+      marginBottom: 1.5
     }
   });
 
   const children: ReactElement[] = [];
 
-  // 1. Centered Header
   if (document.name || document.headline || document.contact) {
     const headerBlocks: ReactElement[] = [];
     if (document.name) headerBlocks.push(el(Text, { key: "name", style: styles.name }, document.name));
@@ -196,7 +192,6 @@ export const buildPdfDocument = async (resume: ResumeProfile): Promise<ReactElem
     children.push(el(View, { key: "header", style: styles.header }, ...headerBlocks));
   }
 
-  // 2. Sections
   document.sections.forEach((section, sectionIndex) => {
     const blocks: ReactElement[] = [
       el(View, { key: "heading-row", style: styles.headingRow }, el(Text, { style: styles.heading }, section.heading))
@@ -204,15 +199,16 @@ export const buildPdfDocument = async (resume: ResumeProfile): Promise<ReactElem
 
     section.paragraphs.forEach((paragraph, index) => {
       const colonIndex = paragraph.indexOf(":");
-      if (colonIndex > 0 && colonIndex < 35) {
+      if (colonIndex > 0 && colonIndex < 38) {
         const label = paragraph.slice(0, colonIndex);
         const rest = paragraph.slice(colonIndex + 1);
+        // Gunakan satu elemen <Text> linear dengan anak <Text> tebal agar PDF parser membacanya sebagai satu baris utuh
         blocks.push(
           el(
-            View,
-            { key: `skill-${index}`, style: styles.skillRow },
-            el(Text, { style: styles.skillLabel }, `${label}:`),
-            el(Text, { style: styles.skillContent }, rest)
+            Text,
+            { key: `paragraph-${index}`, style: styles.paragraph },
+            el(Text, { style: styles.boldLabel }, `${label}:`),
+            rest
           )
         );
       } else {
@@ -236,6 +232,25 @@ export const buildPdfDocument = async (resume: ResumeProfile): Promise<ReactElem
         blocks.push(el(Text, { key: `entry-${entryIndex}`, style: styles.metaOnly }, entry.meta));
       }
 
+      const entryNotes = entry.notes?.length ? entry.notes : entry.note ? [entry.note] : [];
+      entryNotes.forEach((noteLine, noteIndex) => {
+        const colonIdx = noteLine.indexOf(":");
+        if (colonIdx > 0 && colonIdx < 28) {
+          const label = noteLine.slice(0, colonIdx);
+          const rest = noteLine.slice(colonIdx + 1);
+          blocks.push(
+            el(
+              Text,
+              { key: `note-${entryIndex}-${noteIndex}`, style: styles.note },
+              el(Text, { style: styles.boldLabel }, `${label}:`),
+              rest
+            )
+          );
+        } else {
+          blocks.push(el(Text, { key: `note-${entryIndex}-${noteIndex}`, style: styles.note }, noteLine));
+        }
+      });
+
       entry.bullets.forEach((bullet, bulletIndex) => {
         blocks.push(
           el(
@@ -246,8 +261,6 @@ export const buildPdfDocument = async (resume: ResumeProfile): Promise<ReactElem
           )
         );
       });
-
-      if (entry.note) blocks.push(el(Text, { key: `note-${entryIndex}`, style: styles.note }, entry.note));
     });
 
     children.push(el(View, { key: `section-${sectionIndex}`, style: styles.section }, ...blocks));
@@ -267,23 +280,26 @@ export const buildPdfDocument = async (resume: ResumeProfile): Promise<ReactElem
 };
 
 /**
- * Pembuat dokumen Microsoft Word (DOCX) berstandar ATS (Sesuai Referensi Gambar).
+ * Pembuat dokumen Microsoft Word (DOCX) berstandar ATS (Heading semantik, tanpa tabel, 1 kolom linear).
  */
-export const buildDocxDocument = async (resume: ResumeProfile) => {
-  const { AlignmentType, BorderStyle, Document, HeadingLevel, Paragraph, Tab, TabStopType, TextRun } = await import("docx");
-  const document = buildResumeDocument(resume);
-  const margin = Math.round(0.5 * 1440); // 0.5 in
+export const buildDocxDocument = async (
+  resume: ResumeProfile,
+  lang: "id" | "en" = "id",
+  options?: ResumeBuildOptions
+) => {
+  const { AlignmentType, BorderStyle, Document, HeadingLevel, Paragraph, Tab, TabStopType, TextRun } = await import(
+    "docx"
+  );
+  const document = buildResumeDocument(resume, lang, options);
+  const margin = Math.round(0.58 * 1440);
   const contentWidth = 11906 - margin * 2;
   const body: InstanceType<typeof Paragraph>[] = [];
 
-  // 1. Centered Header
   if (document.name) {
     body.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        children: [
-          new TextRun({ text: document.name, bold: true, size: 36, font: "Arial" })
-        ],
+        children: [new TextRun({ text: document.name, bold: true, size: 36, font: "Arial" })],
         spacing: { after: 40 }
       })
     );
@@ -293,10 +309,8 @@ export const buildDocxDocument = async (resume: ResumeProfile) => {
     body.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        children: [
-          new TextRun({ text: document.headline, bold: true, size: 21, font: "Arial" })
-        ],
-        spacing: { after: 30 }
+        children: [new TextRun({ text: document.headline, bold: true, size: 21, font: "Arial" })],
+        spacing: { after: 35 }
       })
     );
   }
@@ -305,28 +319,25 @@ export const buildDocxDocument = async (resume: ResumeProfile) => {
     body.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        children: [
-          new TextRun({ text: document.contact, size: 19, font: "Arial", color: "222222" })
-        ],
-        spacing: { after: 120 }
+        children: [new TextRun({ text: document.contact, size: 19, font: "Arial", color: "222222" })],
+        spacing: { after: 140 }
       })
     );
   }
 
-  // 2. Sections
   document.sections.forEach((section) => {
     body.push(
       new Paragraph({
         text: section.heading.toUpperCase(),
         heading: HeadingLevel.HEADING_1,
         border: { bottom: { color: "000000", space: 2, style: BorderStyle.SINGLE, size: 6 } },
-        spacing: { before: 160, after: 60 }
+        spacing: { before: 160, after: 70 }
       })
     );
 
     section.paragraphs.forEach((paragraph) => {
       const colonIndex = paragraph.indexOf(":");
-      if (colonIndex > 0 && colonIndex < 35) {
+      if (colonIndex > 0 && colonIndex < 38) {
         const label = paragraph.slice(0, colonIndex);
         const rest = paragraph.slice(colonIndex + 1);
         body.push(
@@ -335,14 +346,14 @@ export const buildDocxDocument = async (resume: ResumeProfile) => {
               new TextRun({ text: `${label}:`, bold: true, size: 19, font: "Arial" }),
               new TextRun({ text: rest, size: 19, font: "Arial" })
             ],
-            spacing: { after: 40 }
+            spacing: { after: 45 }
           })
         );
       } else {
         body.push(
           new Paragraph({
             children: [new TextRun({ text: paragraph, size: 19, font: "Arial" })],
-            spacing: { after: 60 }
+            spacing: { after: 65 }
           })
         );
       }
@@ -358,43 +369,59 @@ export const buildDocxDocument = async (resume: ResumeProfile) => {
               new Tab(),
               new TextRun({ text: entry.meta, size: 19, font: "Arial", color: "000000" })
             ],
-            spacing: { before: 80, after: 20 }
+            spacing: { before: 90, after: 25 }
           })
         );
       } else if (entry.title) {
         body.push(
           new Paragraph({
             children: [new TextRun({ text: entry.title, bold: true, size: 20, font: "Arial" })],
-            spacing: { before: 80, after: 20 }
+            spacing: { before: 90, after: 25 }
           })
         );
       } else if (entry.meta) {
         body.push(
           new Paragraph({
             children: [new TextRun({ text: entry.meta, size: 19, font: "Arial", color: "222222" })],
-            spacing: { after: 20 }
+            spacing: { after: 25 }
           })
         );
       }
+
+      const entryNotes = entry.notes?.length ? entry.notes : entry.note ? [entry.note] : [];
+      entryNotes.forEach((noteLine) => {
+        const colonIdx = noteLine.indexOf(":");
+        if (colonIdx > 0 && colonIdx < 28) {
+          const label = noteLine.slice(0, colonIdx);
+          const rest = noteLine.slice(colonIdx + 1);
+          body.push(
+            new Paragraph({
+              children: [
+                new TextRun({ text: `${label}:`, bold: true, size: 18, font: "Arial", color: "222222" }),
+                new TextRun({ text: rest, size: 18, font: "Arial", color: "222222" })
+              ],
+              spacing: { after: 20 }
+            })
+          );
+        } else {
+          body.push(
+            new Paragraph({
+              children: [new TextRun({ text: noteLine, size: 18, font: "Arial", color: "222222" })],
+              spacing: { after: 20 }
+            })
+          );
+        }
+      });
 
       entry.bullets.forEach((bullet) => {
         body.push(
           new Paragraph({
             children: [new TextRun({ text: bullet, size: 19, font: "Arial" })],
             bullet: { level: 0 },
-            spacing: { after: 20 }
+            spacing: { after: 25 }
           })
         );
       });
-
-      if (entry.note) {
-        body.push(
-          new Paragraph({
-            children: [new TextRun({ text: entry.note, size: 18, font: "Arial" })],
-            spacing: { after: 20 }
-          })
-        );
-      }
     });
   });
 
@@ -408,13 +435,13 @@ export const buildDocxDocument = async (resume: ResumeProfile) => {
         heading1: {
           run: {
             font: "Arial",
-            size: 21,
+            size: 20,
             bold: true,
             color: "000000",
             allCaps: true,
-            characterSpacing: 10
+            characterSpacing: 8
           },
-          paragraph: { spacing: { before: 180, after: 40 } }
+          paragraph: { spacing: { before: 180, after: 45 } }
         }
       }
     },
@@ -432,21 +459,33 @@ export const buildDocxDocument = async (resume: ResumeProfile) => {
   });
 };
 
-export const exportPdf = async (resume: ResumeProfile) => {
+export const exportPdf = async (
+  resume: ResumeProfile,
+  lang: "id" | "en" = "id",
+  options?: ResumeBuildOptions
+) => {
   const { pdf } = await import("@react-pdf/renderer");
-  const document = await buildPdfDocument(resume);
+  const document = await buildPdfDocument(resume, lang, options);
   const blob = await pdf(document as Parameters<typeof pdf>[0]).toBlob();
   downloadBlob(blob, `${safeFileName(resume.contact.fullName)}.pdf`);
 };
 
-export const exportDocx = async (resume: ResumeProfile) => {
+export const exportDocx = async (
+  resume: ResumeProfile,
+  lang: "id" | "en" = "id",
+  options?: ResumeBuildOptions
+) => {
   const { Packer } = await import("docx");
-  const document = await buildDocxDocument(resume);
+  const document = await buildDocxDocument(resume, lang, options);
   const blob = await Packer.toBlob(document);
   downloadBlob(blob, `${safeFileName(resume.contact.fullName)}.docx`);
 };
 
-export const exportTextFallback = (resume: ResumeProfile) => {
-  const blob = new Blob([buildPlainTextResume(resume)], { type: "text/plain;charset=utf-8" });
+export const exportTextFallback = (
+  resume: ResumeProfile,
+  lang: "id" | "en" = "id",
+  options?: ResumeBuildOptions
+) => {
+  const blob = new Blob([buildPlainTextResume(resume, lang, options)], { type: "text/plain;charset=utf-8" });
   downloadBlob(blob, `${safeFileName(resume.contact.fullName)}.txt`);
 };
