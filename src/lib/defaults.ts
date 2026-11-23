@@ -44,7 +44,8 @@ export const emptyResumeProfile = (): ResumeProfile => ({
   skills: {
     hardSkills: [],
     softSkills: [],
-    tools: []
+    tools: [],
+    groups: []
   },
   certifications: []
 });

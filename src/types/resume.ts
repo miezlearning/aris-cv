@@ -1,5 +1,6 @@
 export type ExperienceLevel = "fresh_graduate" | "early_career" | "experienced";
 export type CvLanguage = "auto" | "id" | "en";
+export type CvTemplate = "compact_centered" | "classic_editorial" | "executive_left";
 export type DetectedLanguage = "id" | "en" | "mixed";
 export type WorkType = "fulltime" | "internship" | "parttime" | "freelance";
 
@@ -63,10 +64,17 @@ export type CertificationItem = {
   year: string;
 };
 
+export type SkillGroup = {
+  id: string;
+  category: string;
+  items: string[];
+};
+
 export type Skills = {
   hardSkills: string[];
   softSkills: string[];
   tools: string[];
+  groups?: SkillGroup[];
 };
 
 export type ResumeProfile = {
