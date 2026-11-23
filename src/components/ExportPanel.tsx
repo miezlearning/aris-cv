@@ -16,10 +16,18 @@ import {
   TextAlignLeft,
   Translate
 } from "@phosphor-icons/react";
+import { LocalAiControlPanel } from "@/components/LocalAiControlPanel";
 import { Button, SectionCard } from "@/components/ui";
 import { computeProfileContentHash } from "@/lib/ats/translator";
 import { exportDocx, exportPdf, exportTextFallback } from "@/lib/exporters";
-import { buildResumeDocument, estimateA4Pages, resolveCvLanguage } from "@/lib/resume-document";
+import type { ActiveLocalAiConfig } from "@/lib/local-ai/engine";
+import { translateProfileWithLocalAi } from "@/lib/local-ai/tasks";
+import {
+  buildResumeDocument,
+  detectResumeLanguage,
+  estimateA4Pages,
+  resolveCvLanguage
+} from "@/lib/resume-document";
 import { useCvStore } from "@/lib/store";
 import type { CvLanguage, CvTemplate } from "@/types/resume";
 
@@ -58,18 +66,18 @@ const TEMPLATE_OPTIONS: Array<{
 const LANGUAGE_OPTIONS: Array<{ value: CvLanguage; label: string; hint: string }> = [
   {
     value: "auto",
-    label: "Otomatis (Ikuti Lowongan)",
-    hint: "Mengikuti bahasa iklan lowongan yang dianalisis di Langkah 2."
+    label: "Otomatis (Ikuti Lowongan / CV)",
+    hint: "Mengikuti bahasa iklan lowongan di Langkah 2, atau mempertahankan bahasa asli CV bila belum dianalisis."
   },
   {
     value: "id",
     label: "Bahasa Indonesia",
-    hint: "Judul dan isi tetap dalam Bahasa Indonesia (RINGKASAN PROFIL, PENDIDIKAN, KEAHLIAN)."
+    hint: "Judul seksi dan isi CV berbahasa Inggris otomatis diterjemahkan ke Bahasa Indonesia baku standar ATS."
   },
   {
     value: "en",
     label: "English (ATS Full Translation)",
-    hint: "Judul seksi dan seluruh isi CV otomatis diterjemahkan ke bahasa Inggris standar ATS."
+    hint: "Judul seksi dan seluruh isi CV otomatis diterjemahkan ke bahasa Inggris standar industri ATS."
   }
 ];
 
@@ -82,21 +90,37 @@ export const ExportPanel = () => {
   const setCvTemplate = useCvStore((state) => state.setCvTemplate);
   const autoTranslateContent = useCvStore((state) => state.autoTranslateContent);
   const setAutoTranslateContent = useCvStore((state) => state.setAutoTranslateContent);
-  const aiTranslatedEnProfile = useCvStore((state) => state.aiTranslatedEnProfile);
-  const aiTranslatedSourceHash = useCvStore((state) => state.aiTranslatedSourceHash);
-  const setAiTranslatedEn = useCvStore((state) => state.setAiTranslatedEn);
-  const applyEnglishTranslationToEditor = useCvStore((state) => state.applyEnglishTranslationToEditor);
+  const aiTranslatedProfiles = useCvStore((state) => state.aiTranslatedProfiles);
+  const setAiTranslatedProfile = useCvStore((state) => state.setAiTranslatedProfile);
+  const applyTranslationToEditor = useCvStore((state) => state.applyTranslationToEditor);
+
+  const localAiMode = useCvStore((state) => state.localAiMode);
+  const localAiStatus = useCvStore((state) => state.localAiStatus);
+  const webLlmModelId = useCvStore((state) => state.webLlmModelId);
+  const localServerUrl = useCvStore((state) => state.localServerUrl);
+  const localServerModel = useCvStore((state) => state.localServerModel);
 
   const [message, setMessage] = useState("");
+  const [translateProgress, setTranslateProgress] = useState("");
   const [busy, setBusy] = useState<"pdf" | "docx" | "txt" | "translate" | "">("");
 
+  const activeLocalConfig: ActiveLocalAiConfig | null =
+    localAiStatus === "ready" && localAiMode === "webllm"
+      ? { mode: "webllm", modelId: webLlmModelId }
+      : localAiStatus === "ready" && (localAiMode === "ollama" || localAiMode === "lmstudio")
+      ? { mode: localAiMode, baseUrl: localServerUrl, modelId: localServerModel }
+      : null;
+
+  const sourceLang = detectResumeLanguage(resume);
   const activeLang = resolveCvLanguage(
     cvLanguage,
-    analytics.hasAnalyzed ? analytics.detectedLanguage : undefined
+    analytics.hasAnalyzed ? analytics.detectedLanguage : undefined,
+    resume
   );
   const currentHash = computeProfileContentHash(resume);
+  const cachedTranslation = aiTranslatedProfiles[activeLang];
   const translatedOverride =
-    aiTranslatedEnProfile && aiTranslatedSourceHash === currentHash ? aiTranslatedEnProfile : null;
+    cachedTranslation && cachedTranslation.sourceHash === currentHash ? cachedTranslation.profile : null;
   const buildOptions = {
     template: cvTemplate,
     translateContent: autoTranslateContent,
@@ -133,8 +157,27 @@ export const ExportPanel = () => {
     if (document.isEmpty) return;
     setBusy("translate");
     setMessage("");
+    setTranslateProgress("");
+
+    const langLabel = activeLang === "en" ? "English ATS" : "Bahasa Indonesia ATS";
 
     try {
+      if (activeLocalConfig) {
+        const localTranslated = await translateProfileWithLocalAi(
+          activeLocalConfig,
+          resume,
+          activeLang,
+          (txt) => setTranslateProgress(txt)
+        );
+        setAiTranslatedProfile(activeLang, localTranslated, currentHash, activeLocalConfig.modelId);
+        setCvLanguage(activeLang);
+        setAutoTranslateContent(true);
+        setMessage(
+          `Terjemahan ${langLabel} berhasil diperhalus oleh AI lokal (${activeLocalConfig.modelId}) 100% di perangkatmu.`
+        );
+        return;
+      }
+
       const anonymizedResume = {
         ...resume,
         contact: {
@@ -151,7 +194,7 @@ export const ExportPanel = () => {
       const response = await fetch("/api/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resume: anonymizedResume }),
+        body: JSON.stringify({ resume: anonymizedResume, targetLang: activeLang }),
         signal: AbortSignal.timeout(15000)
       });
 
@@ -167,20 +210,21 @@ export const ExportPanel = () => {
           headline: json.data.profile?.contact?.headline ?? resume.contact.headline
         }
       };
-      setAiTranslatedEn(translatedProfile, currentHash);
-      setCvLanguage("en");
+      setAiTranslatedProfile(activeLang, translatedProfile, currentHash, json.data.provider);
+      setCvLanguage(activeLang);
       setAutoTranslateContent(true);
       setMessage(
         json.data.provider === "deterministic"
-          ? "Terjemahan English ATS lokal aktif (100% di perangkat, tanpa kunci AI eksternal)."
-          : "Terjemahan English standar ATS berhasil diperhalus tanpa mengirim identitas pribadimu."
+          ? `Terjemahan ${langLabel} lokal aktif (100% di perangkat). Untuk gaya kalimat lebih luwes, aktifkan model WebLLM atau Ollama di bawah.`
+          : `Terjemahan ${langLabel} berhasil diperhalus tanpa mengirim identitas pribadimu.`
       );
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Menggunakan terjemahan English ATS lokal secara bawaan."
+        error instanceof Error ? error.message : `Menggunakan terjemahan ${langLabel} lokal secara bawaan.`
       );
     } finally {
       setBusy("");
+      setTranslateProgress("");
     }
   };
 
@@ -261,7 +305,7 @@ export const ExportPanel = () => {
               <div>
                 <h3 className="text-sm font-bold text-[#251813]">Bahasa Judul & Isi Dokumen CV</h3>
                 <p className="text-xs text-[#59483F] mt-0.5">
-                  Mode English otomatis menerjemahkan judul seksi maupun seluruh isi CV ke bahasa Inggris standar industri ATS.
+                  Mendukung terjemahan 2 arah (Indonesia ke English maupun English ke Indonesia) langsung di browser.
                 </p>
               </div>
             </div>
@@ -292,52 +336,66 @@ export const ExportPanel = () => {
             })}
           </div>
 
-          {/* Kontrol Terjemahan Full-Content ketika mode English aktif */}
-          {activeLang === "en" ? (
-            <div className="mt-4 rounded-xl border border-[#94D1DF] card-tint-sky p-3.5 sm:p-4 grid gap-3">
-              <label className="flex items-start gap-2.5 cursor-pointer min-h-[44px]">
-                <input
-                  type="checkbox"
-                  checked={autoTranslateContent}
-                  onChange={(event) => setAutoTranslateContent(event.target.checked)}
-                  className="checkbox checkbox-sm mt-0.5 border-[#124959]/50 checked:bg-[#1F6B57] checked:border-[#1F6B57]"
-                />
-                <span className="text-xs sm:text-sm font-semibold text-[#124959] leading-relaxed">
-                  Terjemahkan seluruh isi CV (Ringkasan, Pendidikan, Proyek, Pengalaman, Organisasi, & Keahlian) ke English standar industri ATS
-                </span>
-              </label>
+          {/* Kontrol Terjemahan Full-Content 2 Arah (ID <-> EN) */}
+          <div className="mt-4 rounded-xl border border-[#94D1DF] card-tint-sky p-3.5 sm:p-4 grid gap-3">
+            <label className="flex items-start gap-2.5 cursor-pointer min-h-[44px]">
+              <input
+                type="checkbox"
+                checked={autoTranslateContent}
+                onChange={(event) => setAutoTranslateContent(event.target.checked)}
+                className="checkbox checkbox-sm mt-0.5 border-[#124959]/50 checked:bg-[#1F6B57] checked:border-[#1F6B57]"
+              />
+              <span className="text-xs sm:text-sm font-semibold text-[#124959] leading-relaxed">
+                {activeLang === "en"
+                  ? "Terjemahkan seluruh isi CV ke English standar industri ATS (bila CV masih berbahasa Indonesia)"
+                  : "Terjemahkan seluruh isi CV ke Bahasa Indonesia baku standar ATS (bila CV masih berbahasa Inggris)"}
+              </span>
+            </label>
 
-              {autoTranslateContent && !document.isEmpty ? (
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={Boolean(busy)}
-                    onClick={handleAiTranslatePolish}
-                    className="min-h-[44px] text-xs gap-1.5"
-                  >
-                    <ShieldCheck size={15} weight="duotone" aria-hidden="true" />
-                    <span>
-                      {busy === "translate" ? "Memproses..." : "Perhalus Terjemahan (Tanpa PII)"}
-                    </span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={Boolean(busy)}
-                    onClick={() => {
-                      applyEnglishTranslationToEditor();
-                      setMessage("Seluruh isi CV versi English telah disalin ke formulir Langkah 1 untuk disunting.");
-                    }}
-                    className="min-h-[44px] text-xs gap-1.5"
-                  >
-                    <ArrowsClockwise size={15} weight="duotone" aria-hidden="true" />
-                    <span>Salin Hasil English ke Editor</span>
-                  </Button>
-                </div>
-              ) : null}
+            {autoTranslateContent && !document.isEmpty && (activeLang !== sourceLang || cvLanguage !== "auto" || Boolean(activeLocalConfig)) ? (
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={Boolean(busy)}
+                  onClick={handleAiTranslatePolish}
+                  className="min-h-[44px] text-xs gap-1.5"
+                >
+                  <ShieldCheck size={15} weight="duotone" aria-hidden="true" />
+                  <span>
+                    {busy === "translate"
+                      ? translateProgress || "Menerjemahkan..."
+                      : activeLocalConfig
+                      ? `Perhalus Terjemahan (${activeLocalConfig.modelId})`
+                      : "Perhalus Terjemahan (Tanpa PII)"}
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={Boolean(busy)}
+                  onClick={() => {
+                    applyTranslationToEditor(activeLang);
+                    setMessage(
+                      `Seluruh isi CV versi ${
+                        activeLang === "en" ? "English" : "Bahasa Indonesia"
+                      } telah disalin ke formulir Langkah 1 untuk disunting.`
+                    );
+                  }}
+                  className="min-h-[44px] text-xs gap-1.5"
+                >
+                  <ArrowsClockwise size={15} weight="duotone" aria-hidden="true" />
+                  <span>
+                    Salin Hasil {activeLang === "en" ? "English" : "Indonesia"} ke Editor
+                  </span>
+                </Button>
+              </div>
+            ) : null}
+
+            <div className="pt-1">
+              <LocalAiControlPanel compact contextLabel="Terjemahan 2 Arah ID-EN" />
             </div>
-          ) : null}
+          </div>
         </div>
 
         {/* Peringatan jika CV masih kosong */}
