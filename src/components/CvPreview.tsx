@@ -5,6 +5,7 @@ import { ArrowsOutSimple, FileText, MagnifyingGlassPlus, Translate } from "@phos
 import { computeProfileContentHash } from "@/lib/ats/translator";
 import {
   buildResumeDocument,
+  detectResumeLanguage,
   estimateA4Pages,
   getMissingParts,
   resolveCvLanguage
@@ -41,19 +42,21 @@ export const CvPreview = ({
   const setCvTemplate = useCvStore((state) => state.setCvTemplate);
   const autoTranslateContent = useCvStore((state) => state.autoTranslateContent);
   const setAutoTranslateContent = useCvStore((state) => state.setAutoTranslateContent);
-  const aiTranslatedEnProfile = useCvStore((state) => state.aiTranslatedEnProfile);
-  const aiTranslatedSourceHash = useCvStore((state) => state.aiTranslatedSourceHash);
-  const applyEnglishTranslationToEditor = useCvStore((state) => state.applyEnglishTranslationToEditor);
+  const aiTranslatedProfiles = useCvStore((state) => state.aiTranslatedProfiles);
+  const applyTranslationToEditor = useCvStore((state) => state.applyTranslationToEditor);
 
   const [zoomMode, setZoomMode] = useState<"fit" | "full">("fit");
 
+  const sourceLang = detectResumeLanguage(resume);
   const activeLang = resolveCvLanguage(
     cvLanguage,
-    analytics.hasAnalyzed ? analytics.detectedLanguage : undefined
+    analytics.hasAnalyzed ? analytics.detectedLanguage : undefined,
+    resume
   );
   const currentHash = computeProfileContentHash(resume);
+  const cachedTranslation = aiTranslatedProfiles[activeLang];
   const translatedOverride =
-    aiTranslatedEnProfile && aiTranslatedSourceHash === currentHash ? aiTranslatedEnProfile : null;
+    cachedTranslation && cachedTranslation.sourceHash === currentHash ? cachedTranslation.profile : null;
 
   const document = buildResumeDocument(resume, activeLang, {
     template: cvTemplate,
@@ -187,15 +190,23 @@ export const CvPreview = ({
         </div>
       </div>
 
-      {/* Ribbon info terjemahan full-content saat mode EN aktif */}
-      {!document.isEmpty && activeLang === "en" ? (
+      {/* Ribbon info terjemahan full-content 2 arah ID <-> EN */}
+      {!document.isEmpty && (activeLang !== sourceLang || cvLanguage !== "auto" || Boolean(translatedOverride)) ? (
         <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#94D1DF] bg-[#ECF9FC] px-3 py-2 text-xs">
           <span className="inline-flex items-center gap-1.5 font-bold text-[#124959]">
             <Translate size={15} weight="duotone" aria-hidden="true" />
             <span>
-              {autoTranslateContent
-                ? "Mode ATS English: judul & seluruh isi CV diterjemahkan"
-                : "Mode ATS English: hanya judul seksi (isi tetap asli)"}
+              {activeLang === "en"
+                ? autoTranslateContent
+                  ? translatedOverride
+                    ? "Mode ATS English: judul & isi diperhalus AI"
+                    : "Mode ATS English: judul & seluruh isi CV diterjemahkan"
+                  : "Mode ATS English: hanya judul seksi (isi tetap asli)"
+                : autoTranslateContent
+                ? translatedOverride
+                  ? "Mode Bahasa Indonesia: judul & isi diperhalus AI"
+                  : "Mode Bahasa Indonesia: judul & seluruh isi CV diterjemahkan"
+                : "Mode Bahasa Indonesia: hanya judul seksi (isi tetap asli)"}
             </span>
           </span>
           <div className="flex items-center gap-1.5">
@@ -209,8 +220,8 @@ export const CvPreview = ({
             {autoTranslateContent ? (
               <button
                 type="button"
-                onClick={applyEnglishTranslationToEditor}
-                title="Salin versi bahasa Inggris ini ke formulir Langkah 1 agar bisa kamu sunting manual"
+                onClick={() => applyTranslationToEditor(activeLang)}
+                title={`Salin versi ${activeLang === "en" ? "English" : "Bahasa Indonesia"} ini ke formulir Langkah 1 agar bisa disunting`}
                 className="rounded-md border border-[#1F6B57]/40 bg-[#DFF5DA] px-2 py-1 text-[11px] font-bold text-[#144C32] hover:bg-[#CDECC6] transition-colors"
               >
                 Salin ke Editor
