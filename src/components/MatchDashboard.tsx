@@ -1,22 +1,23 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { motion } from "motion/react";
 import {
   CheckCircle,
   CheckSquareOffset,
-  Compass,
   Gauge,
   GraduationCap,
   ListChecks,
-  Plus,
   Translate,
   UsersThree,
   WarningCircle,
   Wrench
 } from "@phosphor-icons/react";
-import { useCvStore } from "@/lib/store";
+import { GapTogglePanel } from "@/components/GapTogglePanel";
+import { TranslationComparePanel } from "@/components/TranslationComparePanel";
 import { EmptyState, SectionCard, Tag } from "@/components/ui";
+import { useLiveAts } from "@/lib/live-ats";
+import { useCvStore } from "@/lib/store";
 import type { AdministrativeItem, QualificationMatchItem } from "@/types/resume";
 
 const noteClass = {
@@ -53,22 +54,25 @@ const verdictFor = (score: number) => {
       label: "Kecocokan Cukup Baik",
       note: "yellow" as const,
       ringColor: "#9B6B12",
-      body: "Beberapa kualifikasi sudah cocok atau memiliki padanan istilah. Menjelaskan kata kunci yang relevan dari pengalaman/proyek aslimu akan memperkuat skor."
+      body: "Beberapa kualifikasi sudah cocok atau memiliki padanan istilah. Menjelaskan kata kunci yang relevan dari pengalaman/proyek aslimu atau menyesuaikan bahasa akan memperkuat skor."
     };
   }
   return {
     label: "Perlu Penyesuaian",
     note: "red" as const,
     ringColor: "#A3291B",
-    body: "Masih banyak kualifikasi inti lowongan yang belum muncul di CV kamu. Periksa rincian celah di bawah dan sesuaikan hanya berdasarkan kemampuan nyatamu."
+    body: "Masih banyak kualifikasi inti lowongan yang belum muncul atau bahasa CV berbeda dengan lowongan. Periksa rincian celah dan toggle keahlian di bawah sesuai kemampuan nyatamu."
   };
 };
 
 export const MatchDashboard = () => {
-  const analytics = useCvStore((state) => state.matchAnalytics);
-  const addSkillItem = useCvStore((state) => state.addSkillItem);
+  const { analytics, isTranslatedView } = useLiveAts();
+  const setCvLanguage = useCvStore((state) => state.setCvLanguage);
+  const setAutoTranslateContent = useCvStore((state) => state.setAutoTranslateContent);
   const checkedAdminItems = useCvStore((state) => state.checkedAdminItems);
   const toggleAdminItem = useCvStore((state) => state.toggleAdminItem);
+
+  const [compareOpen, setCompareOpen] = useState(false);
 
   if (!analytics.hasAnalyzed) {
     return (
@@ -93,9 +97,8 @@ export const MatchDashboard = () => {
   const partialList = matches.filter((m) => m.status === "partial");
   const gapList = matches.filter((m) => m.status === "gap");
   const adminItems = analytics.administrativeItems ?? [];
-  const implicitSuggestions = analytics.implicitSuggestions ?? [];
   const formatChecks = analytics.formatChecks ?? [];
-  const { breakdown } = analytics;
+  const { breakdown, languageAlignment } = analytics;
 
   const breakdownRows: Array<{
     label: string;
@@ -130,6 +133,14 @@ export const MatchDashboard = () => {
       icon: <CheckSquareOffset size={15} weight="duotone" className="text-[#4A3A2E]" aria-hidden="true" />
     },
     {
+      label: "Keselarasan Bahasa CV & Lowongan",
+      score: breakdown.languageAlignmentScore ?? languageAlignment?.score ?? 100,
+      weightPct: Math.round((breakdown.weights.languageAlignment ?? 0.1) * 100),
+      active: (breakdown.weights.languageAlignment ?? 0) > 0,
+      barColor: "bg-[#B25432]",
+      icon: <Translate size={15} weight="duotone" className="text-[#7B1F14]" aria-hidden="true" />
+    },
+    {
       label: "Karakter Kerja (Bobot Rendah)",
       score: breakdown.softSkillsScore,
       weightPct: Math.round(breakdown.weights.softSkills * 100),
@@ -139,10 +150,15 @@ export const MatchDashboard = () => {
     }
   ].filter((row) => row.active);
 
+  const canOneClickTranslate =
+    languageAlignment &&
+    languageAlignment.status !== "aligned" &&
+    (languageAlignment.jobLanguage === "en" || languageAlignment.jobLanguage === "id");
+
   return (
     <SectionCard
-      title="Hasil Analisis & Rincian Skor ATS"
-      description="Skor dihitung secara transparan dari kecocokan Hard Skills, Pendidikan, Struktur & Dampak CV, serta bobot rendah untuk Soft Skills. Berkas administratif tidak ikut dihitung."
+      title="Hasil Analisis & Rincian Skor ATS (Live)"
+      description="Skor diperbarui seketika saat kamu mengaktifkan toggle keahlian, mengoptimalkan kalimat, atau mengubah bahasa CV (ID / EN)."
       accent="sage"
       icon={<Gauge size={20} weight="duotone" />}
     >
@@ -153,7 +169,7 @@ export const MatchDashboard = () => {
             <div className="flex flex-col items-center justify-center border-b sm:border-b-0 sm:border-r border-[#251813]/20 pb-4 sm:pb-0 sm:pr-6">
               <ScoreRing value={analytics.overallScore} ringColor={verdict.ringColor} />
               <p className="mt-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#4E3E36]">
-                Skor Kecocokan ATS
+                Skor ATS Live
               </p>
             </div>
 
@@ -164,6 +180,11 @@ export const MatchDashboard = () => {
                   <Translate size={13} weight="duotone" aria-hidden="true" />
                   <span>Iklan: {languageLabels[analytics.detectedLanguage ?? "id"]}</span>
                 </span>
+                {languageAlignment ? (
+                  <span className="inline-flex items-center gap-1 rounded-lg border border-[#251813]/25 bg-white/95 px-2.5 py-0.5 text-xs font-bold text-[#251813]">
+                    CV aktif: {languageLabels[languageAlignment.cvLanguage]}
+                  </span>
+                ) : null}
               </div>
               <p className="mt-1.5 text-sm text-[#251813] leading-relaxed max-w-xl">{verdict.body}</p>
               <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-[#251813]">
@@ -174,7 +195,7 @@ export const MatchDashboard = () => {
                   Sinonim/Lintas Bahasa: {partialList.length}
                 </span>
                 <span className="rounded-md bg-white/90 px-2.5 py-1 border border-[#251813]/15">
-                  Perlu ditonjolkan: {gapList.length}
+                  Belum muncul: {gapList.length}
                 </span>
                 {adminItems.length > 0 ? (
                   <span className="rounded-md bg-white/90 px-2.5 py-1 border border-[#251813]/15">
@@ -184,6 +205,41 @@ export const MatchDashboard = () => {
               </div>
             </div>
           </div>
+
+          {/* Banner Keselarasan Bahasa + Aksi 1-Klik */}
+          {canOneClickTranslate ? (
+            <div className="mt-4 pt-3.5 border-t border-[#251813]/15 flex flex-wrap items-center justify-between gap-2.5">
+              <p className="text-xs sm:text-[13px] font-semibold text-[#251813] leading-relaxed">
+                {languageAlignment.note}
+              </p>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCvLanguage(languageAlignment.jobLanguage === "en" ? "en" : "id");
+                    setAutoTranslateContent(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 min-h-[42px] rounded-xl border-2 border-[#251813] bg-[#1F6B57] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#154538] transition-colors"
+                >
+                  <Translate size={15} weight="duotone" aria-hidden="true" />
+                  <span>
+                    {languageAlignment.jobLanguage === "en"
+                      ? "Terjemahkan CV ke English (Naikkan Skor)"
+                      : "Terjemahkan CV ke Indonesia"}
+                  </span>
+                </button>
+                {isTranslatedView ? (
+                  <button
+                    type="button"
+                    onClick={() => setCompareOpen(true)}
+                    className="inline-flex items-center gap-1.5 min-h-[42px] rounded-xl border border-[#251813]/30 bg-white px-3 py-1.5 text-xs font-bold text-[#251813] hover:bg-[#FFF0A8] transition-colors"
+                  >
+                    <span>Teks Asli vs Translate</span>
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {/* Breakdown Penyebab Skor dengan Animated Bars */}
@@ -203,9 +259,9 @@ export const MatchDashboard = () => {
                 </div>
                 <div className="mt-2 h-2.5 w-full rounded-full bg-[#EFE7D6] overflow-hidden">
                   <motion.div
-                    initial={{ width: 0 }}
+                    initial={false}
                     animate={{ width: `${row.score}%` }}
-                    transition={{ duration: 0.55, ease: [0.2, 0.7, 0.3, 1] }}
+                    transition={{ duration: 0.45, ease: [0.2, 0.7, 0.3, 1] }}
                     className={`h-full rounded-full ${row.barColor}`}
                   />
                 </div>
@@ -213,6 +269,9 @@ export const MatchDashboard = () => {
             ))}
           </div>
         </div>
+
+        {/* Interactive Gap & Implicit Skill Toggles */}
+        <GapTogglePanel />
 
         {/* Chip Kata Kunci Berkode Warna + Ikon + Label */}
         <div className="min-w-0 grid gap-4 lg:grid-cols-3">
@@ -235,79 +294,6 @@ export const MatchDashboard = () => {
             empty="Semua kualifikasi utama sudah terbaca di CV!"
           />
         </div>
-
-        {/* Panduan Menjembatani Gap (Anti-Hallucination) */}
-        {gapList.length > 0 ? (
-          <div className="min-w-0 rounded-xl border border-[#D9CEBC] bg-white p-4 sm:p-5">
-            <h3 className="text-sm sm:text-base font-bold text-[#251813]">
-              Cara Jujur Menjembatani Kualifikasi yang Belum Muncul
-            </h3>
-            <p className="mt-1 text-xs sm:text-sm text-[#4E3E36]">
-              Jangan mengarang keahlian atau pengalaman palsu. Gunakan panduan berikut hanya untuk kemampuan yang memang sudah pernah kamu pelajari atau kerjakan.
-            </p>
-            <div className="mt-3.5 min-w-0 grid gap-3 sm:grid-cols-2">
-              {gapList.slice(0, 6).map((item) => (
-                <div key={item.term} className="min-w-0 rounded-xl border border-[#E9A590] bg-[#FFFDF8] p-3.5 text-xs">
-                  <Tag tone="gap" showPrefix>
-                    {item.term}
-                  </Tag>
-                  <p className="mt-2 text-[#4E3E36] leading-relaxed break-words">{item.guidance}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {/* Kartu Saran Kompetensi Domain Implisit (Opt-in) */}
-        {implicitSuggestions.length > 0 ? (
-          <div className="min-w-0 rounded-xl border border-[#94D1DF] bg-[#ECF9FC] p-4 sm:p-5">
-            <div className="mb-3 flex items-start gap-3">
-              <span
-                aria-hidden="true"
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border-2 border-[#251813] bg-white text-[#124959]"
-              >
-                <Compass size={18} weight="duotone" />
-              </span>
-              <div>
-                <h3 className="text-sm sm:text-base font-bold text-[#124959]">
-                  Saran Kompetensi Kontekstual ({implicitSuggestions[0].domain})
-                </h3>
-                <p className="mt-1 text-xs sm:text-[13px] text-[#2B4F5A] leading-relaxed">
-                  Iklan lowongan ini singkat/umum. Berikut kompetensi inti yang biasa diharapkan di bidang ini.{" "}
-                  <span className="font-bold">Tambahkan ke CV hanya jika kamu benar-benar menguasainya:</span>
-                </p>
-              </div>
-            </div>
-            <div className="min-w-0 grid gap-3 sm:grid-cols-2">
-              <AnimatePresence>
-                {implicitSuggestions.map((comp) => (
-                  <motion.div
-                    key={comp.id}
-                    layout
-                    initial={{ opacity: 0, scale: 0.96 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.94 }}
-                    transition={{ duration: 0.2 }}
-                    className="min-w-0 rounded-xl border border-[#94D1DF] bg-white p-3.5 flex flex-col justify-between gap-3"
-                  >
-                    <div>
-                      <p className="text-sm font-bold text-[#251813]">{comp.skill}</p>
-                      <p className="mt-1 text-xs text-[#4E3E36] leading-relaxed">{comp.reason}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => addSkillItem("hardSkills", comp.skill)}
-                      className="inline-flex items-center gap-1.5 min-h-[44px] w-fit rounded-xl border border-[#1F6B57] bg-[#DFF5DA] px-3 py-1.5 text-xs font-bold text-[#144C32] hover:bg-[#CDECC6] transition-colors"
-                    >
-                      <Plus size={14} weight="bold" aria-hidden="true" />
-                      <span>Saya menguasai ini (Tambahkan ke Keahlian)</span>
-                    </button>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          </div>
-        ) : null}
 
         {/* Kartu Terpisah: Checklist Berkas & Syarat Administratif */}
         {adminItems.length > 0 ? (
@@ -407,12 +393,15 @@ export const MatchDashboard = () => {
           </div>
         ) : null}
       </div>
+
+      <TranslationComparePanel open={compareOpen} onClose={() => setCompareOpen(false)} />
     </SectionCard>
   );
 };
 
 const ScoreRing = ({ value, ringColor }: { value: number; ringColor: string }) => {
-  const [shown, setShown] = useState(0);
+  const [shown, setShown] = useState(value);
+  const shownRef = useRef(value);
   const size = 112;
   const strokeWidth = 10;
   const radius = (size - strokeWidth) / 2;
@@ -421,18 +410,23 @@ const ScoreRing = ({ value, ringColor }: { value: number; ringColor: string }) =
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      shownRef.current = value;
       setShown(value);
       return;
     }
 
-    const duration = 650;
+    const fromValue = shownRef.current;
+    if (fromValue === value) return;
+    const duration = 450;
     const start = performance.now();
     let frame = 0;
 
     const tick = (now: number) => {
       const progress = Math.min(1, (now - start) / duration);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setShown(Math.round(value * eased));
+      const nextVal = Math.round(fromValue + (value - fromValue) * eased);
+      shownRef.current = nextVal;
+      setShown(nextVal);
       if (progress < 1) frame = window.requestAnimationFrame(tick);
     };
 
@@ -460,9 +454,9 @@ const ScoreRing = ({ value, ringColor }: { value: number; ringColor: string }) =
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={circumference}
-          initial={{ strokeDashoffset: circumference }}
+          initial={false}
           animate={{ strokeDashoffset: targetOffset }}
-          transition={{ duration: 0.75, ease: [0.2, 0.7, 0.3, 1] }}
+          transition={{ duration: 0.55, ease: [0.2, 0.7, 0.3, 1] }}
         />
       </svg>
       <span className="absolute text-2xl sm:text-3xl font-black text-[#251813]">{shown}%</span>
