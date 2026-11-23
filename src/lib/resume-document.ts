@@ -1,5 +1,6 @@
 import type { CvLanguage, CvTemplate, DetectedLanguage, ResumeProfile } from "@/types/resume";
-import { translateProfileToEnglish } from "@/lib/ats/translator";
+import { detectLanguage } from "@/lib/ats/normalizer";
+import { translateProfileDeterministic } from "@/lib/ats/translator";
 import { compact } from "@/lib/text";
 
 export type SectionKey =
@@ -136,13 +137,32 @@ const DOC_LABELS: Record<"id" | "en", DocLabels> = {
   }
 };
 
+export const detectResumeLanguage = (resume?: ResumeProfile): "id" | "en" => {
+  if (!resume) return "id";
+  const corpus = [
+    resume.contact?.headline ?? "",
+    resume.summary ?? "",
+    ...(resume.workExperience ?? []).flatMap((w) => [w.role, w.company, w.endDate, ...(w.bulletPoints ?? [])]),
+    ...(resume.projects ?? []).flatMap((p) => [p.name, p.role, ...(p.bulletPoints ?? [])]),
+    ...(resume.organizations ?? []).flatMap((o) => [o.role, o.organization, ...(o.bulletPoints ?? [])]),
+    ...(resume.education ?? []).flatMap((e) => [e.degree, e.fieldOfStudy, e.thesisTitle ?? ""])
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (!corpus.trim()) return "id";
+  return detectLanguage(corpus) === "en" ? "en" : "id";
+};
+
 export const resolveCvLanguage = (
   preference: CvLanguage = "auto",
-  detectedJobLang?: DetectedLanguage
+  detectedJobLang?: DetectedLanguage,
+  resume?: ResumeProfile
 ): "id" | "en" => {
   if (preference === "id") return "id";
   if (preference === "en") return "en";
-  return detectedJobLang === "en" ? "en" : "id";
+  if (detectedJobLang) return detectedJobLang === "en" ? "en" : "id";
+  return detectResumeLanguage(resume);
 };
 
 const normalizeEndDate = (rawEnd: string | undefined, isCurrent: boolean, presentLabel: string): string => {
@@ -392,8 +412,8 @@ export const buildResumeDocument = (
 ): ResumeDocument => {
   const template: CvTemplate = options?.template ?? "compact_centered";
   const effectiveResume =
-    language === "en" && options?.translateContent !== false
-      ? options?.translatedOverride ?? translateProfileToEnglish(resume)
+    options?.translateContent !== false
+      ? options?.translatedOverride ?? translateProfileDeterministic(resume, language)
       : resume;
 
   const labels = DOC_LABELS[language];
