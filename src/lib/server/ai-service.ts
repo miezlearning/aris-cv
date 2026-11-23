@@ -1,6 +1,20 @@
-import type { ExtractedKeywords, JobTarget, MatchAnalytics, ResumeProfile, RewriteSuggestion } from "@/types/resume";
-import { buildAnalysis, extractKeywords } from "@/lib/analyzer";
-import { createId } from "@/lib/defaults";
+import type {
+  JobTarget,
+  MatchAnalytics,
+  NormalizedJobQualifications,
+  ResumeProfile,
+  RewriteSuggestion
+} from "@/types/resume";
+import {
+  analyzeMatch,
+  buildAnalysis,
+  generateRewriteSuggestions,
+  normalizeJobDescription,
+  toLegacyExtractedKeywords
+} from "@/lib/analyzer";
+import { ADMIN_RULES } from "@/lib/ats/taxonomy";
+import { translateProfileToEnglish } from "@/lib/ats/translator";
+import { unique } from "@/lib/text";
 
 export type AnalysisProvider = "gemini" | "openrouter" | "deterministic";
 
@@ -18,13 +32,10 @@ export type AiRewriteResult = {
   provider: AnalysisProvider;
 };
 
-/**
- * Call Google Gemini REST API with structured prompt and strict timeouts.
- */
 const callGemini = async (prompt: string, apiKey: string): Promise<string | null> => {
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -48,16 +59,13 @@ const callGemini = async (prompt: string, apiKey: string): Promise<string | null
   }
 };
 
-/**
- * Call OpenRouter REST API with structured JSON response.
- */
 const callOpenRouter = async (prompt: string, apiKey: string): Promise<string | null> => {
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
         "HTTP-Referer": "https://quicktailor.cv",
         "X-Title": "QuickTailor CV"
       },
@@ -79,32 +87,34 @@ const callOpenRouter = async (prompt: string, apiKey: string): Promise<string | 
   }
 };
 
+const isAdministrativeNoise = (term: string): boolean =>
+  ADMIN_RULES.some((rule) => rule.pattern.test(term));
+
 /**
- * Perform hybrid analysis of Job Target & Resume Profile.
- * Uses AI LLM if keys are available, otherwise falls back gracefully to deterministic engine.
+ * Analisis hybrid opsional.
+ * Secara bawaan seluruh proses berjalan deterministik; jika API key AI dikonfigurasi di server,
+ * AI hanya dipakai untuk memperkaya ekstraksi kualifikasi (tanpa membaca data pribadi) dan tidak pernah menimpa isolasi syarat administratif.
  */
 export const runJobAnalysis = async (resume: ResumeProfile, job: JobTarget): Promise<AiAnalysisResult> => {
   const geminiKey = process.env.GEMINI_API_KEY?.trim();
   const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
 
-  // If AI keys exist, attempt enhanced AI keyword extraction
   if (geminiKey || openRouterKey) {
-    const prompt = `Anda adalah sistem ATS Parser profesional untuk lowongan kerja Indonesia.
-Tugas: Ekstraksi kata kunci penting dari iklan lowongan kerja di bawah ini.
+    const prompt = `Anda adalah sistem ATS Parser profesional untuk lowongan kerja Indonesia dan internasional.
+Tugas: Ekstraksi kualifikasi dari iklan lowongan kerja di bawah ini ke dalam format JSON terstruktur.
 
 ATURAN KETAT:
-1. Hanya ambil kata kunci yang benar-benar tertulis atau disyaratkan dalam teks.
-2. Pisahkan ke dalam 3 kategori:
-   - requiredHardSkills: keahlian teknis, tools, software, bahasa pemrograman, sertifikasi.
-   - domainKeywords: bidang kerja, proses bisnis, metodologi, tanggung jawab industri.
-   - softSkills: keterampilan komunikasi, kepemimpinan, pemecahan masalah, adaptabilitas.
-3. Berikan output HANYA dalam JSON format persis seperti ini:
+1. Pisahkan syarat berkas/administrasi (KTP, KK, SKCK, NPWP, FC Ijazah, Transkrip, Pas Foto, usia, gender, tinggi badan, domisili, SIM, status pernikahan) ke dalam "administrative_requirements" dan JANGAN masukkan ke hard skills.
+2. "explicit_hard_skills_and_tools": hanya skill teknis, software, tools, metodologi, atau sertifikasi yang disebut langsung di teks.
+3. "soft_skills_and_work_traits": sikap/karakter kerja (komunikasi, kerja tim, teliti, cekatan).
+4. Jangan mengarang kualifikasi yang tidak tertulis.
+5. Kembalikan HANYA JSON valid:
 {
-  "requiredHardSkills": ["string"],
-  "domainKeywords": ["string"],
-  "softSkills": ["string"]
+  "explicit_hard_skills_and_tools": ["string"],
+  "soft_skills_and_work_traits": ["string"]
 }
 
+<job_title>${job.jobTitle || ""}</job_title>
 <job_description>
 ${job.rawDescription.slice(0, 10000)}
 </job_description>`;
@@ -124,38 +134,57 @@ ${job.rawDescription.slice(0, 10000)}
 
     if (aiRawJson) {
       try {
-        const parsed = JSON.parse(aiRawJson) as Partial<ExtractedKeywords>;
-        if (
-          Array.isArray(parsed.requiredHardSkills) &&
-          Array.isArray(parsed.domainKeywords) &&
-          Array.isArray(parsed.softSkills)
-        ) {
-          // Merge AI extraction with deterministic fallback dictionary for completeness
-          const localKeywords = extractKeywords(job.rawDescription);
-          const mergedJob: JobTarget = {
-            ...job,
-            extractedKeywords: {
-              requiredHardSkills: Array.from(new Set([...parsed.requiredHardSkills, ...localKeywords.requiredHardSkills])).slice(0, 30),
-              domainKeywords: Array.from(new Set([...parsed.domainKeywords, ...localKeywords.domainKeywords])).slice(0, 20),
-              softSkills: Array.from(new Set([...parsed.softSkills, ...localKeywords.softSkills])).slice(0, 15)
-            }
-          };
+        const parsed = JSON.parse(aiRawJson) as {
+          explicit_hard_skills_and_tools?: unknown;
+          soft_skills_and_work_traits?: unknown;
+        };
 
-          const analysis = buildAnalysis(resume, mergedJob);
-          return {
-            enrichedJob: mergedJob,
-            analytics: analysis.analytics,
-            suggestions: analysis.suggestions,
-            provider
-          };
-        }
+        const localNorm = normalizeJobDescription(job.rawDescription, job.jobTitle);
+        const aiHard = Array.isArray(parsed.explicit_hard_skills_and_tools)
+          ? parsed.explicit_hard_skills_and_tools
+              .filter((v): v is string => typeof v === "string" && v.trim().length > 1)
+              .filter((v) => !isAdministrativeNoise(v))
+          : [];
+        const aiSoft = Array.isArray(parsed.soft_skills_and_work_traits)
+          ? parsed.soft_skills_and_work_traits
+              .filter((v): v is string => typeof v === "string" && v.trim().length > 1)
+              .filter((v) => !isAdministrativeNoise(v))
+          : [];
+
+        const mergedNorm: NormalizedJobQualifications = {
+          ...localNorm,
+          explicit_hard_skills_and_tools: unique([
+            ...localNorm.explicit_hard_skills_and_tools,
+            ...aiHard
+          ]).slice(0, 30),
+          soft_skills_and_work_traits: unique([
+            ...localNorm.soft_skills_and_work_traits,
+            ...aiSoft
+          ]).slice(0, 14)
+        };
+
+        const mergedJob: JobTarget = {
+          ...job,
+          normalized: mergedNorm,
+          extractedKeywords: toLegacyExtractedKeywords(mergedNorm)
+        };
+
+        // Hitung match langsung memakai mergedJob tanpa menimpa ulang hasil AI
+        const analytics = analyzeMatch(resume, mergedJob);
+        const suggestions = generateRewriteSuggestions(resume, analytics);
+
+        return {
+          enrichedJob: mergedJob,
+          analytics,
+          suggestions,
+          provider
+        };
       } catch {
-        // Parsing failure falls through to deterministic fallback
+        // Lanjut ke engine deterministik lokal
       }
     }
   }
 
-  // Deterministic local engine fallback (reliable, instantaneous, zero cost)
   const localAnalysis = buildAnalysis(resume, job);
   return {
     enrichedJob: localAnalysis.enrichedJob,
@@ -165,9 +194,6 @@ ${job.rawDescription.slice(0, 10000)}
   };
 };
 
-/**
- * Rewrite single bullet point using Google XYZ / STAR format with strict anti-hallucination guardrails.
- */
 export const rewriteBulletPoint = async (
   bullet: string,
   role?: string,
@@ -178,22 +204,21 @@ export const rewriteBulletPoint = async (
   const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
 
   if (geminiKey || openRouterKey) {
-    const prompt = `Anda adalah pakar penulisan resume profesional dan spesialis format ATS Indonesia.
-Tugas: Rekonstruksi poin pengalaman kerja berikut dengan formula Google XYZ (Accomplished [X] measured by [Y] by doing [Z]) dan STAR method.
+    const prompt = `Anda adalah pakar penulisan resume profesional untuk fresh graduate maupun kandidat berpengalaman di Indonesia.
+Tugas: Susun ulang poin pengalaman/proyek/organisasi berikut memakai formula Google XYZ / STAR.
 
-PANDUAN KESELAMATAN & ANTI-HALUSINASI (SANGAT KETAT):
-1. DILARANG MENGARANG data, angka metrik fiktif, alat baru, atau klaim pencapaian yang tidak ada pada kalimat asli.
-2. Jika kalimat asli tidak memiliki angka metrik, jangan mengarang angka! Sebaliknya, berikan struktur tindakan yang kuat dan tambahkan catatan sopan kepada pengguna untuk melengkapi metriknya.
-3. Mulai dengan kata kerja aksi aktif Bahasa Indonesia yang kuat (contoh: Mengembangkan, Mengoptimalkan, Menyusun, dsb.).
-4. Hindari pembuka pasif seperti "Bertanggung jawab untuk" atau "Membantu dalam".
-5. Target peran: "${role || jobTitle || "Profesional"}".
-6. Kata kunci target yang relevan: ${(targetKeywords ?? []).join(", ") || "sesuai konteks"}.
+ATURAN ANTI-HALUSINASI (WAJIB):
+1. DILARANG mengarang angka, metrik, alat baru, atau pencapaian yang tidak tertulis di kalimat asli.
+2. Jika kalimat asli tidak punya angka, jangan mengarang angka. Berikan saran kalimat aktif yang kuat lalu tulis catatan agar pengguna melengkapi angka jika datanya memang ada.
+3. Mulai dengan kata kerja aksi aktif yang kuat dan hapus pembuka pasif seperti "Bertanggung jawab untuk" atau "Membantu dalam".
+4. Konteks peran: "${role || jobTitle || "Pelamar"}".
+5. Kata kunci relevan yang bisa dipertahankan jika memang sesuai: ${(targetKeywords ?? []).join(", ") || "sesuai kalimat asli"}.
 
-Berikan output HANYA dalam JSON format persis seperti ini:
+Berikan output HANYA JSON:
 {
   "suggestion": "Kalimat hasil restrukturisasi",
-  "note": "Catatan ringkas panduan atau instruksi untuk pengguna",
-  "keywordsUsed": ["kata kunci yang berhasil disematkan"]
+  "note": "Catatan singkat panduan",
+  "keywordsUsed": ["kata kunci yang ada di kalimat"]
 }
 
 <original_bullet>
@@ -225,19 +250,19 @@ ${bullet}
           };
         }
       } catch {
-        // Parsing failure falls through to deterministic
+        // Fallback deterministik lokal
       }
     }
   }
 
-  // Deterministic fallback using existing local engine
   const dummyResume: ResumeProfile = {
+    experienceLevel: "fresh_graduate",
     contact: { fullName: "", email: "", phone: "", location: "", linkedinUrl: "", portfolioUrl: "" },
     summary: "",
     workExperience: [
       {
         id: "temp",
-        company: "Temp",
+        company: "",
         role: role || "",
         startDate: "",
         endDate: "",
@@ -246,6 +271,9 @@ ${bullet}
       }
     ],
     education: [],
+    projects: [],
+    organizations: [],
+    certificationItems: [],
     skills: { hardSkills: [], softSkills: [], tools: [] }
   };
 
@@ -266,7 +294,7 @@ ${bullet}
   if (matched) {
     return {
       suggestion: matched.suggestion,
-      note: matched.note || "Disusun ulang dengan struktur kata kerja aktif.",
+      note: matched.note || "Disusun ulang dengan struktur kata kerja aksi.",
       keywordsUsed: matched.keywordsUsed,
       provider: "deterministic"
     };
@@ -278,4 +306,174 @@ ${bullet}
     keywordsUsed: [],
     provider: "deterministic"
   };
+};
+
+export type AiTranslateResult = {
+  profile: ResumeProfile;
+  provider: AnalysisProvider;
+};
+
+/**
+ * Menerjemahkan konten CV ke bahasa Inggris berstandar industri ATS (tanpa PII).
+ * Jika API key AI tersedia, memoles terjemahan JSON dengan aturan anti-halusinasi;
+ * jika tidak, langsung menggunakan translator deterministik lokal.
+ */
+export const translateResumeWithAi = async (resume: ResumeProfile): Promise<AiTranslateResult> => {
+  const baseline = translateProfileToEnglish(resume);
+  const geminiKey = process.env.GEMINI_API_KEY?.trim();
+  const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
+
+  if (geminiKey || openRouterKey) {
+    const payloadToTranslate = {
+      headline: resume.contact?.headline ?? "",
+      summary: resume.summary ?? "",
+      workExperience: (resume.workExperience ?? []).map((item) => ({
+        id: item.id,
+        role: item.role,
+        company: item.company,
+        startDate: item.startDate,
+        endDate: item.endDate,
+        bulletPoints: item.bulletPoints
+      })),
+      education: (resume.education ?? []).map((item) => ({
+        id: item.id,
+        degree: item.degree,
+        fieldOfStudy: item.fieldOfStudy,
+        graduationDate: item.graduationDate,
+        thesisTitle: item.thesisTitle ?? "",
+        relevantCoursework: item.relevantCoursework ?? [],
+        achievements: item.achievements ?? ""
+      })),
+      projects: (resume.projects ?? []).map((item) => ({
+        id: item.id,
+        name: item.name,
+        role: item.role,
+        context: item.context,
+        period: item.period,
+        technologies: item.technologies,
+        bulletPoints: item.bulletPoints
+      })),
+      organizations: (resume.organizations ?? []).map((item) => ({
+        id: item.id,
+        organization: item.organization,
+        role: item.role,
+        period: item.period,
+        bulletPoints: item.bulletPoints
+      })),
+      certificationItems: (resume.certificationItems ?? []).map((item) => ({
+        id: item.id,
+        name: item.name,
+        year: item.year
+      })),
+      skills: resume.skills
+    };
+
+    const prompt = `You are an expert ATS Resume Writer & Indonesian-to-English Career Translator.
+Task: Translate all Indonesian resume content below into crisp, natural, ATS-industry standard English.
+
+STRICT GUARDRAILS:
+1. NEVER invent or alter numbers, percentages, metrics, dates, company/university proper names, or skills.
+2. Keep exact array lengths and "id" values matching the input JSON.
+3. Start bullets with strong past/present ATS action verbs (Developed, Built, Managed, Coordinated, Configured, Analyzed, etc.).
+4. Use standard English academic/industry terms (e.g. Informatics Engineering, Undergraduate Thesis Project, Bachelor's Degree, Present).
+5. Return ONLY valid JSON with the exact same keys as input:
+${JSON.stringify(payloadToTranslate)}`;
+
+    let aiRawJson: string | null = null;
+    let provider: AnalysisProvider = "deterministic";
+
+    if (geminiKey) {
+      aiRawJson = await callGemini(prompt, geminiKey);
+      if (aiRawJson) provider = "gemini";
+    }
+
+    if (!aiRawJson && openRouterKey) {
+      aiRawJson = await callOpenRouter(prompt, openRouterKey);
+      if (aiRawJson) provider = "openrouter";
+    }
+
+    if (aiRawJson) {
+      try {
+        const parsed = JSON.parse(aiRawJson);
+        const mergeById = <T extends { id: string }>(orig: T[], incoming: unknown, apply: (o: T, inc: Record<string, unknown>) => T): T[] => {
+          if (!Array.isArray(incoming)) return orig;
+          return orig.map((o, idx) => {
+            const match = incoming.find((x) => x && typeof x === "object" && (x as { id?: string }).id === o.id) ?? incoming[idx];
+            return match && typeof match === "object" ? apply(o, match as Record<string, unknown>) : o;
+          });
+        };
+
+        const merged: ResumeProfile = {
+          ...baseline,
+          contact: {
+            ...resume.contact,
+            headline: typeof parsed.headline === "string" ? parsed.headline.trim() : baseline.contact.headline
+          },
+          summary: typeof parsed.summary === "string" ? parsed.summary.trim() : baseline.summary,
+          workExperience: mergeById(baseline.workExperience, parsed.workExperience, (o, inc) => ({
+            ...o,
+            role: typeof inc.role === "string" ? inc.role : o.role,
+            company: typeof inc.company === "string" ? inc.company : o.company,
+            startDate: typeof inc.startDate === "string" ? inc.startDate : o.startDate,
+            endDate: typeof inc.endDate === "string" ? inc.endDate : o.endDate,
+            bulletPoints: Array.isArray(inc.bulletPoints)
+              ? inc.bulletPoints.map((b, i) => (typeof b === "string" ? b : o.bulletPoints[i] ?? ""))
+              : o.bulletPoints
+          })),
+          education: mergeById(baseline.education, parsed.education, (o, inc) => ({
+            ...o,
+            degree: typeof inc.degree === "string" ? inc.degree : o.degree,
+            fieldOfStudy: typeof inc.fieldOfStudy === "string" ? inc.fieldOfStudy : o.fieldOfStudy,
+            graduationDate: typeof inc.graduationDate === "string" ? inc.graduationDate : o.graduationDate,
+            thesisTitle: typeof inc.thesisTitle === "string" ? inc.thesisTitle : o.thesisTitle,
+            relevantCoursework: Array.isArray(inc.relevantCoursework)
+              ? inc.relevantCoursework.filter((c): c is string => typeof c === "string")
+              : o.relevantCoursework,
+            achievements: typeof inc.achievements === "string" ? inc.achievements : o.achievements
+          })),
+          projects: mergeById(baseline.projects, parsed.projects, (o, inc) => ({
+            ...o,
+            name: typeof inc.name === "string" ? inc.name : o.name,
+            role: typeof inc.role === "string" ? inc.role : o.role,
+            context: typeof inc.context === "string" ? inc.context : o.context,
+            period: typeof inc.period === "string" ? inc.period : o.period,
+            technologies: Array.isArray(inc.technologies)
+              ? inc.technologies.filter((t): t is string => typeof t === "string")
+              : o.technologies,
+            bulletPoints: Array.isArray(inc.bulletPoints)
+              ? inc.bulletPoints.map((b, i) => (typeof b === "string" ? b : o.bulletPoints[i] ?? ""))
+              : o.bulletPoints
+          })),
+          organizations: mergeById(baseline.organizations, parsed.organizations, (o, inc) => ({
+            ...o,
+            organization: typeof inc.organization === "string" ? inc.organization : o.organization,
+            role: typeof inc.role === "string" ? inc.role : o.role,
+            period: typeof inc.period === "string" ? inc.period : o.period,
+            bulletPoints: Array.isArray(inc.bulletPoints)
+              ? inc.bulletPoints.map((b, i) => (typeof b === "string" ? b : o.bulletPoints[i] ?? ""))
+              : o.bulletPoints
+          })),
+          certificationItems: mergeById(baseline.certificationItems, parsed.certificationItems, (o, inc) => ({
+            ...o,
+            name: typeof inc.name === "string" ? inc.name : o.name,
+            year: typeof inc.year === "string" ? inc.year : o.year
+          })),
+          skills:
+            parsed.skills && typeof parsed.skills === "object"
+              ? {
+                  hardSkills: Array.isArray(parsed.skills.hardSkills) ? parsed.skills.hardSkills : baseline.skills.hardSkills,
+                  tools: Array.isArray(parsed.skills.tools) ? parsed.skills.tools : baseline.skills.tools,
+                  softSkills: Array.isArray(parsed.skills.softSkills) ? parsed.skills.softSkills : baseline.skills.softSkills
+                }
+              : baseline.skills
+        };
+
+        return { profile: merged, provider };
+      } catch {
+        // Fall through to deterministic translator
+      }
+    }
+  }
+
+  return { profile: baseline, provider: "deterministic" };
 };
