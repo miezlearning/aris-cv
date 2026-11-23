@@ -9,7 +9,7 @@ import type {
 import { detectLanguage } from "@/lib/ats/normalizer";
 import { containsTermBoundary, normalizeForMatch } from "@/lib/ats/synonyms";
 
-const INDONESIAN_MARKERS = [
+export const INDONESIAN_MARKERS = [
   "yang",
   "dengan",
   "untuk",
@@ -19,9 +19,25 @@ const INDONESIAN_MARKERS = [
   "dari",
   "dalam",
   "serta",
+  "dan",
+  "atau",
+  "secara",
+  "hingga",
+  "sampai",
+  "sebagai",
+  "sebuah",
+  "beberapa",
+  "seluruh",
+  "setiap",
+  "harian",
+  "mingguan",
+  "bulanan",
+  "tahunan",
   "lulusan",
   "proyek",
   "pengalaman",
+  "pekerjaan",
+  "kegiatan",
   "jaringan",
   "magang",
   "mengembangkan",
@@ -31,9 +47,31 @@ const INDONESIAN_MARKERS = [
   "menyusun",
   "mengolah",
   "mengkoordinasikan",
+  "mengintegrasikan",
+  "mengoptimalkan",
+  "mengimplementasikan",
+  "mengonfigurasi",
+  "menganalisis",
+  "meningkatkan",
+  "memelihara",
+  "memastikan",
+  "melaksanakan",
+  "menjalankan",
+  "menangani",
+  "membantu",
+  "membuat",
+  "mengerjakan",
+  "menyelesaikan",
+  "melayani",
+  "merekap",
+  "menginput",
+  "mengajar",
+  "membimbing",
+  "mendukung",
+  "memimpin",
+  "menulis",
   "bekerja",
   "bersama",
-  "sebagai",
   "perusahaan",
   "pelatihan",
   "himpunan",
@@ -44,6 +82,7 @@ const INDONESIAN_MARKERS = [
   "keuangan",
   "gudang",
   "sekarang",
+  "saat ini",
   "studi",
   "skripsi",
   "tugas",
@@ -67,16 +106,40 @@ const INDONESIAN_MARKERS = [
   "visualisasi",
   "analisis",
   "alat",
-  "keahlian"
+  "keahlian",
+  "pelanggan",
+  "karyawan",
+  "penjualan",
+  "pembelian",
+  "inventaris",
+  "arsip",
+  "dokumen",
+  "anggaran",
+  "transaksi",
+  "layanan",
+  "pengguna",
+  "keamanan",
+  "kecepatan",
+  "kualitas",
+  "berbasis",
+  "terhadap",
+  "melalui",
+  "tanpa",
+  "agar",
+  "sehingga"
 ];
 
-const ENGLISH_MARKERS = [
+export const ENGLISH_MARKERS = [
   "the",
   "and",
   "with",
   "for",
   "using",
   "that",
+  "across",
+  "through",
+  "during",
+  "including",
   "built",
   "designed",
   "developed",
@@ -91,9 +154,24 @@ const ENGLISH_MARKERS = [
   "assisted",
   "implemented",
   "led",
+  "analyzed",
+  "improved",
+  "reduced",
+  "maintained",
+  "configured",
+  "prepared",
+  "authored",
+  "organized",
+  "processed",
+  "created",
+  "executed",
+  "resolved",
+  "supported",
+  "supervised",
   "practicing",
   "graduate",
   "experience",
+  "experienced",
   "developer",
   "engineer",
   "intern",
@@ -102,6 +180,12 @@ const ENGLISH_MARKERS = [
   "coordinator",
   "staff",
   "community",
+  "manager",
+  "analyst",
+  "designer",
+  "responsible",
+  "proficient",
+  "skilled",
   "bachelor",
   "master",
   "diploma",
@@ -113,14 +197,28 @@ const ENGLISH_MARKERS = [
   "university",
   "present",
   "current",
+  "ongoing",
   "programming",
   "frameworks",
   "libraries",
-  "database",
   "other",
   "open to",
   "hands on",
-  "full time"
+  "full time",
+  "part time",
+  "monthly",
+  "weekly",
+  "daily",
+  "annual",
+  "company",
+  "customers",
+  "employees",
+  "students",
+  "members",
+  "workflow",
+  "workflows",
+  "accuracy",
+  "performance"
 ];
 
 const hasIndonesianMarkers = (text: string): boolean => {
@@ -139,6 +237,7 @@ const shouldSkipTranslation = (text: string): boolean => {
   const clean = text.trim();
   if (!clean) return true;
   if (hasIndonesianMarkers(clean)) return false;
+  if (hasEnglishMarkers(clean)) return true;
   return detectLanguage(clean) === "en";
 };
 
@@ -148,19 +247,6 @@ const shouldSkipIndonesianTranslation = (text: string): boolean => {
   if (hasEnglishMarkers(clean)) return false;
   if (hasIndonesianMarkers(clean)) return true;
   return detectLanguage(clean) === "id";
-};
-
-const replaceBoundaryPhrases = (text: string, pairs: Array<[string, string]>): string => {
-  let out = text;
-  const sorted = [...pairs].sort((a, b) => b[0].length - a[0].length);
-
-  for (const [src, target] of sorted) {
-    const escaped = src.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
-    const regex = new RegExp(`(?<![a-z0-9+#])${escaped}(?![a-z0-9+#])`, "gi");
-    out = out.replace(regex, target);
-  }
-
-  return out;
 };
 
 const PERIOD_PAIRS: Array<[string, string]> = [
@@ -181,13 +267,9 @@ const PERIOD_PAIRS: Array<[string, string]> = [
   ["desember", "Dec"],
   ["des", "Dec"],
   ["sekarang", "Present"],
-  ["saat ini", "Present"]
+  ["saat ini", "Present"],
+  ["masih berlangsung", "Present"]
 ];
-
-export const translatePeriodToEnglish = (period: string): string => {
-  if (!period.trim()) return period;
-  return replaceBoundaryPhrases(period, PERIOD_PAIRS).replace(/\s*[-\u2013\u2014]\s*/g, " - ");
-};
 
 const PERIOD_TO_ID_PAIRS: Array<[string, string]> = [
   ["january", "Januari"],
@@ -210,11 +292,6 @@ const PERIOD_TO_ID_PAIRS: Array<[string, string]> = [
   ["ongoing", "Sekarang"],
   ["now", "Sekarang"]
 ];
-
-export const translatePeriodToIndonesian = (period: string): string => {
-  if (!period.trim()) return period;
-  return replaceBoundaryPhrases(period, PERIOD_TO_ID_PAIRS).replace(/\s*[-\u2013\u2014]\s*/g, " - ");
-};
 
 const DEGREE_MAP: Array<[string, string]> = [
   ["sarjana komputer (s.kom)", "Bachelor of Computer Science (S.Kom)"],
@@ -281,6 +358,7 @@ const COURSEWORK_MAP: Array<[string, string]> = [
   ["manajemen operasional", "Operations Management"],
   ["manajemen pemasaran", "Marketing Management"],
   ["manajemen keuangan", "Financial Management"],
+  ["pengantar sistem basis data", "Introduction to Database Systems"],
   ["kecerdasan buatan", "Artificial Intelligence"],
   ["pembelajaran mesin", "Machine Learning"],
   ["keamanan informasi", "Information Security"],
@@ -297,8 +375,22 @@ const COURSEWORK_MAP: Array<[string, string]> = [
   ["perpajakan", "Taxation"]
 ];
 
+const ID_SKILL_CATEGORY_TO_EN: Array<[string, string]> = [
+  ["keahlian teknis & pemrograman", "Technical Skills & Programming"],
+  ["bahasa pemrograman", "Programming Languages"],
+  ["alat & perangkat lunak", "Tools & Software"],
+  ["alat & framework", "Tools & Frameworks"],
+  ["framework & pustaka", "Frameworks & Libraries"],
+  ["keahlian teknis", "Technical Skills"],
+  ["kompetensi pendukung", "Soft Skills"],
+  ["kompetensi lainnya", "Additional Competencies"],
+  ["basis data", "Databases"],
+  ["pemrograman", "Programming"],
+  ["lainnya", "Other"]
+];
+
 const GENERAL_PROSE_PAIRS: Array<[string, string]> = [
-  // Full sample & common Indonesian CV clauses (longest-first for natural grammar)
+  // Sample & high-frequency full clauses (longest-first)
   [
     "mengembangkan 6 modul antarmuka pendaftaran pasien menggunakan react.js dan typescript yang memangkas waktu input data petugas hingga",
     "Developed 6 patient registration UI modules using React.js and TypeScript, reducing staff data entry time by up to"
@@ -327,12 +419,6 @@ const GENERAL_PROSE_PAIRS: Array<[string, string]> = [
     "menyusun jadwal mentor sebaya dan materi modul belajar bersama 6 pengurus divisi",
     "Prepared peer mentoring schedules and study module materials alongside 6 division committee members"
   ],
-  [
-    "lulusan s1 teknik informatika",
-    "Bachelor of Informatics Engineering graduate"
-  ],
-  ["lulusan s1", "Bachelor's graduate in"],
-  ["ipk", "GPA"],
   [
     "dengan pengalaman magang msib sebagai junior web developer dan asisten laboratorium jaringan",
     "with MSIB internship experience as a Junior Web Developer and networking laboratory assistant"
@@ -390,7 +476,12 @@ const GENERAL_PROSE_PAIRS: Array<[string, string]> = [
     "Organized monthly programming workshops and authored code contribution guidelines for new contributors"
   ],
 
-  // Roles, titles, contexts, orgs, thesis & awards
+  // Common Indonesian CV multi-word expressions
+  ["lulusan s1 teknik informatika", "Bachelor of Informatics Engineering graduate"],
+  ["lulusan teknik informatika", "Informatics Engineering graduate"],
+  ["lulusan baru", "Fresh Graduate"],
+  ["lulusan s1", "Bachelor's graduate in"],
+  ["ipk", "GPA"],
   ["sistem informasi antrean dan rekam medis klinik berbasis web", "Web-Based Clinic Queue and Medical Records Information System"],
   ["aplikasi inventaris dan peminjaman alat laboratorium", "Laboratory Equipment Inventory and Lending Application"],
   ["simulasi jaringan lokal dan monitoring tiket helpdesk", "Local Area Network Simulation and Helpdesk Ticket Monitoring"],
@@ -414,77 +505,352 @@ const GENERAL_PROSE_PAIRS: Array<[string, string]> = [
   ["admin gudang", "Warehouse Administrator"],
   ["staf administrasi", "Administrative Staff"],
   ["staf keuangan", "Finance Staff"],
-  ["lulusan teknik informatika", "Informatics Engineering Graduate"],
+  ["staf pengembangan sumber daya manusia", "Human Resource Development Staff"],
   ["himpunan mahasiswa", "Student Association"],
   ["badan eksekutif mahasiswa", "Student Executive Board"],
   ["studi kasus", "Case Study"],
   ["lulus dengan pujian", "Graduated with Honors"],
   ["penerima beasiswa", "Scholarship Recipient"],
   ["rancang bangun", "Design and Implementation of"],
-  ["berbasis web", "Web-Based"],
-  ["berbasis mobile", "Mobile-Based"],
-  ["berbasis android", "Android-Based"],
-
-  // Action verbs & reusable Indonesian resume vocabulary
+  ["terbiasa menggunakan", "Experienced with"],
+  ["terbiasa membangun", "Experienced in building"],
+  ["terbiasa mengelola", "Experienced in managing"],
+  ["pengalaman magang", "internship experience"],
+  ["pengalaman kerja", "work experience"],
+  ["pengalaman selama", "experience for"],
+  ["terbuka untuk", "Open to"],
+  ["fokus pada", "Focused on"],
   ["bertanggung jawab untuk", "Responsible for"],
   ["bertanggung jawab atas", "Responsible for"],
+  ["bertanggung jawab dalam", "Responsible for"],
   ["bekerja sama erat dengan", "Collaborated closely with"],
   ["bekerja sama dengan", "Collaborated with"],
-  ["mengkoordinasikan", "Coordinated"],
-  ["mengintegrasikan", "Integrated"],
-  ["mengoptimalkan", "Optimized"],
-  ["mengimplementasikan", "Implemented"],
-  ["menyelenggarakan", "Organized"],
-  ["mengembangkan", "Developed"],
-  ["mengonfigurasi", "Configured"],
-  ["mempresentasikan", "Presented"],
-  ["memfasilitasi", "Facilitated"],
-  ["menggantikan", "replaced"],
-  ["menganalisis", "Analyzed"],
-  ["meningkatkan", "Improved"],
-  ["memelihara", "Maintained"],
-  ["memastikan", "Ensured"],
-  ["melaksanakan", "Executed"],
-  ["menjalankan", "Executed"],
-  ["menangani", "Handled"],
-  ["membangun", "Built"],
-  ["merancang", "Designed"],
-  ["mengelola", "Managed"],
-  ["mengurangi", "Reduced"],
-  ["menurunkan", "Reduced"],
-  ["memangkas", "Cut"],
-  ["memeriksa", "Audited"],
-  ["mendukung", "Supported"],
-  ["memimpin", "Led"],
-  ["menyusun", "Prepared"],
-  ["mengolah", "Processed"],
-  ["menulis", "Authored"],
-  ["membuat", "Built"],
-  ["menggunakan", "using"],
-  ["memakai", "using"],
-  ["pencatatan stok", "inventory tracking"],
-  ["stock opname", "stock opname"],
-  ["laporan keuangan", "financial reports"],
-  ["laporan harian", "daily reports"],
-  ["laporan bulanan", "monthly reports"],
+  ["berkolaborasi dengan", "Collaborated with"],
+  ["tim lintas fungsi", "cross-functional team"],
+  ["aplikasi absensi karyawan", "employee attendance application"],
+  ["sistem informasi manajemen", "management information system"],
+  ["sistem informasi", "information system"],
+  ["aplikasi web", "web application"],
+  ["aplikasi mobile", "mobile application"],
+  ["antarmuka pengguna", "user interface"],
+  ["antarmuka web", "web interface"],
+  ["pengalaman pengguna", "user experience"],
+  ["halaman utama", "main page"],
+  ["halaman admin", "admin page"],
+  ["panel admin", "admin panel"],
+  ["basis data", "database"],
   ["perangkat keras", "hardware"],
   ["perangkat lunak", "software"],
   ["jaringan lokal", "local network"],
-  ["basis data", "database"],
+  ["jaringan komputer", "computer networks"],
+  ["media sosial", "social media"],
+  ["layanan pelanggan", "customer service"],
   ["rumah sakit", "hospital"],
+  ["pusat data", "data center"],
+  ["ruang lingkup", "scope"],
+  ["alur kerja", "workflow"],
+  ["waktu nyata", "real-time"],
+  ["tanpa kertas", "paperless"],
+  ["pencatatan stok", "inventory tracking"],
+  ["stock opname", "stock opname"],
+  ["laporan keuangan", "financial reports"],
+  ["laporan penjualan", "sales reports"],
+  ["laporan harian", "daily reports"],
+  ["laporan mingguan", "weekly reports"],
+  ["laporan bulanan", "monthly reports"],
   ["setiap minggu", "weekly"],
   ["setiap bulan", "monthly"],
   ["setiap hari", "daily"],
+  ["setiap semester", "each semester"],
   ["di gudang", "in the warehouse"],
   ["anggota tim", "team members"],
-  ["untuk", "for"],
-  ["dengan", "with"],
-  ["bersama", "with"],
-  ["serta", "and"],
-  ["dan", "and"],
-  ["atau", "or"],
-  ["lulusan", "Graduate of"]
+  ["secara akurat", "accurately"],
+  ["secara efisien", "efficiently"],
+  ["secara real-time", "in real time"],
+  ["secara berkala", "periodically"],
+  ["secara langsung", "directly"],
+  ["secara otomatis", "automatically"],
+  ["secara manual", "manually"],
+  ["lebih dari", "over"],
+  ["kurang dari", "under"],
+  ["hingga saat ini", "to date"],
+  ["kerja sama tim", "team collaboration"],
+  ["kerja sama", "collaboration"],
+  ["kerja tim", "teamwork"],
+  ["tujuan utama", "primary objective"],
+  ["mata kuliah", "academic course"],
+  ["tugas akhir", "final thesis project"],
+  ["studi independen", "independent study"],
+  ["berbasis web", "Web-Based"],
+  ["berbasis mobile", "Mobile-Based"],
+  ["berbasis android", "Android-Based"],
+  ["berbasis cloud", "Cloud-Based"],
+  ["performa tinggi", "high performance"],
+  ["waktu tunggu", "waiting time"],
+  ["kesalahan input", "data entry errors"],
+  ["tingkat kepuasan", "satisfaction rate"],
+  ["umpan balik", "feedback"],
+  ["pembaruan sistem", "system updates"],
+  ["perbaikan bug", "bug fixes"]
 ];
+
+const ID_WORD_TO_EN: Record<string, string> = {
+  // Action verbs & inflected verbs
+  mengembangkan: "developed",
+  membangun: "built",
+  merancang: "designed",
+  mengelola: "managed",
+  menyusun: "prepared",
+  mengolah: "processed",
+  mengkoordinasikan: "coordinated",
+  mengoordinasikan: "coordinated",
+  mengintegrasikan: "integrated",
+  mengoptimalkan: "optimized",
+  mengimplementasikan: "implemented",
+  menyelenggarakan: "organized",
+  mengonfigurasi: "configured",
+  mempresentasikan: "presented",
+  memfasilitasi: "facilitated",
+  menggantikan: "replaced",
+  menganalisis: "analyzed",
+  meningkatkan: "improved",
+  memelihara: "maintained",
+  memastikan: "ensured",
+  melaksanakan: "executed",
+  menjalankan: "executed",
+  menangani: "handled",
+  mengurangi: "reduced",
+  menurunkan: "reduced",
+  memangkas: "cut",
+  memeriksa: "audited",
+  mendukung: "supported",
+  memimpin: "led",
+  menulis: "authored",
+  membuat: "built",
+  mengerjakan: "delivered",
+  menyelesaikan: "completed",
+  membantu: "assisted",
+  melayani: "served",
+  merekap: "compiled",
+  menginput: "entered",
+  memasukkan: "entered",
+  mengumpulkan: "collected",
+  menghasilkan: "produced",
+  mencapai: "achieved",
+  mempercepat: "accelerated",
+  mempermudah: "streamlined",
+  menyederhanakan: "streamlined",
+  memantau: "monitored",
+  melacak: "tracked",
+  menguji: "tested",
+  melatih: "trained",
+  membimbing: "guided",
+  mengajar: "taught",
+  berkontribusi: "contributed",
+  berpartisipasi: "participated",
+  berkoordinasi: "coordinated",
+  bekerja: "worked",
+  bertugas: "served",
+  mempublikasikan: "published",
+  merilis: "released",
+  mengirim: "sent",
+  menerapkan: "applied",
+  mengotomatiskan: "automated",
+  memperbaiki: "resolved",
+
+  // Common CV nouns
+  aplikasi: "application",
+  sistem: "system",
+  situs: "website",
+  fitur: "feature",
+  modul: "module",
+  halaman: "page",
+  formulir: "form",
+  laporan: "report",
+  rekap: "summary",
+  pencatatan: "recording",
+  data: "data",
+  informasi: "information",
+  dokumen: "document",
+  arsip: "archive",
+  kearsipan: "archiving",
+  perpustakaan: "library",
+  inventaris: "inventory",
+  stok: "stock",
+  barang: "goods",
+  gudang: "warehouse",
+  penjualan: "sales",
+  pembelian: "purchasing",
+  keuangan: "finance",
+  anggaran: "budget",
+  transaksi: "transactions",
+  pelanggan: "customers",
+  klien: "clients",
+  pengguna: "users",
+  karyawan: "employees",
+  pegawai: "staff",
+  petugas: "officers",
+  peserta: "participants",
+  anggota: "members",
+  mahasiswa: "students",
+  siswa: "students",
+  dosen: "lecturers",
+  tim: "team",
+  divisi: "division",
+  departemen: "department",
+  perusahaan: "company",
+  instansi: "organization",
+  kantor: "office",
+  industri: "industry",
+  kebutuhan: "requirements",
+  spesifikasi: "specifications",
+  jadwal: "schedule",
+  kegiatan: "activities",
+  acara: "events",
+  seminar: "seminar",
+  lokakarya: "workshop",
+  pelatihan: "training",
+  proyek: "project",
+  pengalaman: "experience",
+  magang: "internship",
+  pekerjaan: "work",
+  keahlian: "skills",
+  kemampuan: "capabilities",
+  prestasi: "achievements",
+  sertifikat: "certificate",
+  sertifikasi: "certification",
+  penghargaan: "awards",
+  lomba: "competition",
+  kompetisi: "competition",
+  juara: "winner",
+  finalis: "finalist",
+  panitia: "committee",
+  ketua: "chairperson",
+  koordinator: "coordinator",
+  sekretaris: "secretary",
+  bendahara: "treasurer",
+  staf: "staff",
+  asisten: "assistant",
+  teknisi: "technician",
+  pengembang: "developer",
+  analis: "analyst",
+  desainer: "designer",
+  absensi: "attendance",
+  antrean: "queue",
+  klinik: "clinic",
+  pasien: "patients",
+  alat: "tools",
+  perangkat: "devices",
+  jaringan: "network",
+  koneksi: "connectivity",
+  keamanan: "security",
+  keandalan: "reliability",
+  kualitas: "quality",
+  performa: "performance",
+  kecepatan: "speed",
+  akurasi: "accuracy",
+  efisiensi: "efficiency",
+  produktivitas: "productivity",
+  masalah: "issues",
+  kendala: "issues",
+  solusi: "solutions",
+  hasil: "results",
+  target: "targets",
+  waktu: "time",
+  tahun: "years",
+  bulan: "months",
+  minggu: "weeks",
+  hari: "days",
+  menit: "minutes",
+  detik: "seconds",
+  kelas: "class",
+  semester: "semester",
+  angkatan: "cohort",
+  skripsi: "thesis",
+  kuliah: "university course",
+  studi: "study",
+  jurusan: "major",
+  fakultas: "faculty",
+  kampus: "campus",
+  sekolah: "school",
+  lulusan: "graduate",
+
+  // Adjectives, adverbs, prepositions, connectors
+  menggunakan: "using",
+  memakai: "using",
+  dengan: "with",
+  untuk: "for",
+  bagi: "for",
+  pada: "in",
+  di: "at",
+  ke: "to",
+  dari: "from",
+  dalam: "in",
+  antara: "between",
+  melalui: "through",
+  terhadap: "for",
+  oleh: "by",
+  bersama: "with",
+  serta: "and",
+  dan: "and",
+  atau: "or",
+  yang: "that",
+  secara: "",
+  hingga: "up to",
+  sampai: "until",
+  sebagai: "as",
+  sebuah: "a",
+  beberapa: "several",
+  berbagai: "various",
+  seluruh: "all",
+  semua: "all",
+  setiap: "every",
+  baru: "new",
+  lama: "legacy",
+  tinggi: "high",
+  rendah: "low",
+  besar: "large",
+  kecil: "small",
+  cepat: "fast",
+  tepat: "accurate",
+  akurat: "accurate",
+  efisien: "efficient",
+  efektif: "effective",
+  otomatis: "automated",
+  terintegrasi: "integrated",
+  terpusat: "centralized",
+  mandiri: "independent",
+  aktif: "active",
+  profesional: "professional",
+  kreatif: "creative",
+  inovatif: "innovative",
+  teliti: "detail-oriented",
+  komunikatif: "communicative",
+  terstruktur: "structured",
+  sederhana: "simple",
+  lengkap: "comprehensive",
+  harian: "daily",
+  mingguan: "weekly",
+  bulanan: "monthly",
+  tahunan: "annual",
+  lokal: "local",
+  nasional: "national",
+  internal: "internal",
+  eksternal: "external",
+  resmi: "official",
+  fisik: "physical",
+  digital: "digital",
+  daring: "online",
+  luring: "offline",
+  sehingga: "so that",
+  agar: "to",
+  supaya: "to",
+  karena: "because",
+  juga: "also",
+  lebih: "more",
+  sekitar: "approximately",
+  lebihnya: "over"
+};
 
 const SKILL_PAIRS: Array<[string, string]> = [
   ["troubleshooting hardware & printer", "Hardware & Printer Troubleshooting"],
@@ -542,6 +908,7 @@ const CERT_PAIRS: Array<[string, string]> = [
   ["belajar dasar visualisasi data", "Data Visualization Fundamentals"],
   ["belajar fundamental pemrosesan data", "Fundamental Data Processing"],
   ["belajar dasar ai", "Artificial Intelligence Fundamentals"],
+  ["kompetensi", "Competency"],
   ["pelatihan", "Training"],
   ["sertifikasi", "Certification"]
 ];
@@ -624,12 +991,15 @@ const EN_COURSEWORK_TO_ID: Array<[string, string]> = [
 ];
 
 const EN_SKILL_CATEGORY_TO_ID: Array<[string, string]> = [
+  ["technical skills & programming", "Keahlian Teknis & Pemrograman"],
   ["frameworks & libraries", "Framework & Pustaka"],
   ["machine learning & data", "Machine Learning & Data"],
   ["tools & software", "Alat & Perangkat Lunak"],
+  ["tools & frameworks", "Alat & Framework"],
   ["technical skills", "Keahlian Teknis"],
   ["programming languages", "Bahasa Pemrograman"],
   ["programming", "Pemrograman"],
+  ["databases", "Basis Data"],
   ["database", "Basis Data"],
   ["soft skills", "Kompetensi Pendukung"],
   ["other", "Lainnya"]
@@ -744,34 +1114,11 @@ const EN_PROSE_TO_ID: Array<[string, string]> = [
   ["designed the community rules and maintained member engagement", "merancang aturan komunitas dan menjaga keterlibatan anggota"],
   ["served additionally as", "bertugas tambahan sebagai"],
 
-  // Action verbs & reusable English CV vocabulary
-  ["collaborated closely with", "berkolaborasi erat dengan"],
-  ["collaborated with", "berkolaborasi dengan"],
-  ["coordinated", "mengkoordinasikan"],
-  ["engineered", "merancang"],
-  ["implemented", "mengimplementasikan"],
-  ["integrated", "mengintegrasikan"],
-  ["optimized", "mengoptimalkan"],
-  ["organized", "menyelenggarakan"],
-  ["developed", "mengembangkan"],
-  ["configured", "mengonfigurasi"],
-  ["presented", "mempresentasikan"],
-  ["facilitated", "memfasilitasi"],
-  ["maintained", "memelihara"],
-  ["produced", "memproduksi"],
-  ["delivered", "menyampaikan"],
-  ["analyzed", "menganalisis"],
-  ["improved", "meningkatkan"],
-  ["reduced", "mengurangi"],
-  ["managed", "mengelola"],
-  ["designed", "merancang"],
-  ["assisted", "membantu"],
-  ["authored", "menulis"],
-  ["guided", "membimbing"],
-  ["built", "membangun"],
-  ["led", "memimpin"],
-  ["in real time", "secara real-time"],
-  ["real-time", "waktu nyata"],
+  // Common English multi-word CV phrases
+  ["responsible for", "Bertanggung jawab untuk"],
+  ["worked closely with", "Bekerja sama erat dengan"],
+  ["collaborated closely with", "Berkolaborasi erat dengan"],
+  ["collaborated with", "Berkolaborasi dengan"],
   ["cross-functional team", "tim lintas fungsi"],
   ["custom data input website", "situs web input data kustom"],
   ["simple calculator mobile app", "aplikasi mobile kalkulator sederhana"],
@@ -783,14 +1130,300 @@ const EN_PROSE_TO_ID: Array<[string, string]> = [
   ["capstone project presentation", "presentasi proyek akhir"],
   ["promotional videography project", "proyek videografi promosi"],
   ["centralized lms platform", "platform LMS terpusat"],
-  ["members", "anggota"],
-  ["using", "menggunakan"],
-  ["covering", "yang mencakup"],
-  ["from", "sejak"],
-  ["with", "dengan"],
-  ["for", "untuk"],
-  ["and", "dan"]
+  ["web application", "aplikasi web"],
+  ["mobile application", "aplikasi mobile"],
+  ["user interface", "antarmuka pengguna"],
+  ["user experience", "pengalaman pengguna"],
+  ["in real time", "secara real-time"],
+  ["real-time", "waktu nyata"],
+  ["every day", "setiap hari"],
+  ["every week", "setiap minggu"],
+  ["every month", "setiap bulan"],
+  ["up to", "hingga"]
 ];
+
+const EN_WORD_TO_ID: Record<string, string> = {
+  // Verbs
+  coordinated: "mengkoordinasikan",
+  engineered: "merancang",
+  implemented: "mengimplementasikan",
+  integrated: "mengintegrasikan",
+  optimized: "mengoptimalkan",
+  organized: "menyelenggarakan",
+  developed: "mengembangkan",
+  configured: "mengonfigurasi",
+  presented: "mempresentasikan",
+  facilitated: "memfasilitasi",
+  maintained: "memelihara",
+  produced: "memproduksi",
+  delivered: "menyampaikan",
+  analyzed: "menganalisis",
+  improved: "meningkatkan",
+  reduced: "mengurangi",
+  managed: "mengelola",
+  designed: "merancang",
+  assisted: "membantu",
+  authored: "menulis",
+  guided: "membimbing",
+  built: "membangun",
+  created: "membuat",
+  executed: "menjalankan",
+  resolved: "menangani",
+  supported: "mendukung",
+  supervised: "mengawasi",
+  trained: "melatih",
+  taught: "mengajar",
+  tested: "menguji",
+  monitored: "memantau",
+  tracked: "melacak",
+  completed: "menyelesaikan",
+  prepared: "menyusun",
+  compiled: "merekap",
+  processed: "mengolah",
+  conducted: "melaksanakan",
+  achieved: "mencapai",
+  increased: "meningkatkan",
+  decreased: "menurunkan",
+  streamlined: "mempercepat",
+  automated: "mengotomatiskan",
+  published: "mempublikasikan",
+  released: "merilis",
+  led: "memimpin",
+  worked: "bekerja",
+
+  // Nouns & modifiers
+  application: "aplikasi",
+  applications: "aplikasi",
+  system: "sistem",
+  systems: "sistem",
+  feature: "fitur",
+  features: "fitur",
+  module: "modul",
+  modules: "modul",
+  report: "laporan",
+  reports: "laporan",
+  document: "dokumen",
+  documents: "dokumen",
+  archive: "arsip",
+  archives: "arsip",
+  inventory: "inventaris",
+  warehouse: "gudang",
+  customers: "pelanggan",
+  customer: "pelanggan",
+  clients: "klien",
+  users: "pengguna",
+  user: "pengguna",
+  employees: "karyawan",
+  students: "mahasiswa",
+  student: "mahasiswa",
+  participants: "peserta",
+  members: "anggota",
+  member: "anggota",
+  team: "tim",
+  company: "perusahaan",
+  companies: "perusahaan",
+  project: "proyek",
+  projects: "proyek",
+  experience: "pengalaman",
+  skills: "keahlian",
+  achievements: "prestasi",
+  certificate: "sertifikat",
+  certification: "sertifikasi",
+  training: "pelatihan",
+  workshop: "lokakarya",
+  workshops: "lokakarya",
+  schedule: "jadwal",
+  network: "jaringan",
+  security: "keamanan",
+  reliability: "keandalan",
+  performance: "performa",
+  accuracy: "akurasi",
+  efficiency: "efisiensi",
+  quality: "kualitas",
+  issues: "kendala",
+  results: "hasil",
+  daily: "harian",
+  weekly: "mingguan",
+  monthly: "bulanan",
+  annual: "tahunan",
+  internal: "internal",
+  digital: "digital",
+  physical: "fisik",
+  centralized: "terpusat",
+  simple: "sederhana",
+  comprehensive: "komprehensif",
+  various: "berbagai",
+  several: "beberapa",
+  all: "seluruh",
+  every: "setiap",
+  new: "baru",
+
+  // Connectors
+  using: "menggunakan",
+  covering: "yang mencakup",
+  including: "termasuk",
+  across: "di berbagai",
+  through: "melalui",
+  during: "selama",
+  from: "dari",
+  with: "dengan",
+  for: "untuk",
+  into: "ke dalam",
+  over: "lebih dari",
+  under: "di bawah",
+  and: "dan",
+  or: "atau",
+  the: ""
+};
+
+// Kata teknis internasional yang sah tetap ditulis sama dalam terjemahan ID maupun EN
+const SHARED_TECH_WORDS = new Set([
+  "api",
+  "restful",
+  "rest",
+  "graphql",
+  "json",
+  "http",
+  "https",
+  "html",
+  "html5",
+  "css",
+  "css3",
+  "javascript",
+  "js",
+  "typescript",
+  "ts",
+  "react",
+  "reactjs",
+  "next",
+  "nextjs",
+  "node",
+  "nodejs",
+  "vue",
+  "vuejs",
+  "laravel",
+  "php",
+  "python",
+  "java",
+  "golang",
+  "go",
+  "sql",
+  "mysql",
+  "postgresql",
+  "postgres",
+  "mariadb",
+  "mongodb",
+  "redis",
+  "tailwind",
+  "tailwindcss",
+  "bootstrap",
+  "git",
+  "github",
+  "gitlab",
+  "docker",
+  "kubernetes",
+  "aws",
+  "gcp",
+  "azure",
+  "figma",
+  "excel",
+  "word",
+  "powerpoint",
+  "office",
+  "spreadsheet",
+  "microsoft",
+  "google",
+  "discord",
+  "whatsapp",
+  "webhook",
+  "webhooks",
+  "dashboard",
+  "backend",
+  "frontend",
+  "fullstack",
+  "full",
+  "stack",
+  "developer",
+  "engineer",
+  "intern",
+  "senior",
+  "junior",
+  "lead",
+  "mentor",
+  "maintainer",
+  "cohort",
+  "founder",
+  "ui",
+  "ux",
+  "qa",
+  "erp",
+  "wms",
+  "crm",
+  "hris",
+  "simrs",
+  "msib",
+  "pkl",
+  "ipk",
+  "gpa",
+  "s.kom",
+  "s.t",
+  "s.e",
+  "s1",
+  "d3",
+  "d4",
+  "s2",
+  "smk",
+  "sma",
+  "lan",
+  "wan",
+  "wifi",
+  "wi-fi",
+  "mikrotik",
+  "cisco",
+  "helpdesk",
+  "troubleshooting",
+  "hardware",
+  "software",
+  "printer",
+  "server",
+  "database",
+  "framework",
+  "library",
+  "machine",
+  "learning",
+  "ai",
+  "gis",
+  "lms",
+  "freelance",
+  "part-time",
+  "full-time",
+  "startup",
+  "platform",
+  "real-time",
+  "agile",
+  "scrum",
+  "kanban",
+  "trello",
+  "jira",
+  "seo",
+  "sem",
+  "ga4",
+  "spss",
+  "flutter",
+  "dart",
+  "unity",
+  "3d",
+  "pc",
+  "mobile",
+  "web",
+  "it",
+  "hr",
+  "cv",
+  "ats"
+]);
+
+const PROTECTED_URI_EMAIL_PATTERN = /(?:https?:\/\/\S+|www\.\S+|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/gi;
+const PROTECTED_TECH_STACK_PATTERN = /\b(?:next\.js|react\.js|vue\.js|node\.js|tailwind\s+css|microsoft\s+(?:excel|word|office|powerpoint|azure)|google\s+(?:cloud|analytics|sheets|docs)|vs\s+code|whatsapp\s+business\s+api)\b/gi;
 
 const capitalizeFirst = (value: string): string =>
   value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
@@ -799,28 +1432,119 @@ const cleanTranslatedText = (value: string): string =>
   value
     .replace(/\s+/g, " ")
     .replace(/\s+([,.;!?])/g, "$1")
+    .replace(/([,;])([^\s\d)])/g, "$1 $2")
     .trim();
+
+const applyProtectedPhraseAndWordPipeline = (
+  text: string,
+  phrasePairs: Array<[string, string]>,
+  wordDict?: Record<string, string>
+): string => {
+  const placeholders: string[] = [];
+  const hold = (value: string): string => {
+    const token = `\uE000${placeholders.length}\uE001`;
+    placeholders.push(value);
+    return token;
+  };
+
+  // 1. Protect URLs and emails before phrase replacements
+  let working = text.replace(PROTECTED_URI_EMAIL_PATTERN, (match) => hold(match));
+
+  // 2. Apply longest-first multi-word phrase replacements and hold the outputs so Layer 2 doesn't touch them
+  const sorted = [...phrasePairs].sort((a, b) => b[0].length - a[0].length);
+  for (const [src, target] of sorted) {
+    const escaped = src.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+    const regex = new RegExp(`(?<![a-z0-9+#\uE000])${escaped}(?![a-z0-9+#\uE001])`, "gi");
+    working = working.replace(regex, () => hold(target));
+  }
+
+  // 3. Protect remaining compound tech stack names right before Layer 2 word translation
+  working = working.replace(PROTECTED_TECH_STACK_PATTERN, (match) => hold(match));
+
+  // 3. Apply Layer 2 word-level dictionary strictly on untouched plain words
+  if (wordDict) {
+    working = working.replace(/(?<![\uE000])([A-Za-zÀ-ÖØ-öø-ÿ]{2,})(?![\uE001])/g, (word, _g1, offset) => {
+      // Skip if preceded or followed directly by dot/slash inside technical identifiers like foo.bar
+      const prevChar = offset > 0 ? working[offset - 1] : "";
+      const nextChar = offset + word.length < working.length ? working[offset + word.length] : "";
+      if (prevChar === "." || nextChar === "." || prevChar === "@" || nextChar === "@") {
+        return word;
+      }
+
+      const lower = word.toLowerCase();
+      if (SHARED_TECH_WORDS.has(lower)) return word;
+      const mapped = wordDict[lower];
+      if (mapped === undefined) return word;
+      if (!mapped) return "";
+      if (/^[A-Z]/.test(word) && offset === 0) {
+        return capitalizeFirst(mapped);
+      }
+      return mapped;
+    });
+  }
+
+  // 4. Restore held tokens
+  working = working.replace(/\uE000(\d+)\uE001/g, (_m, idx) => placeholders[Number(idx)] ?? "");
+
+  return working;
+};
+
+const replaceBoundaryPhrases = (text: string, pairs: Array<[string, string]>): string => {
+  let out = text;
+  const sorted = [...pairs].sort((a, b) => b[0].length - a[0].length);
+
+  for (const [src, target] of sorted) {
+    const escaped = src.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+    const regex = new RegExp(`(?<![a-z0-9+#])${escaped}(?![a-z0-9+#])`, "gi");
+    out = out.replace(regex, target);
+  }
+
+  return out;
+};
+
+export const translatePeriodToEnglish = (period: string): string => {
+  if (!period.trim()) return period;
+  return replaceBoundaryPhrases(period, PERIOD_PAIRS).replace(/\s*[-\u2013\u2014]\s*/g, " - ");
+};
+
+export const translatePeriodToIndonesian = (period: string): string => {
+  if (!period.trim()) return period;
+  return replaceBoundaryPhrases(period, PERIOD_TO_ID_PAIRS).replace(/\s*[-\u2013\u2014]\s*/g, " - ");
+};
+
+const isStructuredKind = (
+  kind: "prose" | "degree" | "major" | "coursework" | "skill" | "skillCategory" | "cert" | "entity"
+) => kind === "degree" || kind === "major" || kind === "coursework" || kind === "skill" || kind === "skillCategory";
 
 export const translateFieldToEnglish = (
   text: string,
-  kind: "prose" | "degree" | "major" | "coursework" | "skill" | "cert" = "prose"
+  kind: "prose" | "degree" | "major" | "coursework" | "skill" | "skillCategory" | "cert" | "entity" = "prose"
 ): string => {
   const clean = text.trim();
-  if (!clean || shouldSkipTranslation(clean)) return text;
+  if (!clean) return text;
+  if (!isStructuredKind(kind) && shouldSkipTranslation(clean)) return text;
 
   let result = clean;
   if (kind === "degree") {
-    result = replaceBoundaryPhrases(result, DEGREE_MAP);
+    result = replaceBoundaryPhrases(result, [...DEGREE_MAP, ...MAJOR_MAP]);
   } else if (kind === "major") {
     result = replaceBoundaryPhrases(result, MAJOR_MAP);
   } else if (kind === "coursework") {
     result = replaceBoundaryPhrases(result, COURSEWORK_MAP);
+  } else if (kind === "skillCategory") {
+    result = replaceBoundaryPhrases(result, ID_SKILL_CATEGORY_TO_EN);
   } else if (kind === "skill") {
     result = replaceBoundaryPhrases(result, SKILL_PAIRS);
   } else if (kind === "cert") {
-    result = replaceBoundaryPhrases(result, [...CERT_PAIRS, ...GENERAL_PROSE_PAIRS]);
+    result = applyProtectedPhraseAndWordPipeline(result, [...CERT_PAIRS, ...GENERAL_PROSE_PAIRS], ID_WORD_TO_EN);
+  } else if (kind === "entity") {
+    result = replaceBoundaryPhrases(result, GENERAL_PROSE_PAIRS);
   } else {
-    result = replaceBoundaryPhrases(result, [...DEGREE_MAP, ...MAJOR_MAP, ...GENERAL_PROSE_PAIRS]);
+    result = applyProtectedPhraseAndWordPipeline(
+      result,
+      [...DEGREE_MAP, ...MAJOR_MAP, ...GENERAL_PROSE_PAIRS],
+      ID_WORD_TO_EN
+    );
   }
 
   return capitalizeFirst(cleanTranslatedText(result));
@@ -828,10 +1552,11 @@ export const translateFieldToEnglish = (
 
 export const translateFieldToIndonesian = (
   text: string,
-  kind: "prose" | "degree" | "major" | "coursework" | "skill" | "skillCategory" | "cert" = "prose"
+  kind: "prose" | "degree" | "major" | "coursework" | "skill" | "skillCategory" | "cert" | "entity" = "prose"
 ): string => {
   const clean = text.trim();
-  if (!clean || shouldSkipIndonesianTranslation(clean)) return text;
+  if (!clean) return text;
+  if (!isStructuredKind(kind) && shouldSkipIndonesianTranslation(clean)) return text;
 
   let result = clean;
   if (kind === "degree") {
@@ -845,9 +1570,15 @@ export const translateFieldToIndonesian = (
   } else if (kind === "skill") {
     result = replaceBoundaryPhrases(result, EN_SKILL_TO_ID);
   } else if (kind === "cert") {
-    result = replaceBoundaryPhrases(result, [...EN_PROSE_TO_ID]);
+    result = applyProtectedPhraseAndWordPipeline(result, [...EN_PROSE_TO_ID], EN_WORD_TO_ID);
+  } else if (kind === "entity") {
+    result = replaceBoundaryPhrases(result, EN_PROSE_TO_ID);
   } else {
-    result = replaceBoundaryPhrases(result, [...EN_DEGREE_TO_ID, ...EN_MAJOR_TO_ID, ...EN_PROSE_TO_ID]);
+    result = applyProtectedPhraseAndWordPipeline(
+      result,
+      [...EN_DEGREE_TO_ID, ...EN_MAJOR_TO_ID, ...EN_PROSE_TO_ID],
+      EN_WORD_TO_ID
+    );
   }
 
   return capitalizeFirst(cleanTranslatedText(result));
@@ -864,7 +1595,7 @@ export const translateProfileToEnglish = (profile: ResumeProfile): ResumeProfile
   const workExperience: WorkExperience[] = (profile.workExperience ?? []).map((item) => ({
     ...item,
     role: translateFieldToEnglish(item.role, "prose"),
-    company: translateFieldToEnglish(item.company, "prose"),
+    company: translateFieldToEnglish(item.company, "entity"),
     startDate: translatePeriodToEnglish(item.startDate),
     endDate: translatePeriodToEnglish(item.endDate),
     bulletPoints: translateBullets(item.bulletPoints ?? [])
@@ -892,7 +1623,7 @@ export const translateProfileToEnglish = (profile: ResumeProfile): ResumeProfile
 
   const organizations: OrganizationItem[] = (profile.organizations ?? []).map((item) => ({
     ...item,
-    organization: translateFieldToEnglish(item.organization, "prose"),
+    organization: translateFieldToEnglish(item.organization, "entity"),
     role: translateFieldToEnglish(item.role, "prose"),
     period: translatePeriodToEnglish(item.period),
     bulletPoints: translateBullets(item.bulletPoints ?? [])
@@ -922,7 +1653,7 @@ export const translateProfileToEnglish = (profile: ResumeProfile): ResumeProfile
       softSkills: (profile.skills?.softSkills ?? []).map((s) => translateFieldToEnglish(s, "skill")),
       groups: (profile.skills?.groups ?? []).map((group) => ({
         ...group,
-        category: translateFieldToEnglish(group.category, "prose"),
+        category: translateFieldToEnglish(group.category, "skillCategory"),
         items: (group.items ?? []).map((item) => translateFieldToEnglish(item, "skill"))
       }))
     },
@@ -941,7 +1672,7 @@ export const translateProfileToIndonesian = (profile: ResumeProfile): ResumeProf
   const workExperience: WorkExperience[] = (profile.workExperience ?? []).map((item) => ({
     ...item,
     role: translateFieldToIndonesian(item.role, "prose"),
-    company: translateFieldToIndonesian(item.company, "prose"),
+    company: translateFieldToIndonesian(item.company, "entity"),
     startDate: translatePeriodToIndonesian(item.startDate),
     endDate: translatePeriodToIndonesian(item.endDate),
     bulletPoints: translateBullets(item.bulletPoints ?? [])
@@ -963,13 +1694,13 @@ export const translateProfileToIndonesian = (profile: ResumeProfile): ResumeProf
     role: translateFieldToIndonesian(item.role, "prose"),
     context: translateFieldToIndonesian(item.context, "prose"),
     period: translatePeriodToIndonesian(item.period),
-    technologies: item.technologies ?? [],
+    technologies: (item.technologies ?? []).map((t) => translateFieldToIndonesian(t, "skill")),
     bulletPoints: translateBullets(item.bulletPoints ?? [])
   }));
 
   const organizations: OrganizationItem[] = (profile.organizations ?? []).map((item) => ({
     ...item,
-    organization: translateFieldToIndonesian(item.organization, "prose"),
+    organization: translateFieldToIndonesian(item.organization, "entity"),
     role: translateFieldToIndonesian(item.role, "prose"),
     period: translatePeriodToIndonesian(item.period),
     bulletPoints: translateBullets(item.bulletPoints ?? [])
@@ -1023,3 +1754,354 @@ export const computeProfileContentHash = (profile: ResumeProfile): string =>
     certificationItems: profile.certificationItems,
     skills: profile.skills
   });
+
+// --- Audit Perbandingan Teks Asli vs Terjemahan + Penyuntingan Langsung ---
+
+export type TranslatedFieldPath =
+  | { kind: "headline" }
+  | { kind: "summary" }
+  | { kind: "work_role"; index: number }
+  | { kind: "work_bullet"; index: number; bulletIndex: number }
+  | { kind: "edu_degree"; index: number }
+  | { kind: "edu_major"; index: number }
+  | { kind: "edu_thesis"; index: number }
+  | { kind: "edu_achievements"; index: number }
+  | { kind: "proj_name"; index: number }
+  | { kind: "proj_role"; index: number }
+  | { kind: "proj_bullet"; index: number; bulletIndex: number }
+  | { kind: "org_role"; index: number }
+  | { kind: "org_name"; index: number }
+  | { kind: "org_bullet"; index: number; bulletIndex: number }
+  | { kind: "cert_name"; index: number }
+  | { kind: "skill_group_cat"; index: number };
+
+export type TranslationFieldComparison = {
+  id: string;
+  section: string;
+  label: string;
+  original: string;
+  translated: string;
+  untranslatedWords: string[];
+  status: "translated" | "partial" | "unchanged";
+  path: TranslatedFieldPath;
+};
+
+export type TranslationAuditSummary = {
+  items: TranslationFieldComparison[];
+  totalFields: number;
+  fullyTranslatedCount: number;
+  partialCount: number;
+  coverageRatio: number;
+};
+
+const EXTRA_ID_AUDIT_WORDS = new Set([
+  ...Object.keys(ID_WORD_TO_EN).filter((w) => w.length >= 2),
+  ...INDONESIAN_MARKERS.filter((m) => !m.includes(" ")),
+  "yang",
+  "dan",
+  "dengan",
+  "untuk",
+  "pada",
+  "dari",
+  "dalam",
+  "serta",
+  "sebagai",
+  "adalah",
+  "ini",
+  "itu",
+  "tersebut",
+  "bagi",
+  "atau"
+]);
+
+const EXTRA_EN_AUDIT_WORDS = new Set([
+  ...Object.keys(EN_WORD_TO_ID).filter((w) => w.length >= 2),
+  ...ENGLISH_MARKERS.filter((m) => !m.includes(" ")),
+  "the",
+  "and",
+  "with",
+  "for",
+  "using",
+  "from",
+  "during",
+  "across",
+  "through",
+  "was",
+  "were",
+  "have",
+  "has"
+]);
+
+export const detectUntranslatedSourceWords = (text: string, targetLang: "id" | "en"): string[] => {
+  const clean = text.trim();
+  if (!clean) return [];
+
+  const tokens = clean.match(/[A-Za-zÀ-ÖØ-öø-ÿ]{2,}/g) ?? [];
+  const sourceDict = targetLang === "en" ? EXTRA_ID_AUDIT_WORDS : EXTRA_EN_AUDIT_WORDS;
+  const found = new Set<string>();
+
+  for (const token of tokens) {
+    const lower = token.toLowerCase();
+    if (SHARED_TECH_WORDS.has(lower)) continue;
+    if (sourceDict.has(lower)) {
+      found.add(lower);
+    }
+  }
+
+  return Array.from(found).slice(0, 6);
+};
+
+export const auditTranslation = (
+  original: ResumeProfile,
+  translated: ResumeProfile,
+  targetLang: "id" | "en"
+): TranslationAuditSummary => {
+  const items: TranslationFieldComparison[] = [];
+
+  const pushItem = (
+    id: string,
+    section: string,
+    label: string,
+    origVal: string | undefined,
+    transVal: string | undefined,
+    path: TranslatedFieldPath,
+    skipUntranslatedCheck = false
+  ) => {
+    const orig = (origVal ?? "").trim();
+    const trans = (transVal ?? "").trim();
+    if (!orig) return;
+
+    const untranslatedWords = skipUntranslatedCheck ? [] : detectUntranslatedSourceWords(trans, targetLang);
+    let status: TranslationFieldComparison["status"] = "translated";
+    if (untranslatedWords.length > 0) {
+      status = orig === trans ? "unchanged" : "partial";
+    }
+
+    items.push({
+      id,
+      section,
+      label,
+      original: orig,
+      translated: trans,
+      untranslatedWords,
+      status,
+      path
+    });
+  };
+
+  pushItem("headline", "Profil", "Headline", original.contact?.headline, translated.contact?.headline, {
+    kind: "headline"
+  });
+  pushItem("summary", "Ringkasan", "Ringkasan Profil", original.summary, translated.summary, {
+    kind: "summary"
+  });
+
+  (original.workExperience ?? []).forEach((origWork, index) => {
+    const transWork = translated.workExperience?.[index];
+    const sec = `Pengalaman #${index + 1}`;
+    pushItem(`work-role-${index}`, sec, "Posisi", origWork.role, transWork?.role, { kind: "work_role", index });
+    (origWork.bulletPoints ?? []).forEach((origBullet, bulletIndex) => {
+      pushItem(
+        `work-bullet-${index}-${bulletIndex}`,
+        sec,
+        `Poin #${bulletIndex + 1}`,
+        origBullet,
+        transWork?.bulletPoints?.[bulletIndex],
+        { kind: "work_bullet", index, bulletIndex }
+      );
+    });
+  });
+
+  (original.education ?? []).forEach((origEdu, index) => {
+    const transEdu = translated.education?.[index];
+    const sec = `Pendidikan #${index + 1}`;
+    pushItem(`edu-degree-${index}`, sec, "Jenjang", origEdu.degree, transEdu?.degree, {
+      kind: "edu_degree",
+      index
+    });
+    pushItem(`edu-major-${index}`, sec, "Program Studi", origEdu.fieldOfStudy, transEdu?.fieldOfStudy, {
+      kind: "edu_major",
+      index
+    });
+    pushItem(`edu-thesis-${index}`, sec, "Tugas Akhir", origEdu.thesisTitle, transEdu?.thesisTitle, {
+      kind: "edu_thesis",
+      index
+    });
+    pushItem(`edu-ach-${index}`, sec, "Prestasi", origEdu.achievements, transEdu?.achievements, {
+      kind: "edu_achievements",
+      index
+    });
+  });
+
+  (original.projects ?? []).forEach((origProj, index) => {
+    const transProj = translated.projects?.[index];
+    const sec = `Proyek #${index + 1}`;
+    pushItem(`proj-name-${index}`, sec, "Nama Proyek", origProj.name, transProj?.name, {
+      kind: "proj_name",
+      index
+    });
+    pushItem(`proj-role-${index}`, sec, "Peran", origProj.role, transProj?.role, { kind: "proj_role", index });
+    (origProj.bulletPoints ?? []).forEach((origBullet, bulletIndex) => {
+      pushItem(
+        `proj-bullet-${index}-${bulletIndex}`,
+        sec,
+        `Poin #${bulletIndex + 1}`,
+        origBullet,
+        transProj?.bulletPoints?.[bulletIndex],
+        { kind: "proj_bullet", index, bulletIndex }
+      );
+    });
+  });
+
+  (original.organizations ?? []).forEach((origOrg, index) => {
+    const transOrg = translated.organizations?.[index];
+    const sec = `Organisasi #${index + 1}`;
+    pushItem(`org-role-${index}`, sec, "Jabatan", origOrg.role, transOrg?.role, { kind: "org_role", index });
+    pushItem(
+      `org-name-${index}`,
+      sec,
+      "Organisasi",
+      origOrg.organization,
+      transOrg?.organization,
+      { kind: "org_name", index },
+      true
+    );
+    (origOrg.bulletPoints ?? []).forEach((origBullet, bulletIndex) => {
+      pushItem(
+        `org-bullet-${index}-${bulletIndex}`,
+        sec,
+        `Poin #${bulletIndex + 1}`,
+        origBullet,
+        transOrg?.bulletPoints?.[bulletIndex],
+        { kind: "org_bullet", index, bulletIndex }
+      );
+    });
+  });
+
+  (original.certificationItems ?? []).forEach((origCert, index) => {
+    const transCert = translated.certificationItems?.[index];
+    pushItem(`cert-name-${index}`, "Sertifikasi", `Sertifikat #${index + 1}`, origCert.name, transCert?.name, {
+      kind: "cert_name",
+      index
+    });
+  });
+
+  (original.skills?.groups ?? []).forEach((origGrp, index) => {
+    const transGrp = translated.skills?.groups?.[index];
+    pushItem(`skill-cat-${index}`, "Keahlian", `Kategori #${index + 1}`, origGrp.category, transGrp?.category, {
+      kind: "skill_group_cat",
+      index
+    });
+  });
+
+  const totalFields = items.length;
+  const fullyTranslatedCount = items.filter((item) => item.status === "translated").length;
+  const partialCount = items.length - fullyTranslatedCount;
+  const coverageRatio =
+    totalFields > 0
+      ? items.reduce((sum, item) => {
+          if (item.status === "translated") return sum + 1;
+          if (item.status === "partial") return sum + 0.5;
+          return sum;
+        }, 0) / totalFields
+      : 1;
+
+  return {
+    items,
+    totalFields,
+    fullyTranslatedCount,
+    partialCount,
+    coverageRatio
+  };
+};
+
+export const applyTranslatedFieldEdit = (
+  profile: ResumeProfile,
+  path: TranslatedFieldPath,
+  value: string
+): ResumeProfile => {
+  const next: ResumeProfile = {
+    ...profile,
+    contact: { ...profile.contact },
+    workExperience: (profile.workExperience ?? []).map((w) => ({
+      ...w,
+      bulletPoints: [...(w.bulletPoints ?? [])]
+    })),
+    education: (profile.education ?? []).map((e) => ({
+      ...e,
+      relevantCoursework: [...(e.relevantCoursework ?? [])]
+    })),
+    projects: (profile.projects ?? []).map((p) => ({
+      ...p,
+      technologies: [...(p.technologies ?? [])],
+      bulletPoints: [...(p.bulletPoints ?? [])]
+    })),
+    organizations: (profile.organizations ?? []).map((o) => ({
+      ...o,
+      bulletPoints: [...(o.bulletPoints ?? [])]
+    })),
+    certificationItems: (profile.certificationItems ?? []).map((c) => ({ ...c })),
+    skills: {
+      ...profile.skills,
+      hardSkills: [...(profile.skills?.hardSkills ?? [])],
+      softSkills: [...(profile.skills?.softSkills ?? [])],
+      tools: [...(profile.skills?.tools ?? [])],
+      groups: (profile.skills?.groups ?? []).map((g) => ({ ...g, items: [...(g.items ?? [])] }))
+    }
+  };
+
+  switch (path.kind) {
+    case "headline":
+      next.contact.headline = value;
+      break;
+    case "summary":
+      next.summary = value;
+      break;
+    case "work_role":
+      if (next.workExperience[path.index]) next.workExperience[path.index].role = value;
+      break;
+    case "work_bullet":
+      if (next.workExperience[path.index]) next.workExperience[path.index].bulletPoints[path.bulletIndex] = value;
+      break;
+    case "edu_degree":
+      if (next.education[path.index]) next.education[path.index].degree = value;
+      break;
+    case "edu_major":
+      if (next.education[path.index]) next.education[path.index].fieldOfStudy = value;
+      break;
+    case "edu_thesis":
+      if (next.education[path.index]) next.education[path.index].thesisTitle = value;
+      break;
+    case "edu_achievements":
+      if (next.education[path.index]) next.education[path.index].achievements = value;
+      break;
+    case "proj_name":
+      if (next.projects[path.index]) next.projects[path.index].name = value;
+      break;
+    case "proj_role":
+      if (next.projects[path.index]) next.projects[path.index].role = value;
+      break;
+    case "proj_bullet":
+      if (next.projects[path.index]) next.projects[path.index].bulletPoints[path.bulletIndex] = value;
+      break;
+    case "org_role":
+      if (next.organizations[path.index]) next.organizations[path.index].role = value;
+      break;
+    case "org_name":
+      if (next.organizations[path.index]) next.organizations[path.index].organization = value;
+      break;
+    case "org_bullet":
+      if (next.organizations[path.index]) next.organizations[path.index].bulletPoints[path.bulletIndex] = value;
+      break;
+    case "cert_name":
+      if (next.certificationItems[path.index]) next.certificationItems[path.index].name = value;
+      break;
+    case "skill_group_cat":
+      if (next.skills.groups && next.skills.groups[path.index]) {
+        next.skills.groups[path.index].category = value;
+      }
+      break;
+  }
+
+  return next;
+};
