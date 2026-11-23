@@ -35,9 +35,10 @@ export async function POST(request: Request) {
   }
 
   const rawPayload = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const targetLang: "id" | "en" = rawPayload.targetLang === "id" ? "id" : "en";
   const validation = validateAnalyzeRequest({
     resume: rawPayload.resume,
-    job: { rawDescription: "translate resume to English ATS", jobTitle: "", companyName: "" }
+    job: { rawDescription: `translate resume to ${targetLang === "en" ? "English" : "Indonesian"} ATS`, jobTitle: "", companyName: "" }
   });
 
   if (!validation.success) {
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await translateResumeWithAi(validation.data.resume);
+    const result = await translateResumeWithAi(validation.data.resume, targetLang);
     return apiSuccessResponse(result, 200, rateLimitHeaders);
   } catch (error) {
     console.error("[API_TRANSLATE_ERROR]", error);
