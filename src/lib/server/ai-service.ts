@@ -13,7 +13,7 @@ import {
   toLegacyExtractedKeywords
 } from "@/lib/analyzer";
 import { ADMIN_RULES } from "@/lib/ats/taxonomy";
-import { translateProfileToEnglish } from "@/lib/ats/translator";
+import { translateProfileDeterministic } from "@/lib/ats/translator";
 import { unique } from "@/lib/text";
 
 export type AnalysisProvider = "gemini" | "openrouter" | "deterministic";
@@ -318,8 +318,11 @@ export type AiTranslateResult = {
  * Jika API key AI tersedia, memoles terjemahan JSON dengan aturan anti-halusinasi;
  * jika tidak, langsung menggunakan translator deterministik lokal.
  */
-export const translateResumeWithAi = async (resume: ResumeProfile): Promise<AiTranslateResult> => {
-  const baseline = translateProfileToEnglish(resume);
+export const translateResumeWithAi = async (
+  resume: ResumeProfile,
+  targetLang: "id" | "en" = "en"
+): Promise<AiTranslateResult> => {
+  const baseline = translateProfileDeterministic(resume, targetLang);
   const geminiKey = process.env.GEMINI_API_KEY?.trim();
   const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
 
@@ -368,14 +371,17 @@ export const translateResumeWithAi = async (resume: ResumeProfile): Promise<AiTr
       skills: resume.skills
     };
 
-    const prompt = `You are an expert ATS Resume Writer & Indonesian-to-English Career Translator.
-Task: Translate all Indonesian resume content below into crisp, natural, ATS-industry standard English.
+    const langDirective =
+      targetLang === "en"
+        ? `Task: Translate all resume content below into crisp, natural, ATS-industry standard English.\n3. Start bullets with strong past/present ATS action verbs (Developed, Built, Managed, Coordinated, Configured, Analyzed, etc.).\n4. Use standard English academic/industry terms (e.g. Informatics Engineering, Undergraduate Thesis Project, Bachelor's Degree, Present).`
+        : `Task: Translate all English resume content below into crisp, formal, ATS-industry standard Indonesian (Bahasa Indonesia baku).\n3. Start bullets with strong Indonesian active verbs (Merancang, Mengembangkan, Membangun, Mengelola, Mengkoordinasikan, Mengoptimalkan, etc.).\n4. Use standard Indonesian academic/industry terms (e.g. S1 Informatika, Proyek Tugas Akhir, Sekarang) while keeping programming/tool names unchanged.`;
+
+    const prompt = `You are an expert ATS Resume Writer & Bilingual Career Translator.
+${langDirective}
 
 STRICT GUARDRAILS:
 1. NEVER invent or alter numbers, percentages, metrics, dates, company/university proper names, or skills.
 2. Keep exact array lengths and "id" values matching the input JSON.
-3. Start bullets with strong past/present ATS action verbs (Developed, Built, Managed, Coordinated, Configured, Analyzed, etc.).
-4. Use standard English academic/industry terms (e.g. Informatics Engineering, Undergraduate Thesis Project, Bachelor's Degree, Present).
 5. Return ONLY valid JSON with the exact same keys as input:
 ${JSON.stringify(payloadToTranslate)}`;
 
@@ -463,7 +469,8 @@ ${JSON.stringify(payloadToTranslate)}`;
               ? {
                   hardSkills: Array.isArray(parsed.skills.hardSkills) ? parsed.skills.hardSkills : baseline.skills.hardSkills,
                   tools: Array.isArray(parsed.skills.tools) ? parsed.skills.tools : baseline.skills.tools,
-                  softSkills: Array.isArray(parsed.skills.softSkills) ? parsed.skills.softSkills : baseline.skills.softSkills
+                  softSkills: Array.isArray(parsed.skills.softSkills) ? parsed.skills.softSkills : baseline.skills.softSkills,
+                  groups: Array.isArray(parsed.skills.groups) ? parsed.skills.groups : baseline.skills.groups
                 }
               : baseline.skills
         };
