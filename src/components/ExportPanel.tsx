@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ArrowsClockwise,
   DownloadSimple,
@@ -9,8 +9,11 @@ import {
   FileDoc,
   FilePdf,
   FileTxt,
+  Layout,
+  Rows,
   SealCheck,
   ShieldCheck,
+  TextAlignLeft,
   Translate
 } from "@phosphor-icons/react";
 import { Button, SectionCard } from "@/components/ui";
@@ -18,9 +21,39 @@ import { computeProfileContentHash } from "@/lib/ats/translator";
 import { exportDocx, exportPdf, exportTextFallback } from "@/lib/exporters";
 import { buildResumeDocument, estimateA4Pages, resolveCvLanguage } from "@/lib/resume-document";
 import { useCvStore } from "@/lib/store";
-import type { CvLanguage } from "@/types/resume";
+import type { CvLanguage, CvTemplate } from "@/types/resume";
 
 const kindLabels = { pdf: "PDF", docx: "DOCX", txt: "TXT" } as const;
+
+const TEMPLATE_OPTIONS: Array<{
+  value: CvTemplate;
+  label: string;
+  badge: string;
+  hint: string;
+  icon: ReactNode;
+}> = [
+  {
+    value: "compact_centered",
+    label: "ATS Padat (Harvard / Tech)",
+    badge: "Muat 1 Halaman",
+    hint: "Header rata tengah, baris Posisi | Instansi dalam satu baris dengan tanggal di kanan, ideal untuk pengalaman padat agar tetap 1 halaman A4.",
+    icon: <Rows size={17} weight="duotone" aria-hidden="true" />
+  },
+  {
+    value: "classic_editorial",
+    label: "ATS Standar (Klasik Lega)",
+    badge: "Umum & BUMN",
+    hint: "Header rata tengah dengan tipografi dan jarak antar-baris lebih lega. Nyaman dibaca HR korporat lokal, instansi, dan pelamar umum.",
+    icon: <Layout size={17} weight="duotone" aria-hidden="true" />
+  },
+  {
+    value: "executive_left",
+    label: "ATS Formal (Rata Kiri Serif)",
+    badge: "Klasik 2 Baris",
+    hint: "Header rata kiri bergaris tegas dengan font Serif formal serta format posisi dan instansi bertingkat. Cocok untuk keuangan, konsultan, dan akademik.",
+    icon: <TextAlignLeft size={17} weight="duotone" aria-hidden="true" />
+  }
+];
 
 const LANGUAGE_OPTIONS: Array<{ value: CvLanguage; label: string; hint: string }> = [
   {
@@ -45,6 +78,8 @@ export const ExportPanel = () => {
   const analytics = useCvStore((state) => state.matchAnalytics);
   const cvLanguage = useCvStore((state) => state.cvLanguage);
   const setCvLanguage = useCvStore((state) => state.setCvLanguage);
+  const cvTemplate = useCvStore((state) => state.cvTemplate);
+  const setCvTemplate = useCvStore((state) => state.setCvTemplate);
   const autoTranslateContent = useCvStore((state) => state.autoTranslateContent);
   const setAutoTranslateContent = useCvStore((state) => state.setAutoTranslateContent);
   const aiTranslatedEnProfile = useCvStore((state) => state.aiTranslatedEnProfile);
@@ -62,10 +97,15 @@ export const ExportPanel = () => {
   const currentHash = computeProfileContentHash(resume);
   const translatedOverride =
     aiTranslatedEnProfile && aiTranslatedSourceHash === currentHash ? aiTranslatedEnProfile : null;
-  const buildOptions = { translateContent: autoTranslateContent, translatedOverride };
+  const buildOptions = {
+    template: cvTemplate,
+    translateContent: autoTranslateContent,
+    translatedOverride
+  };
 
   const document = buildResumeDocument(resume, activeLang, buildOptions);
   const pageInfo = estimateA4Pages(document);
+  const activeTemplateMeta = TEMPLATE_OPTIONS.find((t) => t.value === cvTemplate) ?? TEMPLATE_OPTIONS[0];
 
   const runExport = async (kind: "pdf" | "docx" | "txt") => {
     if (document.isEmpty) return;
@@ -77,7 +117,7 @@ export const ExportPanel = () => {
       if (kind === "docx") await exportDocx(resume, activeLang, buildOptions);
       if (kind === "txt") exportTextFallback(resume, activeLang, buildOptions);
       setMessage(
-        `Berkas ${kindLabels[kind]} (${
+        `Berkas ${kindLabels[kind]} (${activeTemplateMeta.label}, ${
           activeLang === "id" ? "Bahasa Indonesia" : "Full ATS English"
         }) berhasil diunduh ke perangkatmu.`
       );
@@ -147,11 +187,67 @@ export const ExportPanel = () => {
   return (
     <SectionCard
       title="Unduh CV Siap Kirim (100% Gratis & Privat)"
-      description="Berkas disusun langsung di browser perangkatmu tanpa dikirim ke server mana pun. Tata letak satu kolom linear memastikan teks terbaca sempurna oleh sistem ATS."
+      description="Berkas disusun langsung di browser perangkatmu tanpa dikirim ke server mana pun. Pilih jenis gaya tata letak ATS, bahasa, lalu unduh sebagai PDF, Word DOCX, atau TXT."
       accent="clay"
       icon={<Export size={20} weight="duotone" />}
     >
       <div className="grid gap-5">
+        {/* Pilihan Jenis / Gaya Format ATS */}
+        <div className="rounded-xl border border-[#D9CEBC] bg-white p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex items-start gap-2.5">
+              <span
+                aria-hidden="true"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[#DFC25A] bg-[#FFF0A8] text-[#4A3A2E]"
+              >
+                <Layout size={18} weight="duotone" />
+              </span>
+              <div>
+                <h3 className="text-sm font-bold text-[#251813]">Jenis Tata Letak ATS</h3>
+                <p className="text-xs text-[#59483F] mt-0.5">
+                  Ketiganya 100% satu kolom linear tanpa tabel agar lolos mesin ATS sekaligus sesuai preferensi industrimu.
+                </p>
+              </div>
+            </div>
+            <span className="rounded-lg border border-[#DFC25A] bg-[#FFF8DF] px-2.5 py-1 text-xs font-bold text-[#4A3A2E]">
+              Dipilih: {activeTemplateMeta.label}
+            </span>
+          </div>
+
+          <div className="grid gap-2.5 sm:grid-cols-3" role="radiogroup" aria-label="Pilih jenis tata letak ATS">
+            {TEMPLATE_OPTIONS.map((opt) => {
+              const selected = cvTemplate === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setCvTemplate(opt.value)}
+                  className={`text-left rounded-xl p-3.5 transition-all cursor-pointer min-h-[44px] flex flex-col justify-between ${
+                    selected
+                      ? "border-2 border-[#251813] bg-[#FFF8DF] shadow-[2px_3px_0_rgba(37,24,19,0.12)]"
+                      : "border border-[#D9CEBC] bg-[#FFFDF8] hover:border-[#251813]/40"
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="grid h-8 w-8 place-items-center rounded-lg border border-[#251813]/20 bg-white text-[#251813]">
+                        {opt.icon}
+                      </span>
+                      <span className="rounded-md border border-[#D9CEBC] bg-white px-2 py-0.5 text-[10.5px] font-bold text-[#4E3E36]">
+                        {opt.badge}
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm font-bold text-[#251813]">{opt.label}</p>
+                    <p className="mt-1 text-xs text-[#4E3E36] leading-relaxed">{opt.hint}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Pilihan Bahasa CV */}
         <div className="rounded-xl border border-[#D9CEBC] bg-white p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -266,7 +362,7 @@ export const ExportPanel = () => {
               <SealCheck size={22} weight="duotone" className="text-[#144C32] shrink-0 mt-0.5" aria-hidden="true" />
               <div>
                 <p className="text-sm font-bold text-[#144C32]">
-                  Dokumen siap diunduh (Estimasi {pageInfo.estimatedPages} halaman A4)
+                  Dokumen siap diunduh (Estimasi {pageInfo.estimatedPages} halaman A4, gaya {activeTemplateMeta.label})
                 </p>
                 <p className="text-xs text-[#144C32] mt-0.5">
                   100% gratis, tanpa tanda air (watermark), dan 100% teks linear yang bisa diseleksi.
@@ -275,7 +371,7 @@ export const ExportPanel = () => {
             </div>
             {resume.experienceLevel === "fresh_graduate" && pageInfo.estimatedPages > 1 ? (
               <span className="rounded-lg border border-[#DFC25A] bg-[#FFF0A8] px-3 py-1.5 text-xs font-bold text-[#4A3A2E]">
-                Saran Fresh Grad: usahakan pas 1 halaman A4
+                Tips: pilih gaya ATS Padat agar ringkas 1 halaman A4
               </span>
             ) : null}
           </div>
@@ -387,7 +483,7 @@ export const ExportPanel = () => {
           <ul className="grid gap-2 sm:grid-cols-2 text-xs sm:text-[13px] text-[#4E3E36]">
             <li>&bull; 100% tata letak satu kolom linear tanpa tabel atau kotak teks mengambang</li>
             <li>&bull; Seluruh teks PDF bisa diseleksi dan diekstrak secara berurutan</li>
-            <li>&bull; Kontak diletakkan di badan atas halaman (bukan di header/footer file)</li>
+            <li>&bull; 3 pilihan gaya tata letak ATS (Padat 1 halaman, Standar Lega, & Formal Serif)</li>
             <li>&bull; Bahasa judul & isi CV otomatis diterjemahkan saat memilih mode English</li>
             <li>&bull; Tanpa ikon grafis atau bar persentase di dalam file dokumen</li>
             <li>&bull; Dikompilasi 100% di browser perangkatmu untuk menjaga privasi data</li>
