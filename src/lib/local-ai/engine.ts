@@ -1,4 +1,5 @@
 import type { InitProgressReport, MLCEngineInterface } from "@mlc-ai/web-llm";
+import type { LocalAiProvider, RestApiFormat } from "@/lib/local-ai/models";
 
 export type LocalChatMessage = {
   role: "system" | "user" | "assistant";
@@ -7,12 +8,86 @@ export type LocalChatMessage = {
 
 export type ActiveLocalAiConfig =
   | { mode: "webllm"; modelId: string }
-  | { mode: "ollama" | "lmstudio"; baseUrl: string; modelId: string };
+  | { mode: "ollama" | "lmstudio"; baseUrl: string; modelId: string }
+  | { mode: "rest_api"; format: RestApiFormat; baseUrl: string; modelId: string; apiKey: string };
+
+export class WebLlmCancelledError extends Error {
+  constructor(message = "Unduhan model dibatalkan.") {
+    super(message);
+    this.name = "WebLlmCancelledError";
+  }
+}
+
+const SESSION_API_KEY_STORAGE = "quicktailor-rest-api-key";
 
 let webLlmEngine: MLCEngineInterface | null = null;
+let webLlmWorker: Worker | null = null;
 let loadedWebLlmModelId = "";
+let loadSequence = 0;
+let cancelRejecter: ((reason: Error) => void) | null = null;
 
 const cleanBaseUrl = (value: string) => value.trim().replace(/\/+$/, "");
+
+export const readSessionApiKey = (): string => {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.sessionStorage.getItem(SESSION_API_KEY_STORAGE) ?? "";
+  } catch {
+    return "";
+  }
+};
+
+export const saveSessionApiKey = (apiKey: string): void => {
+  if (typeof window === "undefined") return;
+  try {
+    if (apiKey.trim()) {
+      window.sessionStorage.setItem(SESSION_API_KEY_STORAGE, apiKey.trim());
+    } else {
+      window.sessionStorage.removeItem(SESSION_API_KEY_STORAGE);
+    }
+  } catch {
+    // Abaikan error sessionStorage pada mode private browser
+  }
+};
+
+export const resolveActiveAiConfig = (state: {
+  aiEnabled: boolean;
+  localAiStatus: "idle" | "downloading" | "ready" | "error";
+  localAiMode: LocalAiProvider;
+  webLlmModelId: string;
+  localServerUrl: string;
+  localServerModel: string;
+  restApiFormat: RestApiFormat;
+  restApiUrl: string;
+  restApiModel: string;
+  restApiKey: string;
+}): ActiveLocalAiConfig | null => {
+  if (!state.aiEnabled || state.localAiStatus !== "ready") return null;
+
+  if (state.localAiMode === "webllm") {
+    return { mode: "webllm", modelId: state.webLlmModelId };
+  }
+  if (state.localAiMode === "ollama" || state.localAiMode === "lmstudio") {
+    if (!state.localServerUrl.trim() || !state.localServerModel.trim()) return null;
+    return {
+      mode: state.localAiMode,
+      baseUrl: state.localServerUrl,
+      modelId: state.localServerModel
+    };
+  }
+  if (state.localAiMode === "rest_api") {
+    if (!state.restApiUrl.trim() || !state.restApiModel.trim()) return null;
+    return {
+      mode: "rest_api",
+      format: state.restApiFormat,
+      baseUrl: state.restApiUrl,
+      modelId: state.restApiModel,
+      apiKey: state.restApiKey || readSessionApiKey()
+    };
+  }
+
+  return null;
+};
 
 export const isWebLlmLoaded = (modelId?: string): boolean => {
   if (!webLlmEngine) return false;
@@ -34,7 +109,7 @@ export const checkWebGpuSupport = async (): Promise<{ supported: boolean; reason
   if (!nav.gpu || typeof nav.gpu.requestAdapter !== "function") {
     return {
       supported: false,
-      reason: "Browser atau perangkat ini belum mengaktifkan WebGPU. Gunakan Chrome/Edge desktop terbaru atau sambungkan ke Ollama / LM Studio."
+      reason: "Browser atau perangkat ini belum mengaktifkan WebGPU. Kamu bisa memakai tab REST API atau PC Lokal."
     };
   }
 
@@ -43,7 +118,7 @@ export const checkWebGpuSupport = async (): Promise<{ supported: boolean; reason
     if (!adapter) {
       return {
         supported: false,
-        reason: "Adapter GPU untuk WebGPU tidak ditemukan di perangkat ini. Kamu tetap bisa memakai Ollama/LM Studio atau mode standar."
+        reason: "Adapter GPU WebGPU tidak ditemukan. Kamu tetap bisa memakai tab REST API atau PC Lokal."
       };
     }
     return { supported: true };
@@ -75,6 +150,29 @@ export const checkCachedModels = async (modelIds: string[]): Promise<Record<stri
   }
 };
 
+const terminateActiveWorker = () => {
+  if (webLlmWorker) {
+    try {
+      webLlmWorker.terminate();
+    } catch {
+      // Abaikan kegagalan terminasi worker
+    }
+    webLlmWorker = null;
+  }
+};
+
+export const cancelWebLlmDownload = (): void => {
+  loadSequence += 1;
+  const rejectPending = cancelRejecter;
+  cancelRejecter = null;
+  terminateActiveWorker();
+  webLlmEngine = null;
+  loadedWebLlmModelId = "";
+  if (rejectPending) {
+    rejectPending(new WebLlmCancelledError("Unduhan model dibatalkan."));
+  }
+};
+
 export const loadWebLlmModel = async (
   modelId: string,
   onProgress?: (progress: { progress: number; text: string }) => void
@@ -93,6 +191,10 @@ export const loadWebLlmModel = async (
     return;
   }
 
+  if (cancelRejecter) {
+    cancelWebLlmDownload();
+  }
+
   if (webLlmEngine) {
     try {
       await webLlmEngine.unload();
@@ -102,29 +204,73 @@ export const loadWebLlmModel = async (
     webLlmEngine = null;
     loadedWebLlmModelId = "";
   }
+  terminateActiveWorker();
 
+  const seq = ++loadSequence;
   const webllm = await import("@mlc-ai/web-llm");
-  const engine = await webllm.CreateMLCEngine(modelId, {
-    initProgressCallback: (report: InitProgressReport) => {
-      onProgress?.({
-        progress: typeof report.progress === "number" ? report.progress : 0,
-        text: report.text || "Memuat model..."
-      });
-    }
+  if (seq !== loadSequence) {
+    throw new WebLlmCancelledError("Unduhan model dibatalkan.");
+  }
+
+  const worker = new Worker(new URL("./webllm.worker.ts", import.meta.url), {
+    type: "module"
+  });
+  webLlmWorker = worker;
+
+  const cancelPromise = new Promise<never>((_, reject) => {
+    cancelRejecter = reject;
   });
 
-  webLlmEngine = engine;
-  loadedWebLlmModelId = modelId;
+  try {
+    const enginePromise = webllm.CreateWebWorkerMLCEngine(worker, modelId, {
+      initProgressCallback: (report: InitProgressReport) => {
+        if (seq !== loadSequence) return;
+        onProgress?.({
+          progress: typeof report.progress === "number" ? report.progress : 0,
+          text: report.text || "Memuat model..."
+        });
+      }
+    });
+
+    const engine = await Promise.race([enginePromise, cancelPromise]);
+    cancelRejecter = null;
+
+    if (seq !== loadSequence) {
+      try {
+        await engine.unload();
+      } catch {
+        // Abaikan cleanup engine usang
+      }
+      worker.terminate();
+      throw new WebLlmCancelledError("Unduhan model dibatalkan.");
+    }
+
+    webLlmEngine = engine;
+    loadedWebLlmModelId = modelId;
+  } catch (err) {
+    cancelRejecter = null;
+    if (seq !== loadSequence || err instanceof WebLlmCancelledError) {
+      terminateActiveWorker();
+      throw err instanceof WebLlmCancelledError ? err : new WebLlmCancelledError();
+    }
+    terminateActiveWorker();
+    throw err;
+  }
 };
 
 export const unloadWebLlmModel = async (): Promise<void> => {
-  if (!webLlmEngine) return;
-  try {
-    await webLlmEngine.unload();
-  } finally {
-    webLlmEngine = null;
-    loadedWebLlmModelId = "";
+  loadSequence += 1;
+  cancelRejecter = null;
+  if (webLlmEngine) {
+    try {
+      await webLlmEngine.unload();
+    } catch {
+      // Abaikan error saat unload
+    }
   }
+  terminateActiveWorker();
+  webLlmEngine = null;
+  loadedWebLlmModelId = "";
 };
 
 export const deleteWebLlmModelCache = async (modelId: string): Promise<void> => {
@@ -178,6 +324,120 @@ export const fetchLocalServerModels = async (
   }
 };
 
+const formatRestError = (status: number, rawMessage?: string): string => {
+  const snippet = rawMessage ? ` (${rawMessage.slice(0, 120)})` : "";
+  if (status === 401 || status === 403) {
+    return `API key ditolak atau tidak memiliki izin (HTTP ${status})${snippet}.`;
+  }
+  if (status === 404) {
+    return `Endpoint atau nama model tidak ditemukan (HTTP 404)${snippet}. Periksa URL dan nama model.`;
+  }
+  if (status === 429) {
+    return `Batas kuota / rate limit REST API tercapai (HTTP 429)${snippet}.`;
+  }
+  return `Permintaan REST API gagal dengan status HTTP ${status}${snippet}.`;
+};
+
+const runRestApiCompletion = async (
+  config: Extract<ActiveLocalAiConfig, { mode: "rest_api" }>,
+  messages: LocalChatMessage[],
+  temperature: number,
+  maxTokens: number
+): Promise<string> => {
+  const base = cleanBaseUrl(config.baseUrl);
+  const model = config.modelId.trim();
+  if (!base || !model) {
+    throw new Error("Isi alamat Endpoint REST API dan nama model terlebih dahulu.");
+  }
+
+  if (config.format === "gemini") {
+    if (!config.apiKey.trim()) {
+      throw new Error("API key Google Gemini wajib diisi.");
+    }
+
+    const systemText = messages
+      .filter((m) => m.role === "system")
+      .map((m) => m.content)
+      .join("\n\n");
+    const contents = messages
+      .filter((m) => m.role !== "system")
+      .map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }]
+      }));
+
+    const endpoint = `${base}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(
+      config.apiKey.trim()
+    )}`;
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...(systemText ? { system_instruction: { parts: [{ text: systemText }] } } : {}),
+        contents,
+        generationConfig: {
+          temperature,
+          maxOutputTokens: maxTokens
+        }
+      }),
+      signal: AbortSignal.timeout(30000)
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(formatRestError(response.status, data?.error?.message));
+    }
+
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    return typeof text === "string" ? text.trim() : "";
+  }
+
+  const endpoint = base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (config.apiKey.trim()) {
+    headers.Authorization = `Bearer ${config.apiKey.trim()}`;
+  }
+  if (base.includes("openrouter.ai")) {
+    headers["X-Title"] = "QuickTailor CV";
+  }
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature,
+      max_tokens: maxTokens,
+      stream: false
+    }),
+    signal: AbortSignal.timeout(30000)
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(formatRestError(response.status, data?.error?.message));
+  }
+
+  const content = data?.choices?.[0]?.message?.content;
+  return typeof content === "string" ? content.trim() : "";
+};
+
+export const testRestApiConnection = async (
+  config: Extract<ActiveLocalAiConfig, { mode: "rest_api" }>
+): Promise<void> => {
+  const reply = await runRestApiCompletion(
+    config,
+    [{ role: "user", content: "Reply with OK only." }],
+    0,
+    16
+  );
+  if (!reply) {
+    throw new Error("Server REST API terhubung tetapi tidak mengembalikan teks.");
+  }
+};
+
 export const runLocalChatCompletion = async (
   config: ActiveLocalAiConfig,
   messages: LocalChatMessage[],
@@ -188,7 +448,7 @@ export const runLocalChatCompletion = async (
 
   if (config.mode === "webllm") {
     if (!webLlmEngine || loadedWebLlmModelId !== config.modelId) {
-      throw new Error("Model WebLLM belum dimuat. Klik Unduh & Aktifkan Model terlebih dahulu.");
+      throw new Error("Model browser belum dimuat. Klik Unduh & Aktifkan Model terlebih dahulu.");
     }
     const completion = await webLlmEngine.chat.completions.create({
       messages,
@@ -196,6 +456,10 @@ export const runLocalChatCompletion = async (
       max_tokens: maxTokens
     });
     return completion.choices?.[0]?.message?.content?.trim() ?? "";
+  }
+
+  if (config.mode === "rest_api") {
+    return runRestApiCompletion(config, messages, temperature, maxTokens);
   }
 
   const base = cleanBaseUrl(config.baseUrl);
