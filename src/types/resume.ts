@@ -151,6 +151,7 @@ export type QualificationMatchItem = {
   term: string;
   category: "explicit_hard_skills_and_tools" | "education_criteria" | "soft_skills_and_work_traits";
   status: Exclude<QualificationMatchStatus, "administrative">;
+  matchKind?: "exact" | "synonym" | "cross_language" | "gap";
   matchedVia?: string;
   evidenceLocation?: string;
   guidance: string;
@@ -163,15 +164,26 @@ export type FormatCheckItem = {
   tip: string;
 };
 
+export type LanguageAlignmentInfo = {
+  score: number;
+  cvLanguage: DetectedLanguage;
+  activeOutputLanguage: "id" | "en";
+  jobLanguage: DetectedLanguage;
+  status: "aligned" | "partial" | "mismatch";
+  note: string;
+};
+
 export type ScoreBreakdown = {
   hardSkillsScore: number;
   educationAndDomainScore: number;
   structureAndImpactScore: number;
+  languageAlignmentScore: number;
   softSkillsScore: number;
   weights: {
     hardSkills: number;
     educationAndDomain: number;
     structureAndImpact: number;
+    languageAlignment: number;
     softSkills: number;
   };
 };
@@ -189,6 +201,7 @@ export type MatchAnalytics = {
   formatCheckPassed: boolean;
   keywordMatches: KeywordMatch[];
   breakdown: ScoreBreakdown;
+  languageAlignment: LanguageAlignmentInfo;
   qualificationMatches: QualificationMatchItem[];
   administrativeItems: AdministrativeItem[];
   implicitSuggestions: ImplicitCompetency[];
