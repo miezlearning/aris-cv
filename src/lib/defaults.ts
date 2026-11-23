@@ -1,4 +1,4 @@
-import type { ResumeProfile, JobTarget, MatchAnalytics } from "@/types/resume";
+import type { JobTarget, MatchAnalytics, ResumeProfile } from "@/types/resume";
 
 export const createId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -8,7 +8,12 @@ export const createId = () => {
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
+/**
+ * Profil awal kosong dengan ID deterministik (aman untuk SSR/hydration)
+ * dan tanpa nilai default "Present" agar pratinjau tidak merender elemen yatim.
+ */
 export const emptyResumeProfile = (): ResumeProfile => ({
+  experienceLevel: "fresh_graduate",
   contact: {
     fullName: "",
     headline: "",
@@ -19,28 +24,23 @@ export const emptyResumeProfile = (): ResumeProfile => ({
     portfolioUrl: ""
   },
   summary: "",
-  workExperience: [
-    {
-      id: createId(),
-      company: "",
-      role: "",
-      location: "",
-      startDate: "",
-      endDate: "Present",
-      isCurrent: true,
-      bulletPoints: [""]
-    }
-  ],
+  workExperience: [],
   education: [
     {
-      id: createId(),
+      id: "edu-initial",
       institution: "",
       degree: "",
       fieldOfStudy: "",
       gpa: "",
-      graduationDate: ""
+      graduationDate: "",
+      thesisTitle: "",
+      relevantCoursework: [],
+      achievements: ""
     }
   ],
+  projects: [],
+  organizations: [],
+  certificationItems: [],
   skills: {
     hardSkills: [],
     softSkills: [],
@@ -49,11 +49,116 @@ export const emptyResumeProfile = (): ResumeProfile => ({
   certifications: []
 });
 
-/** Profil dummy contoh untuk demonstrasi fitur ATS */
+/** Profil contoh Fresh Graduate / Belum Pernah Bekerja Penuh Waktu */
+export const sampleFreshGradProfile = (): ResumeProfile => ({
+  experienceLevel: "fresh_graduate",
+  contact: {
+    fullName: "Nadia Kusuma",
+    headline: "Lulusan Teknik Informatika | Junior Web & IT Support",
+    email: "nadia.kusuma@example.com",
+    phone: "+62 813-4567-8910",
+    location: "Semarang, Jawa Tengah",
+    linkedinUrl: "linkedin.com/in/nadia-kusuma-ti",
+    portfolioUrl: "github.com/nadiakusuma"
+  },
+  summary:
+    "Lulusan S1 Teknik Informatika (IPK 3.74/4.00) dengan pengalaman magang MSIB sebagai Junior Web Developer dan asisten laboratorium jaringan. Terbiasa membangun antarmuka web dengan React dan TypeScript, mengelola basis data SQL, serta menangani troubleshooting perangkat keras dan jaringan lokal.",
+  workExperience: [
+    {
+      id: "fg-work-1",
+      role: "Frontend Web Intern (MSIB)",
+      company: "PT Mitra Sehat Digital",
+      type: "internship",
+      location: "Semarang",
+      startDate: "Aug 2024",
+      endDate: "Dec 2024",
+      isCurrent: false,
+      bulletPoints: [
+        "Mengembangkan 6 modul antarmuka pendaftaran pasien menggunakan React.js dan TypeScript yang memangkas waktu input data petugas hingga 25%.",
+        "Mengintegrasikan RESTful API internal bersama tim backend dan menulis dokumentasi komponen untuk 4 anggota tim."
+      ]
+    }
+  ],
+  education: [
+    {
+      id: "fg-edu-1",
+      institution: "Universitas Diponegoro",
+      degree: "S1",
+      fieldOfStudy: "Teknik Informatika",
+      gpa: "3.74/4.00",
+      graduationDate: "2025",
+      thesisTitle: "Sistem Informasi Antrean dan Rekam Medis Klinik Berbasis Web",
+      relevantCoursework: ["Basis Data", "Jaringan Komputer", "Rekayasa Perangkat Lunak", "Sistem Informasi"],
+      achievements: "Finalis Lomba Pengembangan Aplikasi Kampus 2024"
+    }
+  ],
+  projects: [
+    {
+      id: "fg-proj-1",
+      name: "Aplikasi Inventaris dan Peminjaman Alat Laboratorium",
+      role: "Full-Stack Developer",
+      context: "Proyek Tugas Akhir",
+      period: "Jan 2025 - May 2025",
+      technologies: ["Next.js", "PostgreSQL", "REST API", "Tailwind CSS"],
+      url: "github.com/nadiakusuma/lab-inventaris",
+      bulletPoints: [
+        "Membangun sistem pelacakan 180+ perangkat laboratorium menggunakan Next.js dan PostgreSQL untuk menggantikan pencatatan manual di spreadsheet.",
+        "Merancang fitur rekap laporan peminjaman bulanan otomatis dalam format Excel dan PDF bagi kepala laboratorium."
+      ]
+    },
+    {
+      id: "fg-proj-2",
+      name: "Simulasi Jaringan Lokal dan Monitoring Tiket Helpdesk",
+      role: "Asisten Praktikum",
+      context: "Proyek Mata Kuliah Jaringan",
+      period: "Sep 2023 - Dec 2023",
+      technologies: ["LAN/WAN", "Mikrotik", "MySQL", "Troubleshooting Hardware"],
+      bulletPoints: [
+        "Mengonfigurasi topologi LAN/WAN sederhana serta menangani troubleshooting koneksi dan printer untuk 35 komputer ruang praktikum."
+      ]
+    }
+  ],
+  organizations: [
+    {
+      id: "fg-org-1",
+      organization: "Himpunan Mahasiswa Teknik Informatika",
+      role: "Koordinator Divisi Akademik & Pelatihan",
+      period: "Feb 2023 - Jan 2024",
+      bulletPoints: [
+        "Mengkoordinasikan 4 seri lokakarya pemrograman web dan penggunaan Git yang diikuti 160 peserta mahasiswa lintas angkatan.",
+        "Menyusun jadwal mentor sebaya dan materi modul belajar bersama 6 pengurus divisi."
+      ]
+    }
+  ],
+  certificationItems: [
+    { id: "fg-cert-1", name: "Belajar Dasar Pemrograman Web & JavaScript", issuer: "Dicoding Indonesia", year: "2024" },
+    { id: "fg-cert-2", name: "Junior Network Administrator (VSGA)", issuer: "Kominfo / BNSP", year: "2024" }
+  ],
+  skills: {
+    hardSkills: [
+      "HTML",
+      "CSS",
+      "JavaScript",
+      "TypeScript",
+      "React.js",
+      "Next.js",
+      "SQL",
+      "REST API",
+      "Jaringan LAN/WAN",
+      "Troubleshooting Hardware"
+    ],
+    tools: ["Microsoft Excel", "Microsoft Word", "Git", "GitHub", "MySQL", "PostgreSQL", "VS Code", "Figma"],
+    softSkills: ["Komunikasi", "Kerja Tim", "Teliti", "Pemecahan Masalah", "Manajemen Waktu"]
+  },
+  certifications: []
+});
+
+/** Profil contoh untuk kandidat berpengalaman (2+ tahun) */
 export const sampleDemoProfile = (): ResumeProfile => ({
+  experienceLevel: "experienced",
   contact: {
     fullName: "Budi Pratama",
-    headline: "Software Engineer | Full-Stack Developer | Cloud & AI Systems",
+    headline: "Software Engineer | Full-Stack Developer | Cloud & Web Systems",
     email: "budi.pratama@example.com",
     phone: "+62 812-3456-7890",
     location: "Jakarta, Indonesia",
@@ -61,113 +166,112 @@ export const sampleDemoProfile = (): ResumeProfile => ({
     portfolioUrl: "github.com/budipratama"
   },
   summary:
-    "Lulusan Teknik Informatika dengan pengalaman 3+ tahun mengembangkan aplikasi web berskala enterprise dan integrasi kecerdasan buatan. Berpengalaman membangun platform mikroservis, otomatisasi alur kerja laboratorium, dan sistem klasifikasi berbasis machine learning. Terbiasa memimpin tim lintas fungsi dan merancang arsitektur sistem yang skalabel serta berkinerja tinggi.",
+    "Lulusan Teknik Informatika dengan pengalaman 3+ tahun mengembangkan aplikasi web berskala enterprise dan integrasi sistem. Berpengalaman membangun platform mikroservis, optimasi query database, dan kolaborasi lintas fungsi dengan fokus keandalan serta performa sistem.",
   workExperience: [
     {
-      id: createId(),
+      id: "exp-demo-1",
       role: "Senior Full Stack Developer",
       company: "PT Inovasi Digital Nusantara",
+      type: "fulltime",
       location: "Jakarta",
       startDate: "Jan 2024",
       endDate: "Present",
       isCurrent: true,
       bulletPoints: [
         "Merancang arsitektur web platform terpusat menggunakan Next.js dan Node.js yang memproses lebih dari 50.000 transaksi harian dengan latensi di bawah 200ms.",
-        "Mengembangkan bot otomatisasi integrasi notifikasi real-time via WhatsApp Business API dan webhook Discord untuk sistem peringatan revisi dokumen.",
-        "Mengoptimalkan performa query PostgreSQL dan Redis caching, menurunkan beban server hingga 40%."
+        "Mengembangkan integrasi notifikasi real-time via WhatsApp Business API dan webhook untuk alur revisi dokumen internal.",
+        "Mengoptimalkan query PostgreSQL dan Redis caching sehingga beban server turun hingga 40%."
       ]
     },
     {
-      id: createId(),
+      id: "exp-demo-2",
       role: "Full-Stack Developer",
       company: "Dinas Komunikasi dan Informatika",
+      type: "fulltime",
       location: "Bandung",
       startDate: "Apr 2023",
       endDate: "Dec 2023",
       isCurrent: false,
       bulletPoints: [
-        "Memimpin pengembangan aplikasi pelaporan infrastruktur publik berbasis peta GIS yang digunakan oleh lebih dari 100.000 warga untuk pemantauan perbaikan fasilitas kota.",
-        "Mengintegrasikan model computer vision untuk mengklasifikasi tingkat kerusakan fasilitas secara otomatis dengan akurasi 92%.",
-        "Bekerja sama erat dengan stakeholder pemerintahan untuk memastikan kepatuhan regulasi privasi data dan standar keamanan siber.",
-        "Menggunakan teknologi: Laravel, React.js, Tailwind CSS, Leaflet.js, MySQL."
+        "Memimpin pengembangan aplikasi pelaporan infrastruktur publik berbasis peta GIS yang digunakan oleh lebih dari 100.000 warga.",
+        "Bekerja sama erat dengan pemangku kepentingan pemerintahan untuk memastikan kepatuhan regulasi privasi data dan standar keamanan.",
+        "Mengembangkan fitur antarmuka dan API menggunakan Laravel, React.js, Tailwind CSS, dan MySQL."
       ]
     },
     {
-      id: createId(),
-      role: "Machine Learning Engineer Cohort",
-      company: "Tech Academy Foundation",
-      location: "Remote",
-      startDate: "Feb 2023",
-      endDate: "Jul 2023",
-      isCurrent: false,
-      bulletPoints: [
-        "Membangun model machine learning end-to-end menggunakan Python, Scikit-learn, dan FastAPI untuk deteksi anomali data transaksi keuangan.",
-        "Melakukan data preprocessing, feature engineering, serta hyperparameter tuning untuk meningkatkan F1-score model sebesar 15%.",
-        "Mempresentasikan hasil proyek capstone dan visualisasi model kepada dewan penguji industri."
-      ]
-    },
-    {
-      id: createId(),
+      id: "exp-demo-3",
       role: "Software Engineering Intern",
       company: "PT Solusi Teknologi Bersama",
+      type: "internship",
       location: "Yogyakarta",
       startDate: "Aug 2022",
       endDate: "Jan 2023",
       isCurrent: false,
       bulletPoints: [
         "Membangun modul dashboard analitik internal menggunakan React.js dan Tailwind CSS untuk visualisasi metrik performa operasional tim.",
-        "Menulis unit testing dan integration testing dengan coverage 85%, mengurangi regresi bug saat rilis ke tahap produksi."
-      ]
-    },
-    {
-      id: createId(),
-      role: "Community Lead & Developer",
-      company: "Komunitas Open Source Indonesia",
-      location: "Remote",
-      startDate: "Jan 2021",
-      endDate: "Present",
-      isCurrent: true,
-      bulletPoints: [
-        "Mengelola komunitas teknologi dengan 50.000+ anggota, menyelenggarakan lokakarya pemrograman bulanan, dan memelihara repository open-source.",
-        "Merancang pedoman kontribusi kode serta memfasilitasi onboarding bagi kontributor baru."
+        "Menulis unit testing dan integration testing dengan coverage 85%, mengurangi regresi bug saat rilis produksi."
       ]
     }
   ],
   education: [
     {
-      id: createId(),
-      degree: "Sarjana Komputer (S.Kom)",
+      id: "edu-demo-1",
+      degree: "S1",
       fieldOfStudy: "Teknik Informatika",
       institution: "Universitas Indonesia",
-      graduationDate: "2019 – 2023",
-      gpa: "3.82/4.00"
-    },
-    {
-      id: createId(),
-      degree: "Sekolah Menengah Kejuruan",
-      fieldOfStudy: "Rekayasa Perangkat Lunak",
-      institution: "SMK Negeri 1 Jakarta",
-      graduationDate: "2016 – 2019",
-      gpa: ""
+      graduationDate: "2023",
+      gpa: "3.82/4.00",
+      thesisTitle: "",
+      relevantCoursework: [],
+      achievements: ""
     }
+  ],
+  projects: [
+    {
+      id: "proj-demo-1",
+      name: "Sistem Monitoring Antrean Layanan Terpadu",
+      role: "Lead Developer",
+      context: "Proyek Mandiri",
+      period: "2023",
+      technologies: ["TypeScript", "Next.js", "PostgreSQL"],
+      bulletPoints: [
+        "Membangun prototipe portal antrean multi-loket dengan pembaruan status waktu nyata dan ekspor laporan harian."
+      ]
+    }
+  ],
+  organizations: [
+    {
+      id: "org-demo-1",
+      organization: "Komunitas Open Source Indonesia",
+      role: "Maintainer & Mentor",
+      period: "Jan 2021 - Present",
+      bulletPoints: [
+        "Menyelenggarakan lokakarya pemrograman bulanan dan menyusun pedoman kontribusi kode bagi kontributor baru."
+      ]
+    }
+  ],
+  certificationItems: [
+    { id: "cert-demo-1", name: "AWS Certified Cloud Practitioner", issuer: "Amazon Web Services", year: "2024" },
+    { id: "cert-demo-2", name: "Google Cloud Associate Cloud Engineer", issuer: "Google Cloud", year: "2023" }
   ],
   skills: {
     hardSkills: [
-      "Programming: Python, TypeScript, JavaScript, Go, SQL, PHP, Dart, HTML, CSS",
-      "Frameworks & Libraries: Next.js, React.js, Node.js, Laravel, Tailwind CSS, FastAPI, Flutter, Scikit-learn",
-      "Database & Cloud: PostgreSQL, MySQL, Redis, Docker, AWS, Google Cloud Platform",
-      "Machine Learning & Data: Supervised Learning, Data Preprocessing, Model Evaluation, Feature Engineering, Data Visualization"
+      "TypeScript",
+      "JavaScript",
+      "Python",
+      "SQL",
+      "Next.js",
+      "React.js",
+      "Node.js",
+      "Laravel",
+      "REST API",
+      "PostgreSQL",
+      "MySQL"
     ],
-    tools: [
-      "Other: Git, CI/CD, DevOps, Microservices Architecture, REST API Design, Testing"
-    ],
-    softSkills: [
-      "Leadership, Team Collaboration, Analytical Problem Solving, Agile/Scrum"
-    ]
+    tools: ["Git", "Docker", "CI/CD", "Redis", "AWS", "Google Cloud Platform", "Tailwind CSS"],
+    softSkills: ["Leadership", "Team Collaboration", "Analytical Problem Solving", "Agile/Scrum"]
   },
-  certifications: [
-    "AWS Certified Cloud Practitioner; Google Cloud Associate Cloud Engineer; Dicoding Indonesia: Belajar Pengembangan Machine Learning & AI; DeepLearning.AI: Supervised Machine Learning"
-  ]
+  certifications: []
 });
 
 export const emptyJobTarget = (): JobTarget => ({
@@ -178,10 +282,13 @@ export const emptyJobTarget = (): JobTarget => ({
     requiredHardSkills: [],
     domainKeywords: [],
     softSkills: []
-  }
+  },
+  normalized: undefined
 });
 
 export const emptyAnalytics = (): MatchAnalytics => ({
+  hasAnalyzed: false,
+  detectedLanguage: "id",
   overallScore: 0,
   exactMatchRate: 0,
   semanticProximity: 0,
@@ -190,5 +297,21 @@ export const emptyAnalytics = (): MatchAnalytics => ({
   semanticKeywords: [],
   missingKeywords: [],
   formatCheckPassed: false,
-  keywordMatches: []
+  keywordMatches: [],
+  breakdown: {
+    hardSkillsScore: 0,
+    educationAndDomainScore: 0,
+    structureAndImpactScore: 0,
+    softSkillsScore: 0,
+    weights: {
+      hardSkills: 0.55,
+      educationAndDomain: 0.25,
+      structureAndImpact: 0.15,
+      softSkills: 0.05
+    }
+  },
+  qualificationMatches: [],
+  administrativeItems: [],
+  implicitSuggestions: [],
+  formatChecks: []
 });
