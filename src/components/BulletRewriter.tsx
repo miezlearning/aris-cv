@@ -9,11 +9,16 @@ import {
   CheckCircle,
   Lightbulb,
   PencilLine,
+  Sparkle,
   XCircle
 } from "@phosphor-icons/react";
+import { LocalAiControlPanel } from "@/components/LocalAiControlPanel";
 import { Button, EmptyState, SectionCard, Tag, TextArea } from "@/components/ui";
 import { Reveal } from "@/components/Reveal";
 import { FRESH_GRAD_XYZ_EXAMPLES } from "@/lib/analyzer";
+import type { ActiveLocalAiConfig } from "@/lib/local-ai/engine";
+import { rewriteBulletWithLocalAi, tailorSummaryWithLocalAi } from "@/lib/local-ai/tasks";
+import { resolveCvLanguage } from "@/lib/resume-document";
 import { useCvStore } from "@/lib/store";
 
 const statusLabels = {
@@ -36,12 +41,38 @@ export const BulletRewriter = () => {
   const applySuggestion = useCvStore((state) => state.applySuggestion);
   const rejectSuggestion = useCvStore((state) => state.rejectSuggestion);
   const updateSuggestion = useCvStore((state) => state.updateSuggestion);
+  const updateSummary = useCvStore((state) => state.updateSummary);
   const job = useCvStore((state) => state.jobTarget);
+  const cvLanguage = useCvStore((state) => state.cvLanguage);
+
+  const localAiMode = useCvStore((state) => state.localAiMode);
+  const localAiStatus = useCvStore((state) => state.localAiStatus);
+  const webLlmModelId = useCvStore((state) => state.webLlmModelId);
+  const localServerUrl = useCvStore((state) => state.localServerUrl);
+  const localServerModel = useCvStore((state) => state.localServerModel);
 
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
   const [aiMessage, setAiMessage] = useState<Record<string, string>>({});
   const [examplesOpen, setExamplesOpen] = useState(false);
+
+  const [summaryDraft, setSummaryDraft] = useState("");
+  const [summaryBusy, setSummaryBusy] = useState(false);
+  const [summaryStatus, setSummaryStatus] = useState("");
+  const [batchProgress, setBatchProgress] = useState("");
+
+  const activeLocalConfig: ActiveLocalAiConfig | null =
+    localAiStatus === "ready" && localAiMode === "webllm"
+      ? { mode: "webllm", modelId: webLlmModelId }
+      : localAiStatus === "ready" && (localAiMode === "ollama" || localAiMode === "lmstudio")
+      ? { mode: localAiMode, baseUrl: localServerUrl, modelId: localServerModel }
+      : null;
+
+  const targetLang = resolveCvLanguage(
+    cvLanguage,
+    analytics.hasAnalyzed ? analytics.detectedLanguage : undefined,
+    resume
+  );
 
   const handleAiRewrite = async (suggestionId: string, originalText: string, sourceLabel: string) => {
     setAiLoading((prev) => ({ ...prev, [suggestionId]: true }));
@@ -50,6 +81,28 @@ export const BulletRewriter = () => {
     const keywords = job.extractedKeywords.requiredHardSkills.slice(0, 5);
 
     try {
+      if (activeLocalConfig) {
+        const localResult = await rewriteBulletWithLocalAi(activeLocalConfig, {
+          bullet: originalText,
+          role: sourceLabel,
+          jobTitle: job.jobTitle,
+          jobDescription: job.rawDescription,
+          targetKeywords: keywords,
+          targetLang
+        });
+
+        setEdits((prev) => ({ ...prev, [suggestionId]: localResult.suggestion }));
+        updateSuggestion(suggestionId, {
+          suggestion: localResult.suggestion,
+          note: localResult.note
+        });
+        setAiMessage((prev) => ({
+          ...prev,
+          [suggestionId]: `Disusun ulang oleh AI lokal (${activeLocalConfig.modelId}) selaras lowongan Langkah 2.`
+        }));
+        return;
+      }
+
       const response = await fetch("/api/rewrite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -77,7 +130,7 @@ export const BulletRewriter = () => {
         ...prev,
         [suggestionId]:
           provider === "deterministic"
-            ? "Disusun ulang dengan mesin aturan lokal (mode 100% offline/privat)."
+            ? "Disusun ulang dengan mesin aturan lokal (mode standar). Aktifkan model WebLLM atau Ollama di atas untuk penyesuaian kontekstual AI."
             : "Berhasil direkonstruksi oleh AI tanpa menambah fakta fiktif."
       }));
     } catch (err) {
@@ -88,6 +141,44 @@ export const BulletRewriter = () => {
     } finally {
       setAiLoading((prev) => ({ ...prev, [suggestionId]: false }));
     }
+  };
+
+  const handleTailorSummary = async () => {
+    if (!resume.summary.trim()) return;
+    if (!activeLocalConfig) {
+      setSummaryStatus("Aktifkan terlebih dahulu model AI lokal di panel atas (WebLLM atau Ollama) untuk menyesuaikan ringkasan otomatis.");
+      return;
+    }
+
+    setSummaryBusy(true);
+    setSummaryStatus("");
+    try {
+      const tailored = await tailorSummaryWithLocalAi(activeLocalConfig, {
+        summary: resume.summary,
+        headline: resume.contact.headline ?? "",
+        jobTitle: job.jobTitle,
+        companyName: job.companyName,
+        matchedKeywords: [...(analytics.matchedKeywords ?? []), ...(analytics.semanticKeywords ?? [])],
+        targetLang
+      });
+      setSummaryDraft(tailored);
+      setSummaryStatus(`Ringkasan berhasil diselaraskan dengan ${activeLocalConfig.modelId}. Periksa lalu terapkan jika cocok.`);
+    } catch (err) {
+      setSummaryStatus(err instanceof Error ? err.message : "Gagal menyesuaikan ringkasan profil.");
+    } finally {
+      setSummaryBusy(false);
+    }
+  };
+
+  const handleBatchAiRewrite = async () => {
+    if (!activeLocalConfig) return;
+    const pendingList = suggestions.filter((s) => s.status === "pending");
+    for (let i = 0; i < pendingList.length; i += 1) {
+      const item = pendingList[i];
+      setBatchProgress(`Menyesuaikan poin ${i + 1} dari ${pendingList.length}...`);
+      await handleAiRewrite(item.id, item.original, item.sourceLabel);
+    }
+    setBatchProgress("");
   };
 
   const totalBullets =
@@ -104,6 +195,70 @@ export const BulletRewriter = () => {
       accent="sage"
       icon={<PencilLine size={20} weight="duotone" />}
     >
+      {/* Panel Model AI Lokal (WebLLM Downloadable + Ollama / LM Studio) */}
+      <div className="mb-4">
+        <LocalAiControlPanel contextLabel="Penyesuaian Kalimat Lowongan" />
+      </div>
+
+      {/* Penyesuaian Ringkasan Profil ke Lowongan */}
+      {analytics.hasAnalyzed && resume.summary.trim() ? (
+        <div className="mb-4 rounded-xl border border-[#D9CEBC] bg-white p-4 grid gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-bold text-[#251813]">Penyesuaian Ringkasan Profil ke Lowongan</p>
+              <p className="text-xs text-[#59483F] mt-0.5">
+                Menonjolkan keahlian aslimu yang relevan dengan{" "}
+                <span className="font-bold text-[#251813]">{job.jobTitle || "lowongan Langkah 2"}</span> (bahasa{" "}
+                {targetLang === "en" ? "English ATS" : "Indonesia"}).
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={summaryBusy}
+              onClick={handleTailorSummary}
+              className="gap-1.5"
+            >
+              <Sparkle size={15} weight="duotone" aria-hidden="true" />
+              <span>{summaryBusy ? "Menyusun..." : "Sesuaikan Ringkasan dengan AI"}</span>
+            </Button>
+          </div>
+
+          {summaryStatus ? (
+            <p className="rounded-lg border border-[#94D1DF] bg-[#ECF9FC] px-3 py-2 text-xs font-semibold text-[#124959]">
+              {summaryStatus}
+            </p>
+          ) : null}
+
+          {summaryDraft ? (
+            <div className="grid gap-2.5 pt-1">
+              <TextArea
+                rows={3}
+                value={summaryDraft}
+                onChange={(event) => setSummaryDraft(event.target.value)}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    updateSummary(summaryDraft);
+                    setSummaryDraft("");
+                    setSummaryStatus("Ringkasan profil berhasil diperbarui di CV kamu.");
+                  }}
+                  className="gap-1.5"
+                >
+                  <CheckCircle size={15} weight="duotone" aria-hidden="true" />
+                  <span>Terapkan ke Ringkasan CV</span>
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setSummaryDraft("")}>
+                  Batal
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* Panduan & Contoh Fresh Grad (Collapsible) */}
       <div className="mb-5 rounded-xl border border-[#94D1DF] bg-[#ECF9FC] p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -169,6 +324,24 @@ export const BulletRewriter = () => {
 
       {suggestions.length ? (
         <div className="grid gap-4">
+          {activeLocalConfig && suggestions.some((s) => s.status === "pending") ? (
+            <div className="rounded-xl border border-[#DFC25A] bg-[#FFF8DF] px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs sm:text-sm font-semibold text-[#4A3A2E]">
+                {batchProgress || `AI Lokal siap (${activeLocalConfig.modelId}). Kamu bisa menyusun ulang semua poin yang tertunda sekaligus.`}
+              </span>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={Boolean(batchProgress)}
+                onClick={handleBatchAiRewrite}
+                className="gap-1.5 min-h-[40px] text-xs"
+              >
+                <Sparkle size={14} weight="duotone" aria-hidden="true" />
+                <span>{batchProgress ? "Memproses..." : "Optimasi Semua Poin dengan AI Lokal"}</span>
+              </Button>
+            </div>
+          ) : null}
+
           {untouched > 0 ? (
             <div className="flex items-center gap-2 rounded-xl border border-[#9FD499] bg-[#DFF5DA] px-4 py-3 text-xs sm:text-sm font-semibold text-[#144C32]">
               <CheckCircle size={17} weight="duotone" className="shrink-0" aria-hidden="true" />
