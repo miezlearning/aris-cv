@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "@react-pdf/renderer": "^4.1.5",
     "docx": "^9.5.1",
     "idb-keyval": "^6.2.1",
