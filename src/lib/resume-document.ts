@@ -1,4 +1,4 @@
-import type { CvLanguage, DetectedLanguage, ResumeProfile } from "@/types/resume";
+import type { CvLanguage, CvTemplate, DetectedLanguage, ResumeProfile } from "@/types/resume";
 import { translateProfileToEnglish } from "@/lib/ats/translator";
 import { compact } from "@/lib/text";
 
@@ -14,6 +14,10 @@ export type SectionKey =
 export type ResumeEntry = {
   /** Contoh: "Frontend Web Intern | PT Mitra Sehat Digital, Semarang". */
   title: string;
+  /** Bagian utama judul entri (dicetak tebal di template ATS). */
+  titlePrimary?: string;
+  /** Bagian sekunder judul entri setelah pemisah (perusahaan/instansi/peran). */
+  titleSecondary?: string;
   /** Contoh: "Aug 2024 - Dec 2024". */
   meta: string;
   /** Baris catatan utama (untuk kompatibilitas). */
@@ -32,6 +36,7 @@ export type ResumeSection = {
 
 export type ResumeDocument = {
   language: "id" | "en";
+  template: CvTemplate;
   name: string;
   headline: string;
   /** Kontak digabung satu baris dengan pemisah pipa (|). */
@@ -40,10 +45,12 @@ export type ResumeDocument = {
   isEmpty: boolean;
 };
 
-/** Ukuran dan warna dipakai bersama oleh PDF, DOCX, dan Pratinjau. */
+/** Ukuran dan warna dasar yang dipakai bersama oleh PDF, DOCX, dan Pratinjau. */
 export const DOC_STYLE = {
   pdfFont: "Helvetica",
+  pdfSerifFont: "Times-Roman",
   docxFont: "Arial",
+  docxSerifFont: "Times New Roman",
   bodySizePt: 9.5,
   nameSizePt: 18,
   headlineSizePt: 10,
@@ -63,6 +70,7 @@ type DocLabels = {
   projects: string;
   organizations: string;
   certifications: string;
+  certificationsCompact: string;
   skills: string;
   present: string;
   gpa: string;
@@ -87,6 +95,7 @@ const DOC_LABELS: Record<"id" | "en", DocLabels> = {
     projects: "PROYEK & STUDI KASUS",
     organizations: "ORGANISASI & KEPANITIAAN",
     certifications: "PELATIHAN & SERTIFIKASI",
+    certificationsCompact: "SERTIFIKASI",
     skills: "KEAHLIAN",
     present: "Sekarang",
     gpa: "IPK",
@@ -107,8 +116,9 @@ const DOC_LABELS: Record<"id" | "en", DocLabels> = {
     education: "EDUCATION",
     experience: "WORK EXPERIENCE",
     projects: "PROJECTS & CASE STUDIES",
-    organizations: "ORGANIZATIONS & LEADERSHIP",
+    organizations: "LEADERSHIP & ORGANIZATIONS",
     certifications: "CERTIFICATIONS & TRAINING",
+    certificationsCompact: "CERTIFICATIONS",
     skills: "SKILLS",
     present: "Present",
     gpa: "GPA",
@@ -155,24 +165,34 @@ const buildExperienceEntries = (resume: ResumeProfile, labels: DocLabels): Resum
 
       const companyWithLoc = compact([item.company?.trim(), item.location?.trim()]).join(", ");
       const title = compact([roleLabel, companyWithLoc]).join(" | ");
+      const titlePrimary = roleLabel || companyWithLoc;
+      const titleSecondary = roleLabel && companyWithLoc ? companyWithLoc : "";
       const bullets = (item.bulletPoints ?? []).map((bullet) => bullet.trim()).filter(Boolean);
 
-      // Cegah elemen yatim: jika judul posisi/perusahaan dan poin semuanya kosong, abaikan seluruh entri (jangan tampilkan "Present")
+      // Cegah elemen yatim: jika judul posisi/perusahaan dan poin semuanya kosong, abaikan seluruh entri
       if (!title && !bullets.length) return null;
 
       const start = (item.startDate ?? "").trim();
       const end = normalizeEndDate(item.endDate, Boolean(item.isCurrent), labels.present);
       const meta = compact([start, end]).join(" - ");
 
-      return { title, meta, note: "", notes: [], bullets };
+      return { title, titlePrimary, titleSecondary, meta, note: "", notes: [], bullets };
     })
     .filter((entry): entry is ResumeEntry => entry !== null);
 
-const buildEducationEntries = (resume: ResumeProfile, labels: DocLabels): ResumeEntry[] =>
+const buildEducationEntries = (
+  resume: ResumeProfile,
+  labels: DocLabels,
+  template: CvTemplate
+): ResumeEntry[] =>
   (resume.education ?? [])
     .map((item): ResumeEntry | null => {
-      const degreePart = compact([item.degree?.trim(), item.fieldOfStudy?.trim()]).join(" - ");
-      const title = compact([degreePart, item.institution?.trim()]).join(" | ");
+      const separator = template === "compact_centered" ? ", " : " - ";
+      const degreePart = compact([item.degree?.trim(), item.fieldOfStudy?.trim()]).join(separator);
+      const instPart = (item.institution ?? "").trim();
+      const title = compact([degreePart, instPart]).join(" | ");
+      const titlePrimary = degreePart || instPart;
+      const titleSecondary = degreePart && instPart ? instPart : "";
       const meta = (item.graduationDate ?? "").trim();
       const notes: string[] = [];
 
@@ -187,6 +207,8 @@ const buildEducationEntries = (resume: ResumeProfile, labels: DocLabels): Resume
       if (!title && !meta && !notes.length) return null;
       return {
         title,
+        titlePrimary,
+        titleSecondary,
         meta,
         note: notes[0] ?? "",
         notes,
@@ -199,7 +221,10 @@ const buildProjectEntries = (resume: ResumeProfile, labels: DocLabels): ResumeEn
   (resume.projects ?? [])
     .map((item): ResumeEntry | null => {
       const nameAndContext = compact([item.name?.trim(), item.context?.trim()]).join(" - ");
-      const title = compact([nameAndContext, item.role?.trim()]).join(" | ");
+      const rolePart = (item.role ?? "").trim();
+      const title = compact([nameAndContext, rolePart]).join(" | ");
+      const titlePrimary = nameAndContext || rolePart;
+      const titleSecondary = nameAndContext && rolePart ? rolePart : "";
       const meta = (item.period ?? "").trim();
       const bullets = (item.bulletPoints ?? []).map((b) => b.trim()).filter(Boolean);
       const notes: string[] = [];
@@ -212,39 +237,96 @@ const buildProjectEntries = (resume: ResumeProfile, labels: DocLabels): ResumeEn
       }
 
       if (!title && !bullets.length && !notes.length) return null;
-      return { title, meta, note: notes[0] ?? "", notes, bullets };
+      return { title, titlePrimary, titleSecondary, meta, note: notes[0] ?? "", notes, bullets };
     })
     .filter((entry): entry is ResumeEntry => entry !== null);
 
 const buildOrganizationEntries = (resume: ResumeProfile): ResumeEntry[] =>
   (resume.organizations ?? [])
     .map((item): ResumeEntry | null => {
-      const title = compact([item.role?.trim(), item.organization?.trim()]).join(" | ");
+      const rolePart = (item.role ?? "").trim();
+      const orgPart = (item.organization ?? "").trim();
+      const title = compact([rolePart, orgPart]).join(" | ");
+      const titlePrimary = rolePart || orgPart;
+      const titleSecondary = rolePart && orgPart ? orgPart : "";
       const meta = (item.period ?? "").trim();
       const bullets = (item.bulletPoints ?? []).map((b) => b.trim()).filter(Boolean);
 
       if (!title && !bullets.length) return null;
-      return { title, meta, note: "", notes: [], bullets };
+      return { title, titlePrimary, titleSecondary, meta, note: "", notes: [], bullets };
     })
     .filter((entry): entry is ResumeEntry => entry !== null);
 
-const buildCertificationParagraphs = (resume: ResumeProfile): string[] => {
-  const structured = (resume.certificationItems ?? [])
-    .map((item) => {
-      const name = (item.name ?? "").trim();
-      if (!name) return "";
-      const issuer = (item.issuer ?? "").trim();
-      const year = (item.year ?? "").trim();
-      const suffix = compact([issuer, year]).join(", ");
-      return suffix ? `${name} (${suffix})` : name;
-    })
-    .filter(Boolean);
+const buildCertificationParagraphs = (resume: ResumeProfile, template: CvTemplate): string[] => {
+  const cleanItems = (resume.certificationItems ?? [])
+    .map((item) => ({
+      name: (item.name ?? "").trim(),
+      issuer: (item.issuer ?? "").trim(),
+      year: (item.year ?? "").trim()
+    }))
+    .filter((item) => item.name);
 
   const legacy = (resume.certifications ?? []).map((c) => c.trim()).filter(Boolean);
+
+  if (template === "compact_centered" && cleanItems.length > 0) {
+    const grouped = new Map<string, { issuer: string; labels: string[] }>();
+    const standalone: string[] = [];
+
+    for (const item of cleanItems) {
+      const label = item.year ? `${item.name} (${item.year})` : item.name;
+      if (item.issuer) {
+        const key = item.issuer.toLowerCase();
+        const existing = grouped.get(key);
+        if (existing) {
+          existing.labels.push(label);
+        } else {
+          grouped.set(key, { issuer: item.issuer, labels: [label] });
+        }
+      } else {
+        standalone.push(label);
+      }
+    }
+
+    const lines: string[] = [];
+    for (const group of grouped.values()) {
+      if (group.labels.length >= 2) {
+        lines.push(`${group.issuer}: ${group.labels.join("; ")}`);
+      } else {
+        const singleItem = cleanItems.find(
+          (it) => it.issuer.toLowerCase() === group.issuer.toLowerCase()
+        );
+        if (singleItem) {
+          const suffix = compact([singleItem.issuer, singleItem.year]).join(", ");
+          lines.push(suffix ? `${singleItem.name} (${suffix})` : singleItem.name);
+        }
+      }
+    }
+    lines.push(...standalone, ...legacy);
+    return lines;
+  }
+
+  const structured = cleanItems.map((item) => {
+    const suffix = compact([item.issuer, item.year]).join(", ");
+    return suffix ? `${item.name} (${suffix})` : item.name;
+  });
+
   return [...structured, ...legacy];
 };
 
 const buildSkillsParagraphs = (resume: ResumeProfile, labels: DocLabels): string[] => {
+  const validGroups = (resume.skills?.groups ?? [])
+    .map((group) => ({
+      category: (group.category ?? "").trim(),
+      items: (group.items ?? []).map((item) => item.trim()).filter(Boolean)
+    }))
+    .filter((group) => group.items.length > 0);
+
+  if (validGroups.length > 0) {
+    return validGroups.map((group) =>
+      group.category ? `${group.category}: ${group.items.join(", ")}` : group.items.join(", ")
+    );
+  }
+
   const paragraphs: string[] = [];
   const hard = (resume.skills?.hardSkills ?? []).map((s) => s.trim()).filter(Boolean);
   const tools = (resume.skills?.tools ?? []).map((s) => s.trim()).filter(Boolean);
@@ -281,10 +363,10 @@ const SECTION_ORDER: Record<ResumeProfile["experienceLevel"], SectionKey[]> = {
     "summary",
     "experience",
     "projects",
-    "education",
     "organizations",
-    "certifications",
-    "skills"
+    "education",
+    "skills",
+    "certifications"
   ],
   experienced: [
     "summary",
@@ -298,6 +380,7 @@ const SECTION_ORDER: Record<ResumeProfile["experienceLevel"], SectionKey[]> = {
 };
 
 export type ResumeBuildOptions = {
+  template?: CvTemplate;
   translateContent?: boolean;
   translatedOverride?: ResumeProfile | null;
 };
@@ -307,6 +390,7 @@ export const buildResumeDocument = (
   language: "id" | "en" = "id",
   options?: ResumeBuildOptions
 ): ResumeDocument => {
+  const template: CvTemplate = options?.template ?? "compact_centered";
   const effectiveResume =
     language === "en" && options?.translateContent !== false
       ? options?.translatedOverride ?? translateProfileToEnglish(resume)
@@ -325,7 +409,7 @@ export const buildResumeDocument = (
     });
   }
 
-  const education = buildEducationEntries(effectiveResume, labels);
+  const education = buildEducationEntries(effectiveResume, labels, template);
   if (education.length) {
     sectionMap.set("education", {
       sectionKey: "education",
@@ -365,11 +449,11 @@ export const buildResumeDocument = (
     });
   }
 
-  const certParagraphs = buildCertificationParagraphs(effectiveResume);
+  const certParagraphs = buildCertificationParagraphs(effectiveResume, template);
   if (certParagraphs.length) {
     sectionMap.set("certifications", {
       sectionKey: "certifications",
-      heading: labels.certifications,
+      heading: template === "compact_centered" ? labels.certificationsCompact : labels.certifications,
       paragraphs: certParagraphs,
       entries: []
     });
@@ -414,6 +498,7 @@ export const buildResumeDocument = (
 
   return {
     language,
+    template,
     name,
     headline,
     contact,
@@ -425,29 +510,36 @@ export const buildResumeDocument = (
 export const estimateA4Pages = (doc: ResumeDocument): { estimatedPages: number; lineEstimate: number } => {
   if (doc.isEmpty) return { estimatedPages: 1, lineEstimate: 0 };
 
+  const isCompact = doc.template === "compact_centered";
+  const isExecutive = doc.template === "executive_left";
+  const charsPerLine = isCompact ? 114 : isExecutive ? 84 : 88;
+  const headingWeight = isCompact ? 1.45 : 2.2;
+  const entryHeaderWeight = isCompact ? 1.15 : isExecutive ? 2.1 : 1.4;
+  const linesPerPage = isCompact ? 72 : isExecutive ? 45 : 47;
+
   let lines = 0;
-  if (doc.name) lines += 2;
+  if (doc.name) lines += isCompact ? 1.7 : 2;
   if (doc.headline) lines += 1;
-  if (doc.contact) lines += Math.max(1, Math.ceil(doc.contact.length / 85));
+  if (doc.contact) lines += Math.max(1, Math.ceil(doc.contact.length / (charsPerLine + 4)));
 
   for (const section of doc.sections) {
-    lines += 2.2; // heading + spacing
+    lines += headingWeight;
     for (const p of section.paragraphs) {
-      lines += Math.max(1, Math.ceil(p.length / 88));
+      lines += Math.max(1, Math.ceil(p.length / charsPerLine));
     }
     for (const entry of section.entries) {
-      lines += 1.4;
+      lines += entryHeaderWeight;
       for (const note of entry.notes) {
-        lines += Math.max(1, Math.ceil(note.length / 88));
+        lines += Math.max(1, Math.ceil(note.length / charsPerLine));
       }
       for (const bullet of entry.bullets) {
-        lines += Math.max(1, Math.ceil(bullet.length / 82));
+        lines += Math.max(1, Math.ceil(bullet.length / (charsPerLine - 6)));
       }
     }
   }
 
   const lineEstimate = Math.round(lines);
-  const estimatedPages = Math.max(1, Math.ceil(lineEstimate / 47));
+  const estimatedPages = Math.max(1, Math.ceil(lineEstimate / linesPerPage));
   return { estimatedPages, lineEstimate };
 };
 
@@ -481,12 +573,17 @@ export const getMissingParts = (resume: ResumeProfile): string[] => {
     missing.push("pengalaman kerja");
   }
 
-  const hasSkills = [
+  const hasFlatSkills = [
     ...(resume.skills?.hardSkills || []),
     ...(resume.skills?.tools || []),
     ...(resume.skills?.softSkills || [])
   ].some((skill) => skill?.trim());
-  if (!hasSkills) missing.push("keahlian");
+
+  const hasGroupSkills = (resume.skills?.groups || []).some((group) =>
+    (group.items || []).some((item) => item?.trim())
+  );
+
+  if (!hasFlatSkills && !hasGroupSkills) missing.push("keahlian");
 
   return missing;
 };
