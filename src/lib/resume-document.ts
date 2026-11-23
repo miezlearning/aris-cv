@@ -1,6 +1,10 @@
 import type { CvLanguage, CvTemplate, DetectedLanguage, ResumeProfile } from "@/types/resume";
-import { detectLanguage } from "@/lib/ats/normalizer";
-import { translateProfileDeterministic } from "@/lib/ats/translator";
+import { containsTermBoundary, normalizeForMatch } from "@/lib/ats/synonyms";
+import {
+  ENGLISH_MARKERS,
+  INDONESIAN_MARKERS,
+  translateProfileDeterministic
+} from "@/lib/ats/translator";
 import { compact } from "@/lib/text";
 
 export type SectionKey =
@@ -137,31 +141,59 @@ const DOC_LABELS: Record<"id" | "en", DocLabels> = {
   }
 };
 
-export const detectResumeLanguage = (resume?: ResumeProfile): "id" | "en" => {
-  if (!resume) return "id";
-  const corpus = [
+const collectResumeProseCorpus = (resume?: ResumeProfile): string => {
+  if (!resume) return "";
+  return [
     resume.contact?.headline ?? "",
     resume.summary ?? "",
-    ...(resume.workExperience ?? []).flatMap((w) => [w.role, w.company, w.endDate, ...(w.bulletPoints ?? [])]),
-    ...(resume.projects ?? []).flatMap((p) => [p.name, p.role, ...(p.bulletPoints ?? [])]),
-    ...(resume.organizations ?? []).flatMap((o) => [o.role, o.organization, ...(o.bulletPoints ?? [])]),
-    ...(resume.education ?? []).flatMap((e) => [e.degree, e.fieldOfStudy, e.thesisTitle ?? ""])
+    ...(resume.workExperience ?? []).flatMap((w) => [w.role, ...(w.bulletPoints ?? [])]),
+    ...(resume.projects ?? []).flatMap((p) => [p.name, p.role, p.context, ...(p.bulletPoints ?? [])]),
+    ...(resume.organizations ?? []).flatMap((o) => [o.role, ...(o.bulletPoints ?? [])]),
+    ...(resume.education ?? []).flatMap((e) => [
+      e.degree,
+      e.fieldOfStudy,
+      e.thesisTitle ?? "",
+      e.achievements ?? ""
+    ])
   ]
     .filter(Boolean)
     .join(" ");
+};
 
-  if (!corpus.trim()) return "id";
-  return detectLanguage(corpus) === "en" ? "en" : "id";
+export const detectResumeProseLanguage = (resume?: ResumeProfile): DetectedLanguage => {
+  const corpus = collectResumeProseCorpus(resume);
+  const norm = normalizeForMatch(corpus);
+  if (!norm) return "id";
+
+  const idHits = INDONESIAN_MARKERS.filter((w) => containsTermBoundary(norm, w)).length;
+  const enHits = ENGLISH_MARKERS.filter((w) => containsTermBoundary(norm, w)).length;
+
+  if (idHits >= 2 && enHits >= 2) {
+    if (enHits >= idHits * 2.2) return "en";
+    if (idHits >= enHits * 2.2) return "id";
+    return "mixed";
+  }
+
+  return enHits > idHits ? "en" : "id";
+};
+
+export const detectResumeLanguage = (resume?: ResumeProfile): "id" | "en" => {
+  const corpus = collectResumeProseCorpus(resume);
+  const norm = normalizeForMatch(corpus);
+  if (!norm) return "id";
+
+  const idHits = INDONESIAN_MARKERS.filter((w) => containsTermBoundary(norm, w)).length;
+  const enHits = ENGLISH_MARKERS.filter((w) => containsTermBoundary(norm, w)).length;
+  return enHits > idHits ? "en" : "id";
 };
 
 export const resolveCvLanguage = (
   preference: CvLanguage = "auto",
-  detectedJobLang?: DetectedLanguage,
+  _detectedJobLang?: DetectedLanguage,
   resume?: ResumeProfile
 ): "id" | "en" => {
   if (preference === "id") return "id";
   if (preference === "en") return "en";
-  if (detectedJobLang) return detectedJobLang === "en" ? "en" : "id";
   return detectResumeLanguage(resume);
 };
 
