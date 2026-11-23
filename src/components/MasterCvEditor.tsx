@@ -199,6 +199,48 @@ export const MasterCvEditor = () => {
   const removeCertification = useCvStore((state) => state.removeCertification);
 
   const updateSkills = useCvStore((state) => state.updateSkills);
+  const addSkillGroup = useCvStore((state) => state.addSkillGroup);
+  const updateSkillGroup = useCvStore((state) => state.updateSkillGroup);
+  const removeSkillGroup = useCvStore((state) => state.removeSkillGroup);
+  const setSkillGroups = useCvStore((state) => state.setSkillGroups);
+
+  const skillGroups = resume.skills.groups ?? [];
+  const hasCustomGroups = skillGroups.length > 0;
+  const [skillMode, setSkillMode] = useState<"standard" | "grouped">(hasCustomGroups ? "grouped" : "standard");
+
+  useEffect(() => {
+    if (skillGroups.length > 0) {
+      setSkillMode("grouped");
+    }
+  }, [skillGroups.length]);
+
+  const handleEnableGroupedMode = () => {
+    if (skillGroups.length === 0) {
+      const seeded = [
+        resume.skills.hardSkills.length
+          ? { id: "grp-seed-1", category: "Keahlian Teknis", items: [...resume.skills.hardSkills] }
+          : null,
+        resume.skills.tools.length
+          ? { id: "grp-seed-2", category: "Alat & Framework", items: [...resume.skills.tools] }
+          : null,
+        resume.skills.softSkills.length
+          ? { id: "grp-seed-3", category: "Kompetensi Lainnya", items: [...resume.skills.softSkills] }
+          : null
+      ].filter((g): g is { id: string; category: string; items: string[] } => g !== null);
+
+      setSkillGroups(
+        seeded.length ? seeded : [{ id: "grp-seed-1", category: "Programming", items: [] }]
+      );
+    }
+    setSkillMode("grouped");
+  };
+
+  const handleSwitchToStandardMode = () => {
+    if (skillGroups.length > 0) {
+      setSkillGroups([]);
+    }
+    setSkillMode("standard");
+  };
 
   const isFresh = resume.experienceLevel === "fresh_graduate";
 
@@ -209,7 +251,9 @@ export const MasterCvEditor = () => {
   const hasWork = resume.workExperience.some((w) => w.company.trim() || w.role.trim() || w.bulletPoints.some((b) => b.trim()));
   const hasOrgs = resume.organizations.some((o) => o.organization.trim() || o.role.trim() || o.bulletPoints.some((b) => b.trim()));
   const hasCerts = resume.certificationItems.some((c) => c.name.trim());
-  const totalSkills = resume.skills.hardSkills.length + resume.skills.tools.length + resume.skills.softSkills.length;
+  const groupedSkillsCount = skillGroups.reduce((sum, g) => sum + g.items.filter((i) => i.trim()).length, 0);
+  const flatSkillsCount = resume.skills.hardSkills.length + resume.skills.tools.length + resume.skills.softSkills.length;
+  const totalSkills = Math.max(flatSkillsCount, groupedSkillsCount);
 
   const baseTabs: Record<MasterTab, TabItem<MasterTab>> = {
     contact: {
@@ -271,7 +315,7 @@ export const MasterCvEditor = () => {
     resume.experienceLevel === "fresh_graduate"
       ? ["contact", "summary", "education", "projects", "experience", "organizations", "certifications", "skills"]
       : resume.experienceLevel === "early_career"
-      ? ["contact", "summary", "experience", "projects", "education", "organizations", "certifications", "skills"]
+      ? ["contact", "summary", "experience", "projects", "organizations", "education", "skills", "certifications"]
       : ["contact", "summary", "experience", "skills", "education", "projects", "organizations", "certifications"];
 
   const orderedTabs = tabOrder.map((key) => baseTabs[key]);
@@ -1032,44 +1076,150 @@ export const MasterCvEditor = () => {
         {activeTab === "skills" ? (
           <SectionCard
             title="Keahlian & Alat Kerja"
-            description="Daftar ini dicocokkan langsung dengan kualifikasi lowongan di Langkah 2. Hanya tulis keahlian dan perangkat lunak yang benar-benar kamu kuasai."
+            description="Daftar ini dicocokkan langsung dengan kualifikasi lowongan di Langkah 2. Pilih format kelompok standar atau kategori kustom seperti Programming, Frameworks, Database."
             accent="sky"
             icon={<Wrench size={20} weight="duotone" />}
+            actions={
+              skillMode === "grouped" ? (
+                <Button type="button" variant="secondary" onClick={addSkillGroup} className="gap-1.5">
+                  <Plus size={15} weight="bold" aria-hidden="true" />
+                  <span>Tambah Kategori</span>
+                </Button>
+              ) : null
+            }
           >
             <div className="grid gap-4">
-              <Field
-                label="Keahlian teknis (Hard Skills)"
-                hint="Pisahkan dengan koma atau baris baru. Contoh: SQL, Jaringan LAN/WAN, Pembukuan, React.js, Troubleshooting Hardware."
-              >
-                <CommaListArea
-                  rows={4}
-                  values={resume.skills.hardSkills}
-                  onChangeValues={(vals) => updateSkills("hardSkills", vals)}
-                  placeholder="SQL, HTML, CSS, JavaScript, Jaringan LAN/WAN, Stock Opname"
-                />
-              </Field>
-              <Field
-                label="Alat kerja & Software (Tools)"
-                hint="Perangkat lunak yang pernah kamu operasikan. Contoh: Microsoft Excel, Microsoft Word, Accurate, Figma, Git."
-              >
-                <CommaListArea
-                  rows={3}
-                  values={resume.skills.tools}
-                  onChangeValues={(vals) => updateSkills("tools", vals)}
-                  placeholder="Microsoft Excel, Microsoft Word, Git, MySQL, Figma"
-                />
-              </Field>
-              <Field
-                label="Sikap & karakter kerja (Soft Skills)"
-                hint="Karakter yang bisa kamu buktikan lewat contoh nyata di proyek atau organisasi saat wawancara."
-              >
-                <CommaListArea
-                  rows={3}
-                  values={resume.skills.softSkills}
-                  onChangeValues={(vals) => updateSkills("softSkills", vals)}
-                  placeholder="Komunikasi, Kerja Tim, Teliti, Pemecahan Masalah"
-                />
-              </Field>
+              {/* Switcher Mode Kelompok Keahlian */}
+              <div className="rounded-xl border border-[#94D1DF] bg-white p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div>
+                  <p className="text-xs sm:text-sm font-bold text-[#251813]">Format tampilan daftar keahlian di CV</p>
+                  <p className="text-xs text-[#59483F] mt-0.5">
+                    Mode Kategori Kustom cocok untuk CV gaya ATS Padat (contoh: Programming, Frameworks, Database, Machine Learning).
+                  </p>
+                </div>
+                <div
+                  role="group"
+                  aria-label="Mode kelompok keahlian"
+                  className="inline-flex rounded-xl border border-[#D9CEBC] bg-[#F3E7C8] p-1 shrink-0"
+                >
+                  <button
+                    type="button"
+                    onClick={handleSwitchToStandardMode}
+                    className={`min-h-[38px] rounded-lg px-3 text-xs font-bold transition-colors ${
+                      skillMode === "standard" ? "bg-white text-[#251813] shadow-2xs" : "text-[#4E3E36]"
+                    }`}
+                  >
+                    3 Kelompok Standar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEnableGroupedMode}
+                    className={`min-h-[38px] rounded-lg px-3 text-xs font-bold transition-colors ${
+                      skillMode === "grouped" ? "bg-white text-[#251813] shadow-2xs" : "text-[#4E3E36]"
+                    }`}
+                  >
+                    Kategori Kustom ({skillGroups.length})
+                  </button>
+                </div>
+              </div>
+
+              {skillMode === "grouped" ? (
+                <div className="grid gap-3.5">
+                  {skillGroups.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-[#C2B49E] bg-white p-6 text-center">
+                      <p className="text-sm font-bold text-[#251813]">Belum ada kategori keahlian kustom</p>
+                      <Button type="button" variant="secondary" className="mt-3 gap-1.5" onClick={addSkillGroup}>
+                        <Plus size={15} weight="bold" aria-hidden="true" />
+                        <span>Tambah Kategori Pertama</span>
+                      </Button>
+                    </div>
+                  ) : (
+                    skillGroups.map((group, gIdx) => (
+                      <div key={group.id} className="rounded-xl border border-[#D9CEBC] bg-white p-4 grid gap-3">
+                        <div className="flex items-center justify-between gap-2 border-b border-[#D9CEBC] pb-2">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[#59483F]">
+                            Kategori #{gIdx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeSkillGroup(group.id)}
+                            className="inline-flex items-center gap-1 min-h-[36px] px-2 text-xs font-bold text-[#7B1F14] hover:underline"
+                          >
+                            <Trash size={14} weight="duotone" aria-hidden="true" />
+                            <span>Hapus</span>
+                          </button>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-3 items-start">
+                          <Field label="Nama kategori" hint="Contoh: Programming, Database, Tools.">
+                            <TextInput
+                              value={group.category}
+                              onChange={(event) => updateSkillGroup(group.id, { category: event.target.value })}
+                              placeholder="Programming"
+                            />
+                          </Field>
+                          <Field
+                            label="Daftar skill dalam kategori ini"
+                            hint="Pisahkan dengan koma."
+                            className="sm:col-span-2"
+                          >
+                            <CommaListArea
+                              rows={2}
+                              values={group.items}
+                              onChangeValues={(vals) => updateSkillGroup(group.id, { items: vals })}
+                              placeholder="Python, Go, SQL, JavaScript, TypeScript"
+                            />
+                          </Field>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button type="button" variant="secondary" onClick={addSkillGroup} className="gap-1.5">
+                      <Plus size={15} weight="bold" aria-hidden="true" />
+                      <span>Tambah Kategori Keahlian</span>
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={handleSwitchToStandardMode}>
+                      Beralih ke 3 Kelompok Standar
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  <Field
+                    label="Keahlian teknis (Hard Skills)"
+                    hint="Pisahkan dengan koma atau baris baru. Contoh: SQL, Jaringan LAN/WAN, Pembukuan, React.js, Troubleshooting Hardware."
+                  >
+                    <CommaListArea
+                      rows={4}
+                      values={resume.skills.hardSkills}
+                      onChangeValues={(vals) => updateSkills("hardSkills", vals)}
+                      placeholder="SQL, HTML, CSS, JavaScript, Jaringan LAN/WAN, Stock Opname"
+                    />
+                  </Field>
+                  <Field
+                    label="Alat kerja & Software (Tools)"
+                    hint="Perangkat lunak yang pernah kamu operasikan. Contoh: Microsoft Excel, Microsoft Word, Accurate, Figma, Git."
+                  >
+                    <CommaListArea
+                      rows={3}
+                      values={resume.skills.tools}
+                      onChangeValues={(vals) => updateSkills("tools", vals)}
+                      placeholder="Microsoft Excel, Microsoft Word, Git, MySQL, Figma"
+                    />
+                  </Field>
+                  <Field
+                    label="Sikap & karakter kerja (Soft Skills)"
+                    hint="Karakter yang bisa kamu buktikan lewat contoh nyata di proyek atau organisasi saat wawancara."
+                  >
+                    <CommaListArea
+                      rows={3}
+                      values={resume.skills.softSkills}
+                      onChangeValues={(vals) => updateSkills("softSkills", vals)}
+                      placeholder="Komunikasi, Kerja Tim, Teliti, Pemecahan Masalah"
+                    />
+                  </Field>
+                </div>
+              )}
             </div>
           </SectionCard>
         ) : null}
