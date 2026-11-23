@@ -538,7 +538,12 @@ export const translateProfileToEnglish = (profile: ResumeProfile): ResumeProfile
     skills: {
       hardSkills: (profile.skills?.hardSkills ?? []).map((s) => translateFieldToEnglish(s, "skill")),
       tools: (profile.skills?.tools ?? []).map((s) => translateFieldToEnglish(s, "skill")),
-      softSkills: (profile.skills?.softSkills ?? []).map((s) => translateFieldToEnglish(s, "skill"))
+      softSkills: (profile.skills?.softSkills ?? []).map((s) => translateFieldToEnglish(s, "skill")),
+      groups: (profile.skills?.groups ?? []).map((group) => ({
+        ...group,
+        category: translateFieldToEnglish(group.category, "prose"),
+        items: (group.items ?? []).map((item) => translateFieldToEnglish(item, "skill"))
+      }))
     },
     certifications: (profile.certifications ?? []).map((c) => translateFieldToEnglish(c, "cert"))
   };

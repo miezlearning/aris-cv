@@ -7,6 +7,7 @@ import type {
   OrganizationItem,
   ProjectItem,
   ResumeProfile,
+  SkillGroup,
   Skills,
   WorkExperience
 } from "@/types/resume";
@@ -182,6 +183,19 @@ export const validateAnalyzeRequest = (raw: unknown): ValidationResult<{ resume:
 
   // Validate skills
   const rawSkills = (rawResume.skills && typeof rawResume.skills === "object" ? rawResume.skills : {}) as Record<string, unknown>;
+  const cleanGroups: SkillGroup[] | undefined = Array.isArray(rawSkills.groups)
+    ? rawSkills.groups.slice(0, 12).map((grp, idx) => {
+        const groupObj = (grp && typeof grp === "object" ? grp : {}) as Record<string, unknown>;
+        return {
+          id: sanitizeString(groupObj.id, 50) || `skill-grp-${idx + 1}`,
+          category: sanitizeString(groupObj.category, 80),
+          items: Array.isArray(groupObj.items)
+            ? groupObj.items.slice(0, 40).map((s) => sanitizeString(s, 120)).filter(Boolean)
+            : []
+        };
+      })
+    : undefined;
+
   const cleanSkills: Skills = {
     hardSkills: Array.isArray(rawSkills.hardSkills)
       ? rawSkills.hardSkills.slice(0, 60).map((s) => sanitizeString(s, 160)).filter(Boolean)
@@ -191,7 +205,8 @@ export const validateAnalyzeRequest = (raw: unknown): ValidationResult<{ resume:
       : [],
     tools: Array.isArray(rawSkills.tools)
       ? rawSkills.tools.slice(0, 60).map((s) => sanitizeString(s, 160)).filter(Boolean)
-      : []
+      : [],
+    ...(cleanGroups ? { groups: cleanGroups } : {})
   };
 
   const legacyCerts = Array.isArray(rawResume.certifications)

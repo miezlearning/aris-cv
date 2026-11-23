@@ -23,7 +23,8 @@ const buildResumeCorpus = (resume: ResumeProfile): ResumeCorpus => {
     [
       ...(resume.skills?.hardSkills ?? []),
       ...(resume.skills?.tools ?? []),
-      ...(resume.skills?.softSkills ?? [])
+      ...(resume.skills?.softSkills ?? []),
+      ...(resume.skills?.groups ?? []).flatMap((group) => group.items ?? [])
     ].join(" ")
   );
   const workText = normalizeForMatch(
@@ -303,9 +304,11 @@ export const evaluateFormatQuality = (resume: ResumeProfile): { score: number; c
     (w) => isValidDateToken(w.startDate) && (w.isCurrent || isValidDateToken(w.endDate))
   );
 
-  const skillCount =
+  const groupedSkillItems = (resume.skills?.groups ?? []).flatMap((group) => group.items ?? []).filter((s) => s.trim());
+  const flatSkillCount =
     (resume.skills?.hardSkills ?? []).filter((s) => s.trim()).length +
     (resume.skills?.tools ?? []).filter((s) => s.trim()).length;
+  const skillCount = Math.max(flatSkillCount, groupedSkillItems.length);
 
   const hasEducation = (resume.education ?? []).some((e) => e.institution.trim() || e.degree.trim() || e.fieldOfStudy.trim());
   const hasGpaOrThesis = (resume.education ?? []).some((e) => Boolean(e.gpa?.trim() || e.thesisTitle?.trim()));
