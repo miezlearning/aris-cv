@@ -20,7 +20,13 @@ import { emptyAnalytics, emptyJobTarget, emptyResumeProfile, createId } from "@/
 import { analyzeMatch } from "@/lib/ats/scorer";
 import { computeProfileContentHash, translateProfileDeterministic } from "@/lib/ats/translator";
 import { normalizeForMatch } from "@/lib/ats/synonyms";
-import { DEFAULT_WEBLLM_MODEL_ID, type LocalAiProvider } from "@/lib/local-ai/models";
+import {
+  DEFAULT_WEBLLM_MODEL_ID,
+  type LocalAiProvider,
+  type RestApiFormat,
+  type RestApiPresetId
+} from "@/lib/local-ai/models";
+import { readSessionApiKey, saveSessionApiKey } from "@/lib/local-ai/engine";
 
 export type MasterTab =
   | "contact"
@@ -44,7 +50,7 @@ const VALID_TABS: MasterTab[] = [
 ];
 
 const VALID_TEMPLATES: CvTemplate[] = ["compact_centered", "classic_editorial", "executive_left"];
-const VALID_LOCAL_AI_MODES: LocalAiProvider[] = ["off", "webllm", "ollama", "lmstudio"];
+const VALID_LOCAL_AI_MODES: LocalAiProvider[] = ["off", "webllm", "rest_api", "ollama", "lmstudio"];
 
 export type CachedAiTranslation = {
   profile: ResumeProfile;
@@ -73,16 +79,28 @@ type AppState = {
     providerLabel?: string
   ) => void;
   applyTranslationToEditor: (lang: "id" | "en") => void;
+  aiEnabled: boolean;
   localAiMode: LocalAiProvider;
   webLlmModelId: string;
   localServerUrl: string;
   localServerModel: string;
+  restApiPreset: RestApiPresetId;
+  restApiFormat: RestApiFormat;
+  restApiUrl: string;
+  restApiModel: string;
+  restApiKey: string;
   setLocalAiConfig: (
     patch: Partial<{
+      aiEnabled: boolean;
       localAiMode: LocalAiProvider;
       webLlmModelId: string;
       localServerUrl: string;
       localServerModel: string;
+      restApiPreset: RestApiPresetId;
+      restApiFormat: RestApiFormat;
+      restApiUrl: string;
+      restApiModel: string;
+      restApiKey: string;
     }>
   ) => void;
   localAiStatus: "idle" | "downloading" | "ready" | "error";
@@ -332,11 +350,22 @@ export const useCvStore = create<AppState>()(
           aiTranslatedProfiles: {}
         });
       },
+      aiEnabled: false,
       localAiMode: "off",
       webLlmModelId: DEFAULT_WEBLLM_MODEL_ID,
       localServerUrl: "http://localhost:11434",
       localServerModel: "",
-      setLocalAiConfig: (patch) => set((state) => ({ ...state, ...patch })),
+      restApiPreset: "gemini",
+      restApiFormat: "gemini",
+      restApiUrl: "https://generativelanguage.googleapis.com/v1beta",
+      restApiModel: "gemini-2.5-flash",
+      restApiKey: "",
+      setLocalAiConfig: (patch) => {
+        if (typeof patch.restApiKey === "string") {
+          saveSessionApiKey(patch.restApiKey);
+        }
+        set((state) => ({ ...state, ...patch }));
+      },
       localAiStatus: "idle",
       localAiProgress: 0,
       localAiProgressText: "",
@@ -764,18 +793,28 @@ export const useCvStore = create<AppState>()(
         }
       },
       rejectSuggestion: (id) => getState().updateSuggestion(id, { status: "rejected" }),
-      resetAll: () =>
+      resetAll: () => {
+        saveSessionApiKey("");
         set({
           resumeProfile: emptyResumeProfile(),
           jobTarget: emptyJobTarget(),
           matchAnalytics: emptyAnalytics(),
           suggestions: [],
           aiTranslatedProfiles: {},
+          aiEnabled: false,
+          localAiMode: "off",
+          localAiStatus: "idle",
+          localAiProgress: 0,
+          localAiProgressText: "",
+          localAiLoadedModel: "",
+          localAiError: "",
+          restApiKey: "",
           checkedAdminItems: {},
           activeMasterTab: "contact",
           previewOpenDesktop: true,
           modalPreviewOpen: false
-        })
+        });
+      }
     }),
     {
       name: "quicktailor-cv-store",
@@ -789,10 +828,15 @@ export const useCvStore = create<AppState>()(
         cvLanguage: state.cvLanguage,
         cvTemplate: state.cvTemplate,
         autoTranslateContent: state.autoTranslateContent,
+        aiEnabled: state.aiEnabled,
         localAiMode: state.localAiMode,
         webLlmModelId: state.webLlmModelId,
         localServerUrl: state.localServerUrl,
         localServerModel: state.localServerModel,
+        restApiPreset: state.restApiPreset,
+        restApiFormat: state.restApiFormat,
+        restApiUrl: state.restApiUrl,
+        restApiModel: state.restApiModel,
         checkedAdminItems: state.checkedAdminItems,
         previewOpenDesktop: state.previewOpenDesktop
       }),
@@ -843,6 +887,9 @@ export const useCvStore = create<AppState>()(
           ? (persisted.localAiMode as LocalAiProvider)
           : "off";
 
+        const restApiPreset = persisted.restApiPreset ?? "gemini";
+        const restApiFormat = persisted.restApiFormat ?? "gemini";
+
         return {
           ...currentState,
           ...persisted,
@@ -854,10 +901,16 @@ export const useCvStore = create<AppState>()(
           cvTemplate,
           autoTranslateContent: persisted.autoTranslateContent ?? true,
           aiTranslatedProfiles: {},
+          aiEnabled: Boolean(persisted.aiEnabled),
           localAiMode,
           webLlmModelId: persisted.webLlmModelId || DEFAULT_WEBLLM_MODEL_ID,
           localServerUrl: persisted.localServerUrl || "http://localhost:11434",
           localServerModel: persisted.localServerModel || "",
+          restApiPreset,
+          restApiFormat,
+          restApiUrl: persisted.restApiUrl || "https://generativelanguage.googleapis.com/v1beta",
+          restApiModel: persisted.restApiModel || "gemini-2.5-flash",
+          restApiKey: "",
           localAiStatus: "idle",
           localAiProgress: 0,
           localAiProgressText: "",
@@ -867,7 +920,11 @@ export const useCvStore = create<AppState>()(
         };
       },
       onRehydrateStorage: () => (state) => {
-        state?.setHydrated(true);
+        if (state) {
+          const sessionKey = readSessionApiKey();
+          if (sessionKey) state.setLocalAiConfig({ restApiKey: sessionKey });
+          state.setHydrated(true);
+        }
       }
     }
   )
