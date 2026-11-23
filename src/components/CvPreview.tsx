@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowsOutSimple, FileText, MagnifyingGlassPlus, Translate } from "@phosphor-icons/react";
-import { computeProfileContentHash } from "@/lib/ats/translator";
+import { ArrowsOutSimple, ArrowsSplit, FileText, MagnifyingGlassPlus, Translate } from "@phosphor-icons/react";
+import { TranslationComparePanel } from "@/components/TranslationComparePanel";
+import { useLiveAts } from "@/lib/live-ats";
 import {
   buildResumeDocument,
-  detectResumeLanguage,
   estimateA4Pages,
-  getMissingParts,
-  resolveCvLanguage
+  getMissingParts
 } from "@/lib/resume-document";
 import { useCvStore, type MasterTab } from "@/lib/store";
 import type { CvLanguage, CvTemplate } from "@/types/resume";
@@ -35,32 +34,29 @@ export const CvPreview = ({
   highlightSection?: MasterTab;
 }) => {
   const resume = useCvStore((state) => state.resumeProfile);
-  const analytics = useCvStore((state) => state.matchAnalytics);
   const cvLanguage = useCvStore((state) => state.cvLanguage);
   const setCvLanguage = useCvStore((state) => state.setCvLanguage);
   const cvTemplate = useCvStore((state) => state.cvTemplate);
   const setCvTemplate = useCvStore((state) => state.setCvTemplate);
   const autoTranslateContent = useCvStore((state) => state.autoTranslateContent);
   const setAutoTranslateContent = useCvStore((state) => state.setAutoTranslateContent);
-  const aiTranslatedProfiles = useCvStore((state) => state.aiTranslatedProfiles);
+  const preTranslationBackup = useCvStore((state) => state.preTranslationBackup);
   const applyTranslationToEditor = useCvStore((state) => state.applyTranslationToEditor);
 
-  const [zoomMode, setZoomMode] = useState<"fit" | "full">("fit");
+  const {
+    sourceLang,
+    activeLang,
+    translatedOverride,
+    isTranslatedView,
+    translationAudit
+  } = useLiveAts();
 
-  const sourceLang = detectResumeLanguage(resume);
-  const activeLang = resolveCvLanguage(
-    cvLanguage,
-    analytics.hasAnalyzed ? analytics.detectedLanguage : undefined,
-    resume
-  );
-  const currentHash = computeProfileContentHash(resume);
-  const cachedTranslation = aiTranslatedProfiles[activeLang];
-  const translatedOverride =
-    cachedTranslation && cachedTranslation.sourceHash === currentHash ? cachedTranslation.profile : null;
+  const [zoomMode, setZoomMode] = useState<"fit" | "full">("fit");
+  const [compareOpen, setCompareOpen] = useState(false);
 
   const document = buildResumeDocument(resume, activeLang, {
     template: cvTemplate,
-    translateContent: autoTranslateContent,
+    translateContent: isTranslatedView,
     translatedOverride
   });
   const pageInfo = estimateA4Pages(document);
@@ -136,6 +132,7 @@ export const CvPreview = ({
               <button
                 key={langOpt}
                 type="button"
+                title={langOpt === "auto" ? "Gunakan bahasa asli teks CV" : `Terjemahkan ke ${langOpt.toUpperCase()}`}
                 onClick={() => setCvLanguage(langOpt)}
                 aria-pressed={cvLanguage === langOpt}
                 className={`min-h-[32px] rounded-md px-2 transition-colors ${
@@ -144,7 +141,7 @@ export const CvPreview = ({
                     : "text-[#4E3E36] hover:text-[#251813]"
                 }`}
               >
-                {langOpt === "auto" ? "Auto" : langOpt.toUpperCase()}
+                {langOpt === "auto" ? "Asli" : langOpt.toUpperCase()}
               </button>
             ))}
           </div>
@@ -191,33 +188,53 @@ export const CvPreview = ({
       </div>
 
       {/* Ribbon info terjemahan full-content 2 arah ID <-> EN */}
-      {!document.isEmpty && (activeLang !== sourceLang || cvLanguage !== "auto" || Boolean(translatedOverride)) ? (
+      {!document.isEmpty && (activeLang !== sourceLang || cvLanguage !== "auto" || Boolean(translatedOverride) || Boolean(preTranslationBackup)) ? (
         <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#94D1DF] bg-[#ECF9FC] px-3 py-2 text-xs">
-          <span className="inline-flex items-center gap-1.5 font-bold text-[#124959]">
-            <Translate size={15} weight="duotone" aria-hidden="true" />
-            <span>
-              {activeLang === "en"
-                ? autoTranslateContent
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1.5 font-bold text-[#124959]">
+              <Translate size={15} weight="duotone" aria-hidden="true" />
+              <span>
+                {activeLang === "en"
+                  ? isTranslatedView
+                    ? translatedOverride
+                      ? "Mode ATS English: diperhalus / disunting"
+                      : "Mode ATS English: diterjemahkan lokal"
+                    : "Mode ATS English: hanya judul seksi"
+                  : isTranslatedView
                   ? translatedOverride
-                    ? "Mode ATS English: judul & isi diperhalus AI"
-                    : "Mode ATS English: judul & seluruh isi CV diterjemahkan"
-                  : "Mode ATS English: hanya judul seksi (isi tetap asli)"
-                : autoTranslateContent
-                ? translatedOverride
-                  ? "Mode Bahasa Indonesia: judul & isi diperhalus AI"
-                  : "Mode Bahasa Indonesia: judul & seluruh isi CV diterjemahkan"
-                : "Mode Bahasa Indonesia: hanya judul seksi (isi tetap asli)"}
+                    ? "Mode Indonesia: diperhalus / disunting"
+                    : "Mode Indonesia: diterjemahkan lokal"
+                  : "Mode Indonesia: hanya judul seksi"}
+              </span>
             </span>
-          </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setAutoTranslateContent(!autoTranslateContent)}
-              className="rounded-md border border-[#94D1DF] bg-white px-2 py-1 text-[11px] font-bold text-[#124959] hover:bg-[#D6F3FA] transition-colors"
-            >
-              {autoTranslateContent ? "Pakai Teks Asli" : "Terjemahkan Isi"}
-            </button>
-            {autoTranslateContent ? (
+            {translationAudit && translationAudit.partialCount > 0 ? (
+              <span className="rounded-md border border-[#DFC25A] bg-[#FFF0A8] px-1.5 py-0.5 text-[10.5px] font-bold text-[#4A3A2E]">
+                {translationAudit.partialCount} belum penuh
+              </span>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            {isTranslatedView || Boolean(preTranslationBackup) ? (
+              <button
+                type="button"
+                onClick={() => setCompareOpen(true)}
+                className="inline-flex items-center gap-1 rounded-md border border-[#124959]/40 bg-white px-2 py-1 text-[11px] font-bold text-[#124959] hover:bg-[#D6F3FA] transition-colors"
+              >
+                <ArrowsSplit size={12} weight="bold" aria-hidden="true" />
+                <span>Teks Asli vs Translate</span>
+              </button>
+            ) : null}
+            {cvLanguage !== "auto" ? (
+              <button
+                type="button"
+                onClick={() => setAutoTranslateContent(!autoTranslateContent)}
+                className="rounded-md border border-[#94D1DF] bg-white px-2 py-1 text-[11px] font-bold text-[#124959] hover:bg-[#D6F3FA] transition-colors"
+              >
+                {autoTranslateContent ? "Pakai Teks Asli" : "Terjemahkan Isi"}
+              </button>
+            ) : null}
+            {isTranslatedView ? (
               <button
                 type="button"
                 onClick={() => applyTranslationToEditor(activeLang)}
@@ -472,6 +489,7 @@ export const CvPreview = ({
           </p>
         )}
       </div>
+      <TranslationComparePanel open={compareOpen} onClose={() => setCompareOpen(false)} />
     </aside>
   );
 };
