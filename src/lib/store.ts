@@ -18,7 +18,12 @@ import type {
 } from "@/types/resume";
 import { emptyAnalytics, emptyJobTarget, emptyResumeProfile, createId } from "@/lib/defaults";
 import { analyzeMatch } from "@/lib/ats/scorer";
-import { computeProfileContentHash, translateProfileDeterministic } from "@/lib/ats/translator";
+import {
+  applyTranslatedFieldEdit,
+  computeProfileContentHash,
+  translateProfileDeterministic,
+  type TranslatedFieldPath
+} from "@/lib/ats/translator";
 import { normalizeForMatch } from "@/lib/ats/synonyms";
 import {
   DEFAULT_WEBLLM_MODEL_ID,
@@ -58,6 +63,12 @@ export type CachedAiTranslation = {
   providerLabel: string;
 };
 
+export type PreTranslationBackup = {
+  profile: ResumeProfile;
+  savedAt: string;
+  targetLang: "id" | "en";
+};
+
 type AppState = {
   resumeProfile: ResumeProfile;
   jobTarget: JobTarget;
@@ -79,6 +90,10 @@ type AppState = {
     providerLabel?: string
   ) => void;
   applyTranslationToEditor: (lang: "id" | "en") => void;
+  updateTranslatedField: (lang: "id" | "en", path: TranslatedFieldPath, value: string) => void;
+  preTranslationBackup: PreTranslationBackup | null;
+  restorePreTranslationBackup: () => void;
+  addedGapTerms: string[];
   aiEnabled: boolean;
   localAiMode: LocalAiProvider;
   webLlmModelId: string;
@@ -158,6 +173,8 @@ type AppState = {
   removeSkillGroup: (id: string) => void;
   setSkillGroups: (groups: SkillGroup[]) => void;
   addSkillItem: (field: "hardSkills" | "softSkills" | "tools", skill: string) => void;
+  removeSkillItem: (skill: string) => void;
+  toggleSkillItem: (field: "hardSkills" | "softSkills" | "tools", skill: string) => boolean;
   setResumeProfile: (profile: ResumeProfile) => void;
   updateJobTarget: (patch: Partial<JobTarget>) => void;
   setAnalytics: (analytics: MatchAnalytics) => void;
@@ -320,6 +337,8 @@ export const useCvStore = create<AppState>()(
       autoTranslateContent: true,
       setAutoTranslateContent: (enabled) => set({ autoTranslateContent: enabled }),
       aiTranslatedProfiles: {},
+      preTranslationBackup: null,
+      addedGapTerms: [],
       setAiTranslatedProfile: (lang, profile, sourceHash, providerLabel = "AI Lokal") =>
         set((state) => {
           const next = { ...state.aiTranslatedProfiles };
@@ -330,6 +349,26 @@ export const useCvStore = create<AppState>()(
           }
           return { aiTranslatedProfiles: next };
         }),
+      updateTranslatedField: (lang, path, value) => {
+        const state = getState();
+        const currentHash = computeProfileContentHash(state.resumeProfile);
+        const cached = state.aiTranslatedProfiles[lang];
+        const baseProfile =
+          cached && cached.sourceHash === currentHash
+            ? cached.profile
+            : translateProfileDeterministic(state.resumeProfile, lang);
+        const updated = applyTranslatedFieldEdit(baseProfile, path, value);
+        set((curr) => ({
+          aiTranslatedProfiles: {
+            ...curr.aiTranslatedProfiles,
+            [lang]: {
+              profile: updated,
+              sourceHash: currentHash,
+              providerLabel: cached?.providerLabel ?? "Suntingan Manual"
+            }
+          }
+        }));
+      },
       applyTranslationToEditor: (lang) => {
         const state = getState();
         const currentHash = computeProfileContentHash(state.resumeProfile);
@@ -344,10 +383,26 @@ export const useCvStore = create<AppState>()(
                 }
               }
             : translateProfileDeterministic(state.resumeProfile, lang);
+        const backup = state.preTranslationBackup ?? {
+          profile: state.resumeProfile,
+          savedAt: new Date().toISOString(),
+          targetLang: lang
+        };
         set({
           resumeProfile: nextProfile,
+          preTranslationBackup: backup,
           cvLanguage: lang,
           aiTranslatedProfiles: {}
+        });
+      },
+      restorePreTranslationBackup: () => {
+        const backup = getState().preTranslationBackup;
+        if (!backup) return;
+        set({
+          resumeProfile: backup.profile,
+          preTranslationBackup: null,
+          aiTranslatedProfiles: {},
+          cvLanguage: "auto"
         });
       },
       aiEnabled: false,
@@ -716,7 +771,8 @@ export const useCvStore = create<AppState>()(
       addSkillItem: (field, skill) => {
         const clean = skill.trim();
         if (!clean) return;
-        const currentProfile = getState().resumeProfile;
+        const state = getState();
+        const currentProfile = state.resumeProfile;
         const current = currentProfile.skills[field] ?? [];
         const normClean = normalizeForMatch(clean);
         const existsFlat = current.some((item) => normalizeForMatch(item) === normClean);
@@ -741,11 +797,16 @@ export const useCvStore = create<AppState>()(
           }
         }
 
-        set((state) => ({
+        const nextGapTerms = state.addedGapTerms.some((t) => normalizeForMatch(t) === normClean)
+          ? state.addedGapTerms
+          : [...state.addedGapTerms, clean];
+
+        set((curr) => ({
+          addedGapTerms: nextGapTerms,
           resumeProfile: {
-            ...state.resumeProfile,
+            ...curr.resumeProfile,
             skills: {
-              ...state.resumeProfile.skills,
+              ...curr.resumeProfile.skills,
               [field]: existsFlat ? current : [...current, clean],
               groups: nextGroups
             }
@@ -757,7 +818,56 @@ export const useCvStore = create<AppState>()(
           set({ matchAnalytics: analyzeMatch(resumeProfile, jobTarget) });
         }
       },
-      setResumeProfile: (profile) => set({ resumeProfile: profile }),
+      removeSkillItem: (skill) => {
+        const normClean = normalizeForMatch(skill);
+        if (!normClean) return;
+        const state = getState();
+        const filterOut = (arr: string[] | undefined) =>
+          (arr ?? []).filter((item) => normalizeForMatch(item) !== normClean);
+
+        set((curr) => ({
+          addedGapTerms: curr.addedGapTerms.filter((t) => normalizeForMatch(t) !== normClean),
+          resumeProfile: {
+            ...curr.resumeProfile,
+            skills: {
+              ...curr.resumeProfile.skills,
+              hardSkills: filterOut(curr.resumeProfile.skills.hardSkills),
+              softSkills: filterOut(curr.resumeProfile.skills.softSkills),
+              tools: filterOut(curr.resumeProfile.skills.tools),
+              groups: (curr.resumeProfile.skills.groups ?? []).map((grp) => ({
+                ...grp,
+                items: filterOut(grp.items)
+              }))
+            }
+          }
+        }));
+
+        const { matchAnalytics, resumeProfile, jobTarget } = state;
+        if (matchAnalytics.hasAnalyzed && jobTarget.rawDescription.trim()) {
+          set({ matchAnalytics: analyzeMatch(getState().resumeProfile, jobTarget) });
+        }
+      },
+      toggleSkillItem: (field, skill) => {
+        const clean = skill.trim();
+        const normClean = normalizeForMatch(clean);
+        if (!normClean) return false;
+        const { skills } = getState().resumeProfile;
+        const allSkillStrings = [
+          ...(skills.hardSkills ?? []),
+          ...(skills.tools ?? []),
+          ...(skills.softSkills ?? []),
+          ...(skills.groups ?? []).flatMap((g) => g.items ?? [])
+        ];
+        const exists = allSkillStrings.some((item) => normalizeForMatch(item) === normClean);
+        if (exists) {
+          getState().removeSkillItem(clean);
+          return false;
+        }
+        getState().addSkillItem(field, clean);
+        return true;
+      },
+      setResumeProfile: (profile) =>
+        set({ resumeProfile: profile, preTranslationBackup: null, addedGapTerms: [], aiTranslatedProfiles: {} }),
       updateJobTarget: (patch) =>
         set((state) => ({
           jobTarget: { ...state.jobTarget, ...patch }
@@ -801,6 +911,8 @@ export const useCvStore = create<AppState>()(
           matchAnalytics: emptyAnalytics(),
           suggestions: [],
           aiTranslatedProfiles: {},
+          preTranslationBackup: null,
+          addedGapTerms: [],
           aiEnabled: false,
           localAiMode: "off",
           localAiStatus: "idle",
@@ -828,6 +940,9 @@ export const useCvStore = create<AppState>()(
         cvLanguage: state.cvLanguage,
         cvTemplate: state.cvTemplate,
         autoTranslateContent: state.autoTranslateContent,
+        aiTranslatedProfiles: state.aiTranslatedProfiles,
+        preTranslationBackup: state.preTranslationBackup,
+        addedGapTerms: state.addedGapTerms,
         aiEnabled: state.aiEnabled,
         localAiMode: state.localAiMode,
         webLlmModelId: state.webLlmModelId,
@@ -850,7 +965,15 @@ export const useCvStore = create<AppState>()(
               ...baseAnalytics,
               ...rawAnalytics,
               hasAnalyzed: Boolean(rawAnalytics.hasAnalyzed || (rawAnalytics.keywordMatches?.length ?? 0) > 0),
-              breakdown: rawAnalytics.breakdown ?? baseAnalytics.breakdown,
+              breakdown: {
+                ...baseAnalytics.breakdown,
+                ...(rawAnalytics.breakdown ?? {}),
+                weights: {
+                  ...baseAnalytics.breakdown.weights,
+                  ...(rawAnalytics.breakdown?.weights ?? {})
+                }
+              },
+              languageAlignment: rawAnalytics.languageAlignment ?? baseAnalytics.languageAlignment,
               qualificationMatches: Array.isArray(rawAnalytics.qualificationMatches)
                 ? rawAnalytics.qualificationMatches
                 : [],
@@ -900,7 +1023,12 @@ export const useCvStore = create<AppState>()(
           cvLanguage: persisted.cvLanguage ?? "auto",
           cvTemplate,
           autoTranslateContent: persisted.autoTranslateContent ?? true,
-          aiTranslatedProfiles: {},
+          aiTranslatedProfiles:
+            persisted.aiTranslatedProfiles && typeof persisted.aiTranslatedProfiles === "object"
+              ? persisted.aiTranslatedProfiles
+              : {},
+          preTranslationBackup: persisted.preTranslationBackup ?? null,
+          addedGapTerms: Array.isArray(persisted.addedGapTerms) ? persisted.addedGapTerms : [],
           aiEnabled: Boolean(persisted.aiEnabled),
           localAiMode,
           webLlmModelId: persisted.webLlmModelId || DEFAULT_WEBLLM_MODEL_ID,
