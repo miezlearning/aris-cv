@@ -303,13 +303,23 @@ export const emptyAnalytics = (): MatchAnalytics => ({
     hardSkillsScore: 0,
     educationAndDomainScore: 0,
     structureAndImpactScore: 0,
+    languageAlignmentScore: 100,
     softSkillsScore: 0,
     weights: {
-      hardSkills: 0.55,
-      educationAndDomain: 0.25,
-      structureAndImpact: 0.15,
+      hardSkills: 0.45,
+      educationAndDomain: 0.2,
+      structureAndImpact: 0.2,
+      languageAlignment: 0.1,
       softSkills: 0.05
     }
+  },
+  languageAlignment: {
+    score: 100,
+    cvLanguage: "id",
+    activeOutputLanguage: "id",
+    jobLanguage: "id",
+    status: "aligned",
+    note: ""
   },
   qualificationMatches: [],
   administrativeItems: [],
