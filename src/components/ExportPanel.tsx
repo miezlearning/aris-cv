@@ -20,7 +20,7 @@ import { LocalAiControlPanel } from "@/components/LocalAiControlPanel";
 import { Button, SectionCard } from "@/components/ui";
 import { computeProfileContentHash } from "@/lib/ats/translator";
 import { exportDocx, exportPdf, exportTextFallback } from "@/lib/exporters";
-import type { ActiveLocalAiConfig } from "@/lib/local-ai/engine";
+import { resolveActiveAiConfig } from "@/lib/local-ai/engine";
 import { translateProfileWithLocalAi } from "@/lib/local-ai/tasks";
 import {
   buildResumeDocument,
@@ -94,22 +94,33 @@ export const ExportPanel = () => {
   const setAiTranslatedProfile = useCvStore((state) => state.setAiTranslatedProfile);
   const applyTranslationToEditor = useCvStore((state) => state.applyTranslationToEditor);
 
+  const aiEnabled = useCvStore((state) => state.aiEnabled);
   const localAiMode = useCvStore((state) => state.localAiMode);
   const localAiStatus = useCvStore((state) => state.localAiStatus);
   const webLlmModelId = useCvStore((state) => state.webLlmModelId);
   const localServerUrl = useCvStore((state) => state.localServerUrl);
   const localServerModel = useCvStore((state) => state.localServerModel);
+  const restApiFormat = useCvStore((state) => state.restApiFormat);
+  const restApiUrl = useCvStore((state) => state.restApiUrl);
+  const restApiModel = useCvStore((state) => state.restApiModel);
+  const restApiKey = useCvStore((state) => state.restApiKey);
 
   const [message, setMessage] = useState("");
   const [translateProgress, setTranslateProgress] = useState("");
   const [busy, setBusy] = useState<"pdf" | "docx" | "txt" | "translate" | "">("");
 
-  const activeLocalConfig: ActiveLocalAiConfig | null =
-    localAiStatus === "ready" && localAiMode === "webllm"
-      ? { mode: "webllm", modelId: webLlmModelId }
-      : localAiStatus === "ready" && (localAiMode === "ollama" || localAiMode === "lmstudio")
-      ? { mode: localAiMode, baseUrl: localServerUrl, modelId: localServerModel }
-      : null;
+  const activeLocalConfig = resolveActiveAiConfig({
+    aiEnabled,
+    localAiStatus,
+    localAiMode,
+    webLlmModelId,
+    localServerUrl,
+    localServerModel,
+    restApiFormat,
+    restApiUrl,
+    restApiModel,
+    restApiKey
+  });
 
   const sourceLang = detectResumeLanguage(resume);
   const activeLang = resolveCvLanguage(
@@ -391,12 +402,11 @@ export const ExportPanel = () => {
                 </Button>
               </div>
             ) : null}
-
-            <div className="pt-1">
-              <LocalAiControlPanel compact contextLabel="Terjemahan 2 Arah ID-EN" />
-            </div>
           </div>
         </div>
+
+        {/* Toggle Ringkas Asisten AI untuk Terjemahan */}
+        <LocalAiControlPanel compact contextLabel="Terjemahan 2 Arah" />
 
         {/* Peringatan jika CV masih kosong */}
         {document.isEmpty ? (
