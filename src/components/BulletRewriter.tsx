@@ -16,7 +16,7 @@ import { LocalAiControlPanel } from "@/components/LocalAiControlPanel";
 import { Button, EmptyState, SectionCard, Tag, TextArea } from "@/components/ui";
 import { Reveal } from "@/components/Reveal";
 import { FRESH_GRAD_XYZ_EXAMPLES } from "@/lib/analyzer";
-import type { ActiveLocalAiConfig } from "@/lib/local-ai/engine";
+import { resolveActiveAiConfig } from "@/lib/local-ai/engine";
 import { rewriteBulletWithLocalAi, tailorSummaryWithLocalAi } from "@/lib/local-ai/tasks";
 import { resolveCvLanguage } from "@/lib/resume-document";
 import { useCvStore } from "@/lib/store";
@@ -45,11 +45,16 @@ export const BulletRewriter = () => {
   const job = useCvStore((state) => state.jobTarget);
   const cvLanguage = useCvStore((state) => state.cvLanguage);
 
+  const aiEnabled = useCvStore((state) => state.aiEnabled);
   const localAiMode = useCvStore((state) => state.localAiMode);
   const localAiStatus = useCvStore((state) => state.localAiStatus);
   const webLlmModelId = useCvStore((state) => state.webLlmModelId);
   const localServerUrl = useCvStore((state) => state.localServerUrl);
   const localServerModel = useCvStore((state) => state.localServerModel);
+  const restApiFormat = useCvStore((state) => state.restApiFormat);
+  const restApiUrl = useCvStore((state) => state.restApiUrl);
+  const restApiModel = useCvStore((state) => state.restApiModel);
+  const restApiKey = useCvStore((state) => state.restApiKey);
 
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
@@ -61,12 +66,18 @@ export const BulletRewriter = () => {
   const [summaryStatus, setSummaryStatus] = useState("");
   const [batchProgress, setBatchProgress] = useState("");
 
-  const activeLocalConfig: ActiveLocalAiConfig | null =
-    localAiStatus === "ready" && localAiMode === "webllm"
-      ? { mode: "webllm", modelId: webLlmModelId }
-      : localAiStatus === "ready" && (localAiMode === "ollama" || localAiMode === "lmstudio")
-      ? { mode: localAiMode, baseUrl: localServerUrl, modelId: localServerModel }
-      : null;
+  const activeLocalConfig = resolveActiveAiConfig({
+    aiEnabled,
+    localAiStatus,
+    localAiMode,
+    webLlmModelId,
+    localServerUrl,
+    localServerModel,
+    restApiFormat,
+    restApiUrl,
+    restApiModel,
+    restApiKey
+  });
 
   const targetLang = resolveCvLanguage(
     cvLanguage,
@@ -195,131 +206,122 @@ export const BulletRewriter = () => {
       accent="sage"
       icon={<PencilLine size={20} weight="duotone" />}
     >
-      {/* Panel Model AI Lokal (WebLLM Downloadable + Ollama / LM Studio) */}
-      <div className="mb-4">
-        <LocalAiControlPanel contextLabel="Penyesuaian Kalimat Lowongan" />
-      </div>
+      {/* Slim Toggle Asisten AI & Ringkasan */}
+      <div className="mb-4 grid gap-2.5">
+        <LocalAiControlPanel contextLabel="Optimasi Kalimat" />
 
-      {/* Penyesuaian Ringkasan Profil ke Lowongan */}
-      {analytics.hasAnalyzed && resume.summary.trim() ? (
-        <div className="mb-4 rounded-xl border border-[#D9CEBC] bg-white p-4 grid gap-3">
+        {analytics.hasAnalyzed && resume.summary.trim() ? (
+          <div className="rounded-xl border border-[#D9CEBC] bg-white px-3.5 py-2.5 grid gap-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs sm:text-sm font-bold text-[#251813]">
+                  Selaraskan Ringkasan Profil dengan{" "}
+                  <span className="text-[#144C32]">{job.jobTitle || "Lowongan Langkah 2"}</span>
+                </p>
+                <p className="text-xs text-[#59483F]">
+                  Menonjolkan keahlian aslimu tanpa mengarang pengalaman baru.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={summaryBusy}
+                onClick={handleTailorSummary}
+                className="min-h-[38px] text-xs gap-1.5"
+              >
+                <Sparkle size={14} weight="duotone" aria-hidden="true" />
+                <span>{summaryBusy ? "Menyusun..." : "Sesuaikan Ringkasan"}</span>
+              </Button>
+            </div>
+
+            {summaryStatus ? (
+              <p className="rounded-lg border border-[#94D1DF] bg-[#ECF9FC] px-3 py-1.5 text-xs font-semibold text-[#124959]">
+                {summaryStatus}
+              </p>
+            ) : null}
+
+            {summaryDraft ? (
+              <div className="grid gap-2 pt-0.5">
+                <TextArea
+                  rows={3}
+                  value={summaryDraft}
+                  onChange={(event) => setSummaryDraft(event.target.value)}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      updateSummary(summaryDraft);
+                      setSummaryDraft("");
+                      setSummaryStatus("Ringkasan profil berhasil diperbarui di CV kamu.");
+                    }}
+                    className="min-h-[38px] text-xs gap-1.5"
+                  >
+                    <CheckCircle size={14} weight="duotone" aria-hidden="true" />
+                    <span>Terapkan ke Ringkasan CV</span>
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => setSummaryDraft("")}>
+                    Batal
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Panduan Google XYZ / STAR Ringkas */}
+        <div className="rounded-xl border border-[#D9CEBC] bg-[#FAF5E8] px-3.5 py-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-bold text-[#251813]">Penyesuaian Ringkasan Profil ke Lowongan</p>
-              <p className="text-xs text-[#59483F] mt-0.5">
-                Menonjolkan keahlian aslimu yang relevan dengan{" "}
-                <span className="font-bold text-[#251813]">{job.jobTitle || "lowongan Langkah 2"}</span> (bahasa{" "}
-                {targetLang === "en" ? "English ATS" : "Indonesia"}).
+            <div className="flex items-center gap-2">
+              <Lightbulb size={16} weight="duotone" className="text-[#4A3A2E] shrink-0" aria-hidden="true" />
+              <p className="text-xs sm:text-[13px] font-semibold text-[#251813]">
+                Pola Google XYZ: Kata kerja aktif + ruang lingkup + alat + hasil terukur nyata
               </p>
             </div>
-            <Button
+            <button
               type="button"
-              variant="secondary"
-              disabled={summaryBusy}
-              onClick={handleTailorSummary}
-              className="gap-1.5"
+              onClick={() => setExamplesOpen((prev) => !prev)}
+              aria-expanded={examplesOpen}
+              className="inline-flex items-center gap-1 min-h-[34px] rounded-lg border border-[#D9CEBC] bg-white px-2.5 text-xs font-bold text-[#251813] hover:bg-[#FFF8DF]"
             >
-              <Sparkle size={15} weight="duotone" aria-hidden="true" />
-              <span>{summaryBusy ? "Menyusun..." : "Sesuaikan Ringkasan dengan AI"}</span>
-            </Button>
-          </div>
-
-          {summaryStatus ? (
-            <p className="rounded-lg border border-[#94D1DF] bg-[#ECF9FC] px-3 py-2 text-xs font-semibold text-[#124959]">
-              {summaryStatus}
-            </p>
-          ) : null}
-
-          {summaryDraft ? (
-            <div className="grid gap-2.5 pt-1">
-              <TextArea
-                rows={3}
-                value={summaryDraft}
-                onChange={(event) => setSummaryDraft(event.target.value)}
+              <span>{examplesOpen ? "Tutup Contoh" : "Lihat Contoh"}</span>
+              <CaretDown
+                size={13}
+                weight="bold"
+                className={`transition-transform duration-200 ${examplesOpen ? "rotate-180" : ""}`}
+                aria-hidden="true"
               />
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  onClick={() => {
-                    updateSummary(summaryDraft);
-                    setSummaryDraft("");
-                    setSummaryStatus("Ringkasan profil berhasil diperbarui di CV kamu.");
-                  }}
-                  className="gap-1.5"
-                >
-                  <CheckCircle size={15} weight="duotone" aria-hidden="true" />
-                  <span>Terapkan ke Ringkasan CV</span>
-                </Button>
-                <Button type="button" variant="ghost" onClick={() => setSummaryDraft("")}>
-                  Batal
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* Panduan & Contoh Fresh Grad (Collapsible) */}
-      <div className="mb-5 rounded-xl border border-[#94D1DF] bg-[#ECF9FC] p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-start gap-2.5">
-            <span
-              aria-hidden="true"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[#94D1DF] bg-white text-[#124959]"
-            >
-              <Lightbulb size={18} weight="duotone" />
-            </span>
-            <div>
-              <p className="text-sm font-bold text-[#124959]">Pola Penulisan Google XYZ / STAR</p>
-              <p className="text-xs sm:text-[13px] text-[#2B4F5A] mt-0.5">
-                Kata kerja aktif + ruang lingkup kerja + alat yang digunakan + hasil terukur (jika datanya nyata).
-              </p>
-            </div>
+            </button>
           </div>
-          <Button
-            type="button"
-            variant="secondary"
-            className="min-h-[44px] text-xs gap-1.5"
-            aria-expanded={examplesOpen}
-            onClick={() => setExamplesOpen((prev) => !prev)}
-          >
-            <span>{examplesOpen ? "Tutup Contoh Fresh Grad" : "Lihat Contoh Fresh Grad"}</span>
-            <CaretDown
-              size={14}
-              weight="bold"
-              className={`transition-transform duration-200 ${examplesOpen ? "rotate-180" : ""}`}
-              aria-hidden="true"
-            />
-          </Button>
-        </div>
 
-        <AnimatePresence initial={false}>
-          {examplesOpen ? (
-            <motion.div
-              key="rewriter-examples"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden"
-            >
-              <div className="mt-3 grid gap-3 border-t border-[#94D1DF]/60 pt-3 sm:grid-cols-2">
-                {FRESH_GRAD_XYZ_EXAMPLES.map((ex) => (
-                  <div key={ex.category} className="rounded-xl border border-[#D9CEBC] bg-white p-3 text-xs grid gap-1.5">
-                    <p className="font-bold text-[#144C32]">{ex.category}</p>
-                    <p className="text-[#7B1F14]">
-                      <span className="font-bold">Sebelum:</span> {ex.weak}
-                    </p>
-                    <p className="text-[#251813] leading-relaxed">
-                      <span className="font-bold text-[#144C32]">Sesudah:</span> {ex.strong}
-                    </p>
-                    <p className="text-[#59483F]">{ex.formulaNote}</p>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+          <AnimatePresence initial={false}>
+            {examplesOpen ? (
+              <motion.div
+                key="rewriter-examples"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="mt-2.5 grid gap-2.5 border-t border-[#D9CEBC] pt-2.5 sm:grid-cols-2">
+                  {FRESH_GRAD_XYZ_EXAMPLES.map((ex) => (
+                    <div key={ex.category} className="rounded-lg border border-[#D9CEBC] bg-white p-2.5 text-xs grid gap-1">
+                      <p className="font-bold text-[#144C32]">{ex.category}</p>
+                      <p className="text-[#7B1F14]">
+                        <span className="font-bold">Sebelum:</span> {ex.weak}
+                      </p>
+                      <p className="text-[#251813] leading-relaxed">
+                        <span className="font-bold text-[#144C32]">Sesudah:</span> {ex.strong}
+                      </p>
+                      <p className="text-[#59483F]">{ex.formulaNote}</p>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+        </div>
       </div>
 
       {suggestions.length ? (
