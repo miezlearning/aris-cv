@@ -8,6 +8,7 @@ export type TabItem<T extends string = string> = {
   label: string;
   icon?: ReactNode;
   badge?: string | number;
+  done?: boolean;
 };
 
 export type KumoTabsProps<T extends string = string> = {
@@ -20,12 +21,6 @@ export type KumoTabsProps<T extends string = string> = {
   ariaLabel?: string;
 };
 
-/**
- * Kumo-style Segmented Tabs Component:
- * - Fluid sliding indicator with spring physics (zero splash, zero ripple, zero button pop).
- * - Stateful controlled tabs with accessible keyboard support.
- * - Smooth, quiet transitions inspired by Kumo UI.
- */
 export const KumoTabs = <T extends string>({
   tabs,
   value,
@@ -66,7 +61,7 @@ export const KumoTabs = <T extends string>({
       role="tablist"
       aria-label={ariaLabel}
       onKeyDown={handleKeyDown}
-      className={`relative inline-flex flex-wrap items-center gap-1 rounded-2xl bg-[#ebe4d4]/85 p-1.5 border border-line/15 select-none shadow-inner ${className}`}
+      className={`relative flex flex-wrap items-center gap-1 rounded-2xl bg-[#F3EAD7] p-1.5 border border-[#D9CEBC] select-none ${className}`}
     >
       {tabs.map((tab) => {
         const isSelected = value === tab.value;
@@ -79,19 +74,20 @@ export const KumoTabs = <T extends string>({
             aria-selected={isSelected}
             tabIndex={isSelected ? 0 : -1}
             onClick={() => onValueChange(tab.value)}
-            className={`relative z-10 flex items-center justify-center gap-2 rounded-xl transition-colors duration-200 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-moss focus-visible:ring-offset-1 ${
-              isSmall ? "px-3 py-1.5 text-xs font-semibold" : "min-h-[42px] px-4 py-2 text-sm font-bold"
+            className={`relative z-10 flex items-center justify-center gap-1.5 rounded-xl transition-colors duration-150 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#1F6B57] whitespace-nowrap ${
+              isSmall
+                ? "min-h-[40px] px-3 py-1.5 text-xs font-semibold"
+                : "min-h-[44px] px-3.5 py-2 text-[13px] sm:text-sm font-bold"
             } ${
               isSelected
-                ? "text-ink"
-                : "text-[#5c4a40] hover:text-ink hover:bg-black/[0.03]"
+                ? "text-[#251813]"
+                : "text-[#4E3E36] hover:text-[#251813] hover:bg-white/40"
             }`}
           >
-            {/* The sliding pill indicator */}
             {isSelected && (
               <motion.span
                 layoutId={layoutId}
-                className="absolute inset-0 rounded-xl bg-white shadow-[0_2px_8px_rgba(37,24,19,0.08),0_1px_3px_rgba(37,24,19,0.06)] border border-line/12 -z-10"
+                className="absolute inset-0 rounded-xl bg-white shadow-xs border border-[#C2B49E] -z-10"
                 transition={{
                   type: "spring",
                   stiffness: 420,
@@ -101,15 +97,24 @@ export const KumoTabs = <T extends string>({
               />
             )}
 
+            {tab.done !== undefined && (
+              <span
+                aria-hidden="true"
+                className={`inline-block h-2 w-2 rounded-full ${
+                  tab.done ? "bg-[#1F6B57]" : "bg-[#C2B49E]"
+                }`}
+              />
+            )}
+
             {tab.icon ? <span className="shrink-0">{tab.icon}</span> : null}
             <span>{tab.label}</span>
 
             {tab.badge !== undefined && (
               <span
-                className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full transition-colors ${
+                className={`text-[11px] font-bold px-1.5 py-0.5 rounded-md transition-colors ${
                   isSelected
-                    ? "bg-[#e4f6df] text-[#155436]"
-                    : "bg-black/5 text-[#5c4a40]"
+                    ? "bg-[#E4F6DF] text-[#144C32]"
+                    : "bg-white/80 text-[#4E3E36]"
                 }`}
               >
                 {tab.badge}

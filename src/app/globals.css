@@ -1,43 +1,43 @@
-/* Turbopack CSS refreshed with modern UI/UX architecture and zero scroll-trap layout */
 @import "tailwindcss";
 @source "../**/*.{ts,tsx}";
 @plugin "daisyui";
 
-@font-face {
-  font-family: "Sunghyun Sans";
-  src: local("Sunghyun Sans"), local("SunghyunSans");
-  font-display: swap;
-}
-
 @theme {
   --color-ink: #251813;
-  --color-paper: #fff4d8;
+  --color-paper: #fbf3df;
   --color-clay: #e86f4d;
   --color-moss: #1f6b57;
   --color-line: #251813;
   --color-sky: #7bc7d8;
   --color-butter: #f5d35b;
-  --font-sans: "Sunghyun Sans", Arial, Helvetica, sans-serif;
-  --shadow-panel: 7px 8px 0 rgba(37, 24, 19, 0.16);
+  --font-sans: var(--font-jakarta), "Segoe UI", Arial, Helvetica, sans-serif;
+  --shadow-panel: 4px 5px 0 rgba(37, 24, 19, 0.14);
 }
 
 :root {
   color-scheme: light;
-  --paper: #fff4d8;
-  --paper-strong: #fffaf0;
-  --paper-soft: #f8e7b8;
+  --paper: #fbf3df;
+  --paper-strong: #fffdf8;
+  --paper-soft: #f3e7c8;
+  --stone-border: #d9cebc;
+  --stone-strong: #c2b49e;
   --ink: #251813;
-  --muted: #57443b;
+  --muted: #4e3e36;
+  --helper: #59483f;
   --line: #251813;
   --moss: #1f6b57;
   --moss-dark: #154538;
   --clay: #e86f4d;
-  --clay-dark: #9d321e;
+  --clay-dark: #7b1f14;
   --sky: #7bc7d8;
   --butter: #f5d35b;
-  --danger: #a3291b;
-  --warning: #7a5400;
-  --success: #17583d;
+  --danger: #7b1f14;
+  --warning: #4a3a2e;
+  --success: #144c32;
+  --motion-fast: 150ms;
+  --motion-base: 240ms;
+  --motion-rise: 380ms;
+  --motion-ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
 * {
@@ -46,17 +46,23 @@
 
 html {
   scroll-behavior: smooth;
+  scrollbar-gutter: stable;
 }
 
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at 12px 12px, rgba(37, 24, 19, 0.055) 1.3px, transparent 1.6px),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.46), rgba(245, 211, 91, 0.18)),
-    var(--paper);
-  background-size: 26px 26px, 100% 100%, auto;
+  background-color: var(--paper);
   color: var(--ink);
-  font-family: "Sunghyun Sans", Arial, Helvetica, sans-serif;
+  font-family: var(--font-jakarta), "Segoe UI", Arial, Helvetica, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (max-width: 640px) {
+  body {
+    font-size: 14px;
+  }
 }
 
 @layer base {
@@ -80,12 +86,7 @@ textarea:focus-visible,
 select:focus-visible,
 summary:focus-visible {
   outline: 3px solid var(--moss-dark);
-  outline-offset: 4px;
-}
-
-/* Modern, subtle scrollbar system to avoid bulky competing scrollbars */
-html {
-  scrollbar-gutter: stable;
+  outline-offset: 3px;
 }
 
 ::-webkit-scrollbar {
@@ -100,11 +101,10 @@ html {
 ::-webkit-scrollbar-thumb {
   background: rgba(37, 24, 19, 0.2);
   border-radius: 999px;
-  transition: background 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(37, 24, 19, 0.4);
+  background: rgba(37, 24, 19, 0.38);
 }
 
 * {
@@ -124,86 +124,72 @@ html {
 .doodle-stage {
   position: relative;
   isolation: isolate;
-}
-
-.doodle-stage::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
   background:
-    radial-gradient(circle at 8% 18%, rgba(123, 199, 216, 0.14), transparent 22rem),
-    radial-gradient(circle at 87% 10%, rgba(232, 111, 77, 0.1), transparent 20rem),
-    radial-gradient(circle at 75% 82%, rgba(31, 107, 87, 0.09), transparent 22rem);
-  z-index: -1;
+    radial-gradient(circle at 6% 10%, rgba(245, 211, 91, 0.26), transparent 30rem),
+    radial-gradient(circle at 92% 14%, rgba(123, 199, 216, 0.2), transparent 28rem),
+    radial-gradient(circle at 82% 88%, rgba(31, 107, 87, 0.11), transparent 30rem),
+    radial-gradient(circle at 14% 85%, rgba(232, 111, 77, 0.11), transparent 26rem),
+    var(--paper);
 }
 
+/* Container sekunder tenang: warm stone border tipis dengan sentuhan krem hangat */
+.surface-card {
+  position: relative;
+  background: var(--paper-strong);
+  border: 1px solid var(--stone-border);
+  border-radius: 16px;
+  box-shadow: 0 2px 6px rgba(37, 24, 19, 0.05);
+}
+
+/* Container fokus utama (hero, kartu skor utama, langkah aktif) */
 .doodle-card {
   position: relative;
   border: 2px solid var(--line);
-  border-radius: 20px 16px 22px 15px;
-  box-shadow: 3px 4px 0 rgba(37, 24, 19, 0.12);
+  border-radius: 18px;
+  box-shadow: 4px 5px 0 rgba(37, 24, 19, 0.14);
 }
 
-.doodle-tape {
-  position: relative;
+.card-tint-butter {
+  background: linear-gradient(135deg, rgba(255, 240, 168, 0.55), rgba(255, 253, 248, 0.92));
 }
 
-.doodle-tape::before {
-  content: "";
-  position: absolute;
-  top: -13px;
-  left: 32px;
-  width: 88px;
-  height: 24px;
-  transform: rotate(-2deg);
-  border: 2px solid rgba(37, 24, 19, 0.18);
-  background: rgba(245, 211, 91, 0.78);
-  border-radius: 4px 7px 5px 6px;
+.card-tint-sky {
+  background: linear-gradient(135deg, rgba(214, 243, 250, 0.55), rgba(255, 253, 248, 0.92));
+}
+
+.card-tint-sage {
+  background: linear-gradient(135deg, rgba(223, 245, 218, 0.6), rgba(255, 253, 248, 0.92));
+}
+
+.card-tint-clay {
+  background: linear-gradient(135deg, rgba(255, 227, 216, 0.55), rgba(255, 253, 248, 0.92));
 }
 
 .doodle-title-mark {
   display: inline;
-  background-image: linear-gradient(transparent 62%, rgba(245, 211, 91, 0.72) 62%);
+  background-image: linear-gradient(transparent 66%, rgba(245, 211, 91, 0.7) 66%);
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
 
 .doodle-btn.btn {
-  min-height: 2.9rem;
-  border: 2px solid var(--line);
-  border-radius: 16px 13px 18px 12px;
-  box-shadow: 3px 4px 0 rgba(37, 24, 19, 0.18);
+  min-height: 2.75rem;
+  border-radius: 12px;
   text-transform: none;
 }
 
-.doodle-btn.btn:hover {
-  transform: translate(-1px, -1px) rotate(-0.2deg);
-  box-shadow: 5px 6px 0 rgba(37, 24, 19, 0.16);
-}
-
 .doodle-input.input,
-.doodle-input.textarea {
-  border: 2px solid rgba(37, 24, 19, 0.82);
-  border-radius: 16px 12px 17px 13px;
-  background: #fffdf7;
+.doodle-input.textarea,
+.doodle-input.select {
+  border: 1.5px solid var(--stone-strong);
+  border-radius: 12px;
+  background: #ffffff;
 }
 
 .doodle-input.input:focus,
-.doodle-input.textarea:focus {
-  border-color: var(--moss-dark);
-}
-
-.doodle-chip {
-  border: 2px solid var(--line);
-  border-radius: 999px 12px 999px 14px;
-  box-shadow: 2px 3px 0 rgba(37, 24, 19, 0.14);
-}
-
-.doodle-score {
-  border: 2px solid var(--line);
-  border-radius: 21px 15px 23px 17px;
-  box-shadow: 5px 6px 0 rgba(37, 24, 19, 0.12);
+.doodle-input.textarea:focus,
+.doodle-input.select:focus {
+  border-color: var(--moss);
 }
 
 .doodle-note-yellow {
@@ -211,36 +197,28 @@ html {
 }
 
 .doodle-note-blue {
-  background: #e0f6fb;
+  background: #d6f3fa;
 }
 
 .doodle-note-green {
-  background: #e4f6df;
+  background: #dff5da;
 }
 
 .doodle-note-red {
-  background: #ffe1d6;
+  background: #ffe3d8;
 }
 
 .cv-paper {
   background: #ffffff;
-  color: #101513;
+  color: #000000;
   font-family: Arial, Helvetica, sans-serif;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
-/* Motion layer (MOTION 2). Gerakan hanya menandai "baru muncul" dan "ini hasil barumu",
-   lalu berhenti. Tidak ada loop dan tidak ada parallax. */
-:root {
-  --motion-fast: 160ms;
-  --motion-base: 260ms;
-  --motion-rise: 460ms;
-  --motion-ease: cubic-bezier(0.2, 0.7, 0.3, 1);
-}
-
+/* Motion layer (MOTION 2) */
 .motion-rise {
   opacity: 0;
-  transform: translateY(14px);
+  transform: translateY(10px);
 }
 
 .motion-rise.is-visible {
@@ -251,7 +229,7 @@ html {
 @keyframes rise-in {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -259,48 +237,6 @@ html {
   }
 }
 
-.motion-pop {
-  animation: pop-in var(--motion-base) var(--motion-ease);
-}
-
-@keyframes pop-in {
-  from {
-    transform: scale(0.94);
-  }
-  to {
-    transform: scale(1);
-  }
-}
-
-.motion-drawer {
-  animation: drawer-in var(--motion-base) var(--motion-ease);
-}
-
-@keyframes drawer-in {
-  from {
-    opacity: 0;
-    transform: translateX(18px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.motion-backdrop {
-  animation: backdrop-in var(--motion-fast) linear;
-}
-
-@keyframes backdrop-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* Tab dan panel isi: konten baru masuk tanpa menggeser layout sekitarnya. */
 .motion-panel {
   animation: panel-in var(--motion-base) var(--motion-ease);
 }
@@ -308,21 +244,11 @@ html {
 @keyframes panel-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(5px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@media (max-width: 640px) {
-  .doodle-card {
-    box-shadow: 4px 5px 0 rgba(37, 24, 19, 0.14);
-  }
-
-  .doodle-card::after {
-    inset: 5px -5px -5px 5px;
   }
 }
 
@@ -341,10 +267,6 @@ html {
 
   .motion-rise {
     opacity: 1;
-    transform: none;
-  }
-
-  .doodle-btn.btn:hover {
     transform: none;
   }
 }
