@@ -18,8 +18,9 @@ import type {
 } from "@/types/resume";
 import { emptyAnalytics, emptyJobTarget, emptyResumeProfile, createId } from "@/lib/defaults";
 import { analyzeMatch } from "@/lib/ats/scorer";
-import { computeProfileContentHash, translateProfileToEnglish } from "@/lib/ats/translator";
+import { computeProfileContentHash, translateProfileDeterministic } from "@/lib/ats/translator";
 import { normalizeForMatch } from "@/lib/ats/synonyms";
+import { DEFAULT_WEBLLM_MODEL_ID, type LocalAiProvider } from "@/lib/local-ai/models";
 
 export type MasterTab =
   | "contact"
@@ -43,6 +44,13 @@ const VALID_TABS: MasterTab[] = [
 ];
 
 const VALID_TEMPLATES: CvTemplate[] = ["compact_centered", "classic_editorial", "executive_left"];
+const VALID_LOCAL_AI_MODES: LocalAiProvider[] = ["off", "webllm", "ollama", "lmstudio"];
+
+export type CachedAiTranslation = {
+  profile: ResumeProfile;
+  sourceHash: string;
+  providerLabel: string;
+};
 
 type AppState = {
   resumeProfile: ResumeProfile;
@@ -57,10 +65,40 @@ type AppState = {
   setCvTemplate: (template: CvTemplate) => void;
   autoTranslateContent: boolean;
   setAutoTranslateContent: (enabled: boolean) => void;
-  aiTranslatedEnProfile: ResumeProfile | null;
-  aiTranslatedSourceHash: string;
-  setAiTranslatedEn: (profile: ResumeProfile | null, sourceHash: string) => void;
-  applyEnglishTranslationToEditor: () => void;
+  aiTranslatedProfiles: Partial<Record<"id" | "en", CachedAiTranslation>>;
+  setAiTranslatedProfile: (
+    lang: "id" | "en",
+    profile: ResumeProfile | null,
+    sourceHash: string,
+    providerLabel?: string
+  ) => void;
+  applyTranslationToEditor: (lang: "id" | "en") => void;
+  localAiMode: LocalAiProvider;
+  webLlmModelId: string;
+  localServerUrl: string;
+  localServerModel: string;
+  setLocalAiConfig: (
+    patch: Partial<{
+      localAiMode: LocalAiProvider;
+      webLlmModelId: string;
+      localServerUrl: string;
+      localServerModel: string;
+    }>
+  ) => void;
+  localAiStatus: "idle" | "downloading" | "ready" | "error";
+  localAiProgress: number;
+  localAiProgressText: string;
+  localAiLoadedModel: string;
+  localAiError: string;
+  setLocalAiRuntime: (
+    patch: Partial<{
+      localAiStatus: "idle" | "downloading" | "ready" | "error";
+      localAiProgress: number;
+      localAiProgressText: string;
+      localAiLoadedModel: string;
+      localAiError: string;
+    }>
+  ) => void;
   checkedAdminItems: Record<string, boolean>;
   toggleAdminItem: (id: string) => void;
   previewOpenDesktop: boolean;
@@ -263,24 +301,48 @@ export const useCvStore = create<AppState>()(
       setCvTemplate: (template) => set({ cvTemplate: template }),
       autoTranslateContent: true,
       setAutoTranslateContent: (enabled) => set({ autoTranslateContent: enabled }),
-      aiTranslatedEnProfile: null,
-      aiTranslatedSourceHash: "",
-      setAiTranslatedEn: (profile, sourceHash) =>
-        set({ aiTranslatedEnProfile: profile, aiTranslatedSourceHash: sourceHash }),
-      applyEnglishTranslationToEditor: () => {
+      aiTranslatedProfiles: {},
+      setAiTranslatedProfile: (lang, profile, sourceHash, providerLabel = "AI Lokal") =>
+        set((state) => {
+          const next = { ...state.aiTranslatedProfiles };
+          if (!profile) {
+            delete next[lang];
+          } else {
+            next[lang] = { profile, sourceHash, providerLabel };
+          }
+          return { aiTranslatedProfiles: next };
+        }),
+      applyTranslationToEditor: (lang) => {
         const state = getState();
         const currentHash = computeProfileContentHash(state.resumeProfile);
-        const enProfile =
-          state.aiTranslatedEnProfile && state.aiTranslatedSourceHash === currentHash
-            ? { ...state.aiTranslatedEnProfile, contact: { ...state.resumeProfile.contact, headline: state.aiTranslatedEnProfile.contact.headline } }
-            : translateProfileToEnglish(state.resumeProfile);
+        const cached = state.aiTranslatedProfiles[lang];
+        const nextProfile =
+          cached && cached.sourceHash === currentHash
+            ? {
+                ...cached.profile,
+                contact: {
+                  ...state.resumeProfile.contact,
+                  headline: cached.profile.contact.headline
+                }
+              }
+            : translateProfileDeterministic(state.resumeProfile, lang);
         set({
-          resumeProfile: enProfile,
-          cvLanguage: "en",
-          aiTranslatedEnProfile: null,
-          aiTranslatedSourceHash: ""
+          resumeProfile: nextProfile,
+          cvLanguage: lang,
+          aiTranslatedProfiles: {}
         });
       },
+      localAiMode: "off",
+      webLlmModelId: DEFAULT_WEBLLM_MODEL_ID,
+      localServerUrl: "http://localhost:11434",
+      localServerModel: "",
+      setLocalAiConfig: (patch) => set((state) => ({ ...state, ...patch })),
+      localAiStatus: "idle",
+      localAiProgress: 0,
+      localAiProgressText: "",
+      localAiLoadedModel: "",
+      localAiError: "",
+      setLocalAiRuntime: (patch) => set((state) => ({ ...state, ...patch })),
       checkedAdminItems: {},
       toggleAdminItem: (id) =>
         set((state) => ({
@@ -708,8 +770,7 @@ export const useCvStore = create<AppState>()(
           jobTarget: emptyJobTarget(),
           matchAnalytics: emptyAnalytics(),
           suggestions: [],
-          aiTranslatedEnProfile: null,
-          aiTranslatedSourceHash: "",
+          aiTranslatedProfiles: {},
           checkedAdminItems: {},
           activeMasterTab: "contact",
           previewOpenDesktop: true,
@@ -728,6 +789,10 @@ export const useCvStore = create<AppState>()(
         cvLanguage: state.cvLanguage,
         cvTemplate: state.cvTemplate,
         autoTranslateContent: state.autoTranslateContent,
+        localAiMode: state.localAiMode,
+        webLlmModelId: state.webLlmModelId,
+        localServerUrl: state.localServerUrl,
+        localServerModel: state.localServerModel,
         checkedAdminItems: state.checkedAdminItems,
         previewOpenDesktop: state.previewOpenDesktop
       }),
@@ -772,6 +837,12 @@ export const useCvStore = create<AppState>()(
           ? (persisted.cvTemplate as CvTemplate)
           : "compact_centered";
 
+        const localAiMode: LocalAiProvider = VALID_LOCAL_AI_MODES.includes(
+          persisted.localAiMode as LocalAiProvider
+        )
+          ? (persisted.localAiMode as LocalAiProvider)
+          : "off";
+
         return {
           ...currentState,
           ...persisted,
@@ -782,8 +853,16 @@ export const useCvStore = create<AppState>()(
           cvLanguage: persisted.cvLanguage ?? "auto",
           cvTemplate,
           autoTranslateContent: persisted.autoTranslateContent ?? true,
-          aiTranslatedEnProfile: null,
-          aiTranslatedSourceHash: "",
+          aiTranslatedProfiles: {},
+          localAiMode,
+          webLlmModelId: persisted.webLlmModelId || DEFAULT_WEBLLM_MODEL_ID,
+          localServerUrl: persisted.localServerUrl || "http://localhost:11434",
+          localServerModel: persisted.localServerModel || "",
+          localAiStatus: "idle",
+          localAiProgress: 0,
+          localAiProgressText: "",
+          localAiLoadedModel: "",
+          localAiError: "",
           checkedAdminItems: persisted.checkedAdminItems ?? {}
         };
       },
