@@ -35,22 +35,22 @@ const EXPERIENCE_LEVEL_OPTIONS: Array<{
 }> = [
   {
     value: "fresh_graduate",
-    title: "Fresh Graduate / Belum Pernah Kerja",
-    desc: "Memprioritaskan Pendidikan (IPK, Tugas Akhir), Proyek Kuliah, Magang, & Organisasi.",
+    title: "Fresh Graduate",
+    desc: "Pendidikan, Proyek, & Magang tampil di atas.",
     tint: "bg-[#DFF5DA] text-[#144C32]",
     icon: <Student size={18} weight="duotone" aria-hidden="true" />
   },
   {
     value: "early_career",
-    title: "Pengalaman 0-2 Tahun / Magang",
-    desc: "Menempatkan Pengalaman Kerja & Magang paling atas, diikuti Proyek dan Pendidikan.",
+    title: "Pengalaman 0-2 Tahun",
+    desc: "Magang & Kerja tampil di atas, diikuti Proyek.",
     tint: "bg-[#D6F3FA] text-[#124959]",
     icon: <TrendUp size={18} weight="duotone" aria-hidden="true" />
   },
   {
     value: "experienced",
     title: "Berpengalaman (2+ Tahun)",
-    desc: "Menonjolkan Riwayat Kerja dan Keahlian Inti di bagian paling atas CV.",
+    desc: "Riwayat Kerja & Keahlian tampil paling atas.",
     tint: "bg-[#FFF0A8] text-[#4A3A2E]",
     icon: <Medal size={18} weight="duotone" aria-hidden="true" />
   }
@@ -107,10 +107,10 @@ const XyzGuideToggle = () => {
           </span>
           <div>
             <p className="text-xs sm:text-sm font-bold text-[#251813]">
-              Panduan menulis poin berpola Google XYZ / STAR (untuk Proyek, Magang, & Skripsi)
+              Tips menulis poin yang kuat
             </p>
             <p className="text-xs text-[#4E3E36] mt-0.5">
-              Formula: Kata kerja aksi + hal yang dikerjakan + alat + ukuran hasil nyata (jika ada datanya).
+              Kata kerja aktif + tugas + alat/hasil terukur (jika ada datanya).
             </p>
           </div>
         </div>
@@ -325,10 +325,8 @@ export const MasterCvEditor = () => {
       {/* Pilihan Mode Profil Pengalaman */}
       <div className="surface-card p-4 sm:p-5">
         <div className="mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-          <p className="text-sm font-bold text-[#251813]">Profil tingkat pengalamanmu</p>
-          <p className="text-xs text-[#59483F]">
-            Mengatur urutan seksi CV otomatis agar bagian terkuatmu tampil di atas.
-          </p>
+          <p className="text-sm font-bold text-[#251813]">Urutan CV sesuai pengalaman</p>
+          <p className="text-xs text-[#59483F]">Mengatur posisi bagian terkuat di CV.</p>
         </div>
         <div className="grid gap-2.5 sm:grid-cols-3" role="radiogroup" aria-label="Pilih tingkat pengalaman">
           {EXPERIENCE_LEVEL_OPTIONS.map((opt) => {
@@ -366,10 +364,7 @@ export const MasterCvEditor = () => {
 
       {/* Sub-tab bagian CV */}
       <div className="surface-card p-3.5 sm:p-4">
-        <div className="flex flex-wrap items-center justify-between gap-1 mb-2.5">
-          <p className="text-xs sm:text-sm font-bold text-[#251813]">Pilih bagian CV yang ingin diisi:</p>
-          <span className="text-xs text-[#59483F]">Titik hijau menandakan bagian sudah terisi</span>
-        </div>
+        <p className="text-xs sm:text-sm font-bold text-[#251813] mb-2.5">Bagian CV:</p>
         <KumoTabs<MasterTab>
           tabs={orderedTabs}
           value={activeTab}
@@ -383,30 +378,27 @@ export const MasterCvEditor = () => {
       <div key={activeTab} className="motion-panel min-w-0 grid gap-5">
         {activeTab === "contact" ? (
           <SectionCard
-            title="Profil & Kontak Pribadi"
-            description="Nama dan kontak ditempatkan di badan paling atas CV (bukan di header dokumen Word/PDF) agar 100% terbaca oleh sistem ATS."
+            title="Profil & Kontak"
+            description="Tampil paling atas di dokumen CV."
             accent="butter"
             icon={<AddressBook size={20} weight="duotone" />}
           >
             <div className="grid gap-4 sm:grid-cols-2 items-start">
-              <Field label="Nama lengkap" hint="Tulis nama lengkap sesuai ijazah/KTP.">
+              <Field label="Nama lengkap">
                 <TextInput
                   value={resume.contact.fullName}
                   onChange={(event) => updateContact("fullName", event.target.value)}
-                  placeholder="Contoh: Nadia Kusuma"
+                  placeholder="Nadia Kusuma"
                 />
               </Field>
-              <Field
-                label="Headline / Posisi yang dituju"
-                hint="Opsional. Contoh: Lulusan Informatika | IT Support & Web Developer."
-              >
+              <Field label="Headline / Posisi target (opsional)">
                 <TextInput
                   value={resume.contact.headline || ""}
                   onChange={(event) => updateContact("headline", event.target.value)}
-                  placeholder="Lulusan Teknik Informatika | Junior Developer"
+                  placeholder="Lulusan Teknik Informatika | Web Developer"
                 />
               </Field>
-              <Field label="Email aktif" hint="Gunakan alamat email yang profesional dan rutin diperiksa.">
+              <Field label="Email aktif">
                 <TextInput
                   type="email"
                   value={resume.contact.email}
@@ -414,32 +406,32 @@ export const MasterCvEditor = () => {
                   placeholder="nama@email.com"
                 />
               </Field>
-              <Field label="Nomor telepon / WhatsApp" hint="Pastikan nomor aktif untuk dihubungi rekruter.">
+              <Field label="Nomor telepon / WhatsApp">
                 <TextInput
                   value={resume.contact.phone}
                   onChange={(event) => updateContact("phone", event.target.value)}
                   placeholder="+62 812-xxxx-xxxx"
                 />
               </Field>
-              <Field label="Domisili saat ini" hint="Cukup kota dan provinsi, tidak perlu alamat jalan lengkap.">
+              <Field label="Domisili">
                 <TextInput
                   value={resume.contact.location}
                   onChange={(event) => updateContact("location", event.target.value)}
                   placeholder="Kota, Provinsi"
                 />
               </Field>
-              <Field label="Tautan LinkedIn" hint="Kosongkan jika belum memiliki akun.">
+              <Field label="LinkedIn (opsional)">
                 <TextInput
                   value={resume.contact.linkedinUrl}
                   onChange={(event) => updateContact("linkedinUrl", event.target.value)}
                   placeholder="linkedin.com/in/username"
                 />
               </Field>
-              <Field label="Portofolio / GitHub / Behance" hint="Kosongkan jika belum ada." className="sm:col-span-2">
+              <Field label="Portofolio / GitHub (opsional)" className="sm:col-span-2">
                 <TextInput
                   value={resume.contact.portfolioUrl}
                   onChange={(event) => updateContact("portfolioUrl", event.target.value)}
-                  placeholder="github.com/username atau tautan portofolio"
+                  placeholder="github.com/username"
                 />
               </Field>
             </div>
@@ -449,23 +441,20 @@ export const MasterCvEditor = () => {
         {activeTab === "summary" ? (
           <SectionCard
             title="Ringkasan Profil"
-            description="Tulis 2 sampai 4 kalimat: latar belakang pendidikan/keahlianmu, aktivitas atau proyek relevan yang pernah kamu kerjakan, dan posisi yang kamu tuju."
+            description="2-4 kalimat singkat tentang latar belakang, alat kerja, dan bidang yang dituju."
             accent="sky"
             icon={<NotePencil size={20} weight="duotone" />}
           >
             <div className="grid gap-4">
-              <Field
-                label="Ringkasan diri"
-                hint="Hindari klaim generik tanpa bukti seperti 'pekerja keras dan cepat belajar'. Sebutkan jurusan, alat kerja, atau proyek nyatamu."
-              >
+              <Field label="Ringkasan diri">
                 <TextArea
                   rows={5}
                   value={resume.summary}
                   onChange={(event) => updateSummary(event.target.value)}
                   placeholder={
                     isFresh
-                      ? "Contoh: Lulusan S1 Teknik Informatika (IPK 3.74/4.00) dengan pengalaman proyek web dan magang IT Support. Terbiasa menggunakan React, SQL, serta menangani pemeliharaan jaringan lokal dan perangkat keras."
-                      : "Contoh: Staf Administrasi dengan pengalaman 3 tahun mengelola pencatatan stok, arsip transaksi, dan laporan keuangan harian menggunakan Microsoft Excel dan sistem ERP."
+                      ? "Lulusan S1 Teknik Informatika (IPK 3.74) dengan pengalaman proyek web dan magang IT Support. Terbiasa dengan React, SQL, dan jaringan lokal."
+                      : "Staf Administrasi dengan pengalaman 3 tahun mengelola stok, arsip transaksi, dan laporan harian menggunakan Excel dan ERP."
                   }
                 />
               </Field>
@@ -475,11 +464,11 @@ export const MasterCvEditor = () => {
 
         {activeTab === "education" ? (
           <SectionCard
-            title="Riwayat Pendidikan"
+            title="Pendidikan"
             description={
               isFresh
-                ? "Untuk Fresh Graduate, bagian Pendidikan ditempatkan di atas. Cantumkan IPK, judul tugas akhir/skripsi, dan mata kuliah relevan agar kekuatan akademismu terlihat jelas."
-                : "Tuliskan pendidikan terakhir yang paling relevan dengan posisi target."
+                ? "Cantumkan IPK, tugas akhir, atau mata kuliah yang relevan."
+                : "Tuliskan riwayat pendidikan terakhirmu."
             }
             accent="sage"
             icon={<GraduationCap size={20} weight="duotone" />}
@@ -509,62 +498,61 @@ export const MasterCvEditor = () => {
                     ) : null}
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2 items-start">
-                    <Field label="Nama universitas atau sekolah">
+                    <Field label="Universitas / Sekolah">
                       <TextInput
                         value={education.institution}
                         onChange={(event) => updateEducation(education.id, { institution: event.target.value })}
                         placeholder="Universitas / Politeknik / SMK"
                       />
                     </Field>
-                    <Field label="Jenjang pendidikan" hint="Contoh: S1, D3, D4, SMK.">
+                    <Field label="Jenjang">
                       <TextInput
                         value={education.degree}
                         onChange={(event) => updateEducation(education.id, { degree: event.target.value })}
-                        placeholder="S1"
+                        placeholder="S1 / D3 / SMK"
                       />
                     </Field>
-                    <Field label="Program studi atau jurusan">
+                    <Field label="Jurusan / Program Studi">
                       <TextInput
                         value={education.fieldOfStudy}
                         onChange={(event) => updateEducation(education.id, { fieldOfStudy: event.target.value })}
-                        placeholder="Teknik Informatika / Akuntansi / TKJ"
+                        placeholder="Teknik Informatika / Akuntansi"
                       />
                     </Field>
-                    <Field label="Tahun lulus atau perkiraan lulus" hint="Contoh: 2025 atau 2021 - 2025.">
+                    <Field label="Tahun lulus">
                       <TextInput
                         value={education.graduationDate}
                         onChange={(event) => updateEducation(education.id, { graduationDate: event.target.value })}
-                        placeholder="2025"
+                        placeholder="2025 atau 2021 - 2025"
                       />
                     </Field>
-                    <Field label="IPK / Nilai akhir (opsional)" hint="Skala 4.00, contoh: 3.74/4.00.">
+                    <Field label="IPK / Nilai (opsional)">
                       <TextInput
                         value={education.gpa}
                         onChange={(event) => updateEducation(education.id, { gpa: event.target.value })}
                         placeholder="3.74/4.00"
                       />
                     </Field>
-                    <Field label="Prestasi / Beasiswa (opsional)" hint="Contoh: Cum Laude, Penerima Beasiswa Unggulan.">
+                    <Field label="Prestasi / Beasiswa (opsional)">
                       <TextInput
                         value={education.achievements || ""}
                         onChange={(event) => updateEducation(education.id, { achievements: event.target.value })}
-                        placeholder="Lulus dengan pujian / Finalis lomba..."
+                        placeholder="Cum Laude / Penerima Beasiswa"
                       />
                     </Field>
                     <Field
                       label="Judul Tugas Akhir / Skripsi (opsional)"
-                      hint="Sangat disarankan untuk Fresh Graduate jika relevan dengan posisi."
                       className="sm:col-span-2"
                     >
                       <TextInput
                         value={education.thesisTitle || ""}
                         onChange={(event) => updateEducation(education.id, { thesisTitle: event.target.value })}
-                        placeholder="Contoh: Rancang Bangun Sistem Antrean Klinik Berbasis Web"
+                        placeholder="Rancang Bangun Sistem Antrean Klinik Berbasis Web"
                       />
                     </Field>
                     <Field
                       label="Mata kuliah relevan (opsional)"
-                      hint="Pisahkan dengan koma. Contoh: Basis Data, Jaringan Komputer, Analisis Sistem."
+                      hint="Pisahkan dengan koma."
                       className="sm:col-span-2"
                     >
                       <CommaListArea
@@ -583,8 +571,8 @@ export const MasterCvEditor = () => {
 
         {activeTab === "projects" ? (
           <SectionCard
-            title="Proyek, Tugas Akhir, & Studi Kasus"
-            description="Belum pernah kerja kantor bukan halangan. Masukkan proyek kuliah, tugas akhir, praktikum, freelance kecil, atau proyek mandiri yang membuktikan kemampuanmu."
+            title="Proyek & Tugas Akhir"
+            description="Proyek kuliah, tugas akhir, freelance, atau karya mandiri."
             accent="butter"
             icon={<CodeBlock size={20} weight="duotone" />}
             actions={
@@ -599,13 +587,13 @@ export const MasterCvEditor = () => {
 
               {resume.projects.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-[#C2B49E] bg-white p-6 text-center">
-                  <p className="text-sm font-bold text-[#251813]">Belum ada proyek yang ditambahkan</p>
-                  <p className="mt-1 text-xs sm:text-sm text-[#4E3E36] max-w-lg mx-auto">
-                    Untuk pelamar fresh graduate, proyek tugas akhir atau proyek mata kuliah adalah bukti keahlian paling kuat di CV.
+                  <p className="text-sm font-bold text-[#251813]">Belum ada proyek</p>
+                  <p className="mt-1 text-xs text-[#4E3E36]">
+                    Tambahkan proyek kuliah, skripsi, atau proyek pribadi untuk menunjukkan keahlianmu.
                   </p>
                   <Button type="button" className="mt-4 gap-1.5" onClick={addProject}>
                     <Plus size={15} weight="bold" aria-hidden="true" />
-                    <span>Tambah Proyek Pertama</span>
+                    <span>Tambah Proyek</span>
                   </Button>
                 </div>
               ) : (
@@ -714,11 +702,11 @@ export const MasterCvEditor = () => {
 
         {activeTab === "experience" ? (
           <SectionCard
-            title={isFresh ? "Pengalaman Magang, PKL, atau Kerja" : "Pengalaman Kerja"}
+            title={isFresh ? "Magang, PKL, & Kerja" : "Pengalaman Kerja"}
             description={
               isFresh
-                ? "Jika belum pernah bekerja sama sekali, biarkan bagian ini kosong. CV tetap terlihat profesional lewat Pendidikan, Proyek, dan Organisasi. Jika punya pengalaman magang/MSIB/freelance, tambahkan di sini."
-                : "Tuliskan riwayat kerja mulai dari yang terbaru. Gunakan format tanggal konsisten (contoh: Jan 2024 atau 01/2024)."
+                ? "Boleh dikosongkan jika belum ada pengalaman kerja atau magang."
+                : "Urutkan dari pengalaman paling baru."
             }
             accent="sky"
             icon={<Briefcase size={20} weight="duotone" />}
@@ -735,14 +723,14 @@ export const MasterCvEditor = () => {
               {resume.workExperience.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-[#C2B49E] bg-white p-6 text-center">
                   <p className="text-sm font-bold text-[#251813]">Belum ada pengalaman kerja / magang</p>
-                  <p className="mt-1 text-xs sm:text-sm text-[#4E3E36] max-w-lg mx-auto">
+                  <p className="mt-1 text-xs text-[#4E3E36]">
                     {isFresh
-                      ? "Tidak masalah jika kosong. Bagian Pengalaman Kerja otomatis tidak akan ditampilkan di CV jika belum diisi."
-                      : "Klik tombol di bawah untuk menambahkan pengalaman kerja."}
+                      ? "Opsional untuk Fresh Graduate."
+                      : "Klik tombol di bawah untuk menambahkan."}
                   </p>
                   <Button type="button" variant="secondary" className="mt-4 gap-1.5" onClick={addExperience}>
                     <Plus size={15} weight="bold" aria-hidden="true" />
-                    <span>Tambah Pengalaman Kerja / Magang</span>
+                    <span>Tambah Pengalaman</span>
                   </Button>
                 </div>
               ) : (
@@ -794,14 +782,14 @@ export const MasterCvEditor = () => {
                           <option value="freelance">Freelance / Kontrak Proyek</option>
                         </SelectInput>
                       </Field>
-                      <Field label="Kota / Lokasi (opsional)" hint="Contoh: Semarang atau Remote.">
+                      <Field label="Kota / Lokasi (opsional)">
                         <TextInput
                           value={experience.location || ""}
                           onChange={(event) => updateExperience(experience.id, { location: event.target.value })}
-                          placeholder="Kota, Provinsi"
+                          placeholder="Jakarta / Remote"
                         />
                       </Field>
-                      <Field label="Tanggal mulai" hint="Contoh: Aug 2024 atau 08/2024.">
+                      <Field label="Tanggal mulai">
                         <TextInput
                           value={experience.startDate}
                           onChange={(event) => updateExperience(experience.id, { startDate: event.target.value })}
@@ -809,7 +797,7 @@ export const MasterCvEditor = () => {
                         />
                       </Field>
                       <div className="flex flex-col gap-2">
-                        <Field label="Tanggal selesai" hint="Kosongkan dan centang di bawah jika masih aktif.">
+                        <Field label="Tanggal selesai">
                           <TextInput
                             value={experience.isCurrent ? "Present" : experience.endDate}
                             disabled={experience.isCurrent}
@@ -890,8 +878,8 @@ export const MasterCvEditor = () => {
 
         {activeTab === "organizations" ? (
           <SectionCard
-            title="Organisasi, Kepanitiaan, & Kegiatan Relawan"
-            description="Pengalaman organisasi atau kepanitiaan membuktikan kemampuan kerja tim, komunikasi, dan manajemen acara untuk fresh graduate."
+            title="Organisasi & Kepanitiaan"
+            description="Kegiatan kampus, UKM, kepanitiaan, atau relawan."
             accent="sage"
             icon={<UsersThree size={20} weight="duotone" />}
             actions={
@@ -999,8 +987,8 @@ export const MasterCvEditor = () => {
 
         {activeTab === "certifications" ? (
           <SectionCard
-            title="Pelatihan, Kursus, & Sertifikasi"
-            description="Sertifikasi kompetensi (BNSP, Kominfo VSGA, Dicoding, Brevet Pajak, TOEFL, dsb.) membantu meyakinkan perekrut pada keahlianmu."
+            title="Sertifikasi & Pelatihan"
+            description="Kursus, bootcamp, atau sertifikat kompetensi relevan."
             accent="butter"
             icon={<Certificate size={20} weight="duotone" />}
             actions={
@@ -1012,13 +1000,11 @@ export const MasterCvEditor = () => {
           >
             {resume.certificationItems.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[#C2B49E] bg-white p-6 text-center">
-                <p className="text-sm font-bold text-[#251813]">Belum ada sertifikasi atau pelatihan</p>
-                <p className="mt-1 text-xs sm:text-sm text-[#4E3E36] max-w-lg mx-auto">
-                  Opsional. Tambahkan jika kamu pernah mengikuti bootcamp, kursus daring bersertifikat, atau uji kompetensi.
-                </p>
+                <p className="text-sm font-bold text-[#251813]">Belum ada sertifikasi</p>
+                <p className="mt-1 text-xs text-[#4E3E36]">Opsional. Tambahkan jika ada sertifikat atau bootcamp relevan.</p>
                 <Button type="button" variant="secondary" className="mt-4 gap-1.5" onClick={addCertification}>
                   <Plus size={15} weight="bold" aria-hidden="true" />
-                  <span>Tambah Sertifikasi Pertama</span>
+                  <span>Tambah Sertifikasi</span>
                 </Button>
               </div>
             ) : (
@@ -1075,8 +1061,8 @@ export const MasterCvEditor = () => {
 
         {activeTab === "skills" ? (
           <SectionCard
-            title="Keahlian & Alat Kerja"
-            description="Daftar ini dicocokkan langsung dengan kualifikasi lowongan di Langkah 2. Pilih format kelompok standar atau kategori kustom seperti Programming, Frameworks, Database."
+            title="Keahlian & Alat"
+            description="Digunakan langsung saat mencocokkan CV dengan syarat lowongan."
             accent="sky"
             icon={<Wrench size={20} weight="duotone" />}
             actions={
@@ -1092,10 +1078,8 @@ export const MasterCvEditor = () => {
               {/* Switcher Mode Kelompok Keahlian */}
               <div className="rounded-xl border border-[#94D1DF] bg-white p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div>
-                  <p className="text-xs sm:text-sm font-bold text-[#251813]">Format tampilan daftar keahlian di CV</p>
-                  <p className="text-xs text-[#59483F] mt-0.5">
-                    Mode Kategori Kustom cocok untuk CV gaya ATS Padat (contoh: Programming, Frameworks, Database, Machine Learning).
-                  </p>
+                  <p className="text-xs sm:text-sm font-bold text-[#251813]">Tampilan keahlian di CV</p>
+                  <p className="text-xs text-[#59483F] mt-0.5">Standar 3 kelompok atau kategori kustom.</p>
                 </div>
                 <div
                   role="group"
@@ -1185,21 +1169,15 @@ export const MasterCvEditor = () => {
                 </div>
               ) : (
                 <div className="grid gap-4">
-                  <Field
-                    label="Keahlian teknis (Hard Skills)"
-                    hint="Pisahkan dengan koma atau baris baru. Contoh: SQL, Jaringan LAN/WAN, Pembukuan, React.js, Troubleshooting Hardware."
-                  >
+                  <Field label="Keahlian teknis (Hard Skills)" hint="Pisahkan dengan koma.">
                     <CommaListArea
                       rows={4}
                       values={resume.skills.hardSkills}
                       onChangeValues={(vals) => updateSkills("hardSkills", vals)}
-                      placeholder="SQL, HTML, CSS, JavaScript, Jaringan LAN/WAN, Stock Opname"
+                      placeholder="SQL, HTML, CSS, JavaScript, Jaringan LAN/WAN"
                     />
                   </Field>
-                  <Field
-                    label="Alat kerja & Software (Tools)"
-                    hint="Perangkat lunak yang pernah kamu operasikan. Contoh: Microsoft Excel, Microsoft Word, Accurate, Figma, Git."
-                  >
+                  <Field label="Alat & Software (Tools)" hint="Pisahkan dengan koma.">
                     <CommaListArea
                       rows={3}
                       values={resume.skills.tools}
@@ -1207,15 +1185,12 @@ export const MasterCvEditor = () => {
                       placeholder="Microsoft Excel, Microsoft Word, Git, MySQL, Figma"
                     />
                   </Field>
-                  <Field
-                    label="Sikap & karakter kerja (Soft Skills)"
-                    hint="Karakter yang bisa kamu buktikan lewat contoh nyata di proyek atau organisasi saat wawancara."
-                  >
+                  <Field label="Kompetensi pendukung (Soft Skills)" hint="Pisahkan dengan koma.">
                     <CommaListArea
                       rows={3}
                       values={resume.skills.softSkills}
                       onChangeValues={(vals) => updateSkills("softSkills", vals)}
-                      placeholder="Komunikasi, Kerja Tim, Teliti, Pemecahan Masalah"
+                      placeholder="Komunikasi, Kerja Tim, Teliti"
                     />
                   </Field>
                 </div>
