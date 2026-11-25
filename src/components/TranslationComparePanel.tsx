@@ -82,10 +82,10 @@ export const TranslationComparePanel = ({
             </span>
             <div>
               <h2 id="translation-compare-title" className="text-sm sm:text-base font-extrabold text-[#251813]">
-                Teks Asli vs Hasil Terjemahan ({targetLang === "en" ? "English ATS" : "Bahasa Indonesia"})
+                Bandingkan & Sunting Terjemahan ({targetLang === "en" ? "English" : "Indonesia"})
               </h2>
               <p className="text-xs text-[#4E3E36]">
-                Bandingkan teks sebelummu dengan hasil terjemahan dan sunting langsung kalimat yang masih kurang pas.
+                Sunting langsung kalimat terjemahan yang dirasa kurang pas.
               </p>
             </div>
           </div>
@@ -246,7 +246,7 @@ export const TranslationComparePanel = ({
                 <div className="grid gap-3 md:grid-cols-2 items-start">
                   <div>
                     <p className="text-[11px] font-bold uppercase tracking-wider text-[#59483F] mb-1">
-                      Teks Asli Sebelum Translate
+                      Teks Asli
                     </p>
                     <div className="rounded-xl border border-[#D9CEBC] bg-[#FAF5E8] p-2.5 text-xs sm:text-[13px] leading-relaxed text-[#251813] break-words">
                       {item.original}
@@ -255,7 +255,7 @@ export const TranslationComparePanel = ({
 
                   <div>
                     <p className="text-[11px] font-bold uppercase tracking-wider text-[#144C32] mb-1">
-                      Hasil Terjemahan (Bisa Disunting)
+                      Terjemahan
                     </p>
                     <TextArea
                       rows={item.original.length > 100 ? 3 : 2}
