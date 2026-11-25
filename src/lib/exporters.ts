@@ -187,20 +187,23 @@ export const buildPdfDocument = async (
     },
     name: {
       fontSize: m.nameSize,
+      lineHeight: 1.22,
       fontWeight: 700,
       textAlign: m.alignHeader,
       color: "#000000",
-      marginBottom: 2.5
+      marginBottom: m.padV <= 30 ? 3 : 4
     },
     headline: {
       fontSize: m.headlineSize,
+      lineHeight: 1.28,
       fontWeight: 700,
       textAlign: m.alignHeader,
       color: "#000000",
-      marginBottom: 2.5
+      marginBottom: m.padV <= 30 ? 2.5 : 3.5
     },
     contact: {
       fontSize: m.contactSize,
+      lineHeight: 1.3,
       textAlign: m.alignHeader,
       color: "#222222",
       marginBottom: 1.5
@@ -211,11 +214,12 @@ export const buildPdfDocument = async (
     headingRow: {
       borderBottomWidth: 0.8,
       borderBottomColor: "#000000",
-      paddingBottom: 1.5,
+      paddingBottom: 2,
       marginBottom: m.headingBottom
     },
     heading: {
       fontSize: m.headingSize,
+      lineHeight: 1.25,
       fontWeight: 700,
       letterSpacing: 0.35,
       textTransform: "uppercase",
@@ -226,17 +230,19 @@ export const buildPdfDocument = async (
       justifyContent: "space-between",
       alignItems: "flex-start",
       marginTop: m.entryTop,
-      marginBottom: 1
+      marginBottom: 1.5
     },
     entryTitle: {
       fontSize: m.entrySize,
+      lineHeight: m.lineHeight,
       color: "#000000",
       marginTop: m.entryTop,
-      marginBottom: 1
+      marginBottom: 1.5
     },
     entryTitleInRow: {
       flex: 1,
       fontSize: m.entrySize,
+      lineHeight: m.lineHeight,
       color: "#000000",
       paddingRight: 8
     },
@@ -250,17 +256,20 @@ export const buildPdfDocument = async (
     },
     entrySecondaryLine: {
       fontSize: m.noteSize,
+      lineHeight: m.lineHeight,
       fontStyle: "italic",
       color: "#222222",
       marginBottom: 1.5
     },
     entryMeta: {
       fontSize: m.metaSize,
+      lineHeight: m.lineHeight,
       color: "#000000",
       textAlign: "right"
     },
     metaOnly: {
       fontSize: m.metaSize,
+      lineHeight: m.lineHeight,
       color: "#222222",
       marginBottom: 1.5
     },
@@ -282,6 +291,7 @@ export const buildPdfDocument = async (
     bulletDot: {
       width: 8,
       fontSize: m.bodySize,
+      lineHeight: m.lineHeight,
       color: "#000000"
     },
     bulletText: {
@@ -292,6 +302,7 @@ export const buildPdfDocument = async (
     },
     note: {
       fontSize: m.noteSize,
+      lineHeight: m.lineHeight,
       color: "#222222",
       marginBottom: 1.5
     }
