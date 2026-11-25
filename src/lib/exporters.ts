@@ -224,11 +224,17 @@ export const buildPdfDocument = async (
     entryRow: {
       flexDirection: "row",
       justifyContent: "space-between",
-      alignItems: "baseline",
+      alignItems: "flex-start",
       marginTop: m.entryTop,
       marginBottom: 1
     },
     entryTitle: {
+      fontSize: m.entrySize,
+      color: "#000000",
+      marginTop: m.entryTop,
+      marginBottom: 1
+    },
+    entryTitleInRow: {
       flex: 1,
       fontSize: m.entrySize,
       color: "#000000",
@@ -332,7 +338,7 @@ export const buildPdfDocument = async (
             el(
               View,
               { key: `entry-${entryIndex}`, style: styles.entryRow },
-              el(Text, { style: [styles.entryTitle, styles.entryTitleBold] }, primaryLabel),
+              el(Text, { style: [styles.entryTitleInRow, styles.entryTitleBold] }, primaryLabel),
               el(Text, { style: styles.entryMeta }, entry.meta)
             )
           );
@@ -364,7 +370,7 @@ export const buildPdfDocument = async (
             el(
               View,
               { key: `entry-${entryIndex}`, style: styles.entryRow },
-              el(Text, { style: styles.entryTitle }, ...titleChildren),
+              el(Text, { style: styles.entryTitleInRow }, ...titleChildren),
               el(Text, { style: styles.entryMeta }, entry.meta)
             )
           );
