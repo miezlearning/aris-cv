@@ -78,12 +78,12 @@ export const ImportPanel = () => {
 
     const modeNote =
       applyMode === "merge"
-        ? " Item baru telah digabungkan ke data CV yang sudah ada."
-        : ` Format disesuaikan otomatis ke gaya ${TEMPLATE_LABELS[recommendedTemplate]} (bisa diganti kapan saja di pratinjau atau ekspor).`;
+        ? " Item baru digabungkan ke data CV."
+        : ` Gaya tampilan diset ke ${TEMPLATE_LABELS[recommendedTemplate]}.`;
 
     setMessage(
       sourceLabel
-        ? `Resource "${sourceLabel}" berhasil diimpor. ${summaryMessage}${modeNote}`
+        ? `File "${sourceLabel}" berhasil diimpor. ${summaryMessage}${modeNote}`
         : `${summaryMessage}${modeNote}`
     );
     setErrorMessage("");
@@ -230,9 +230,9 @@ export const ImportPanel = () => {
             <UploadSimple size={19} weight="duotone" />
           </span>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-[#251813]">Cara mulai mengisi data CV</p>
-            <p className="text-xs sm:text-[13px] text-[#4E3E36] mt-0.5 leading-relaxed">
-              Isi dari nol di bawah, unggah CV lama (PDF / DOCX / TXT / JSON), impor resource ekspor LinkedIn (PDF / ZIP / CSV), atau muat contoh.
+            <p className="text-sm font-bold text-[#251813]">Mulai dari berkas, LinkedIn, atau contoh</p>
+            <p className="text-xs text-[#4E3E36] mt-0.5">
+              Atau langsung isi formulir di bawah dari awal.
             </p>
           </div>
         </div>
@@ -372,7 +372,7 @@ export const ImportPanel = () => {
 
               {applyMode === "merge" ? (
                 <p className="text-xs text-[#144C32] bg-[#DFF5DA]/70 border border-[#9FD499] rounded-xl px-3 py-2 font-medium">
-                  Mode Gabung aktif: pengalaman, pendidikan, sertifikasi, dan keahlian baru akan ditambahkan tanpa menimpa kontak, ringkasan, atau proyek yang sudah terisi.
+                  Mode Gabung: item baru ditambahkan tanpa menghapus kontak, ringkasan, atau proyek yang sudah ada.
                 </p>
               ) : null}
 
@@ -381,7 +381,7 @@ export const ImportPanel = () => {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-[#124959]">
                       <LinkedinLogo size={18} weight="duotone" aria-hidden="true" />
-                      <span>Dukung PDF &quot;Save to PDF&quot;, Arsip Data .zip / .csv, atau Salin Profil</span>
+                      <span>Dukung PDF, arsip .zip / .csv, atau salinan teks profil</span>
                     </div>
                     <button
                       type="button"
@@ -410,25 +410,25 @@ export const ImportPanel = () => {
                         className="overflow-hidden grid gap-1.5 text-xs text-[#251813] bg-white/90 border border-[#94D1DF] rounded-xl p-3 list-decimal list-inside leading-relaxed"
                       >
                         <li>
-                          <strong>Save to PDF (Tercepat):</strong> Buka halaman profil LinkedIn kamu, klik tombol <strong>More / Lainnya</strong> di sebelah foto profil, lalu pilih <strong>Save to PDF</strong> (<code>Profile.pdf</code>).
+                          <strong>Save to PDF:</strong> Profil LinkedIn -&gt; <strong>More / Lainnya</strong> -&gt; <strong>Save to PDF</strong>.
                         </li>
                         <li>
-                          <strong>Arsip Data LinkedIn (.zip / .csv):</strong> Buka <strong>Settings &amp; Privacy</strong> -&gt; <strong>Data privacy</strong> -&gt; <strong>Get a copy of your data</strong>, centang <em>Profile, Positions, Education, Skills, Certifications</em>, lalu unggah berkas <code>.zip</code> atau kumpulan berkas <code>.csv</code>.
+                          <strong>Arsip Data (.zip / .csv):</strong> Settings -&gt; Data privacy -&gt; Get a copy of your data.
                         </li>
                         <li>
-                          <strong>Salin Teks Halaman Profil:</strong> Jika PDF/ZIP tidak tersedia, blok teks profil LinkedIn (Tentang, Pengalaman, Pendidikan, Keahlian) dan tempel ke kotak teks di bawah.
+                          <strong>Salin Teks:</strong> Salin teks profil LinkedIn lalu tempel di kolom di bawah.
                         </li>
                       </motion.ol>
                     ) : null}
                   </AnimatePresence>
 
                   <label className="grid gap-1 text-xs font-semibold text-[#124959]">
-                    <span>Tautan Profil LinkedIn kamu (opsional, untuk melengkapi bagian kontak)</span>
+                    <span>Tautan profil LinkedIn (opsional)</span>
                     <TextInput
                       type="url"
                       value={linkedInUrl}
                       onChange={(event) => setLinkedInUrl(event.target.value)}
-                      placeholder="https://www.linkedin.com/in/username-kamu"
+                      placeholder="https://www.linkedin.com/in/username"
                       className="bg-white"
                     />
                   </label>
@@ -478,13 +478,13 @@ export const ImportPanel = () => {
                     <div>
                       <p className="text-sm font-bold text-[#251813]">
                         {readingFile
-                          ? "Mengekstrak resource di browser..."
+                          ? "Membaca file..."
                           : activeTab === "linkedin"
-                          ? "Unggah resource ekspor LinkedIn (Profile.pdf, arsip .zip, atau beberapa .csv)"
-                          : "Unggah berkas CV lama kamu (.pdf, .docx, .txt, .json)"}
+                          ? "Unggah Profile.pdf, arsip .zip, atau file .csv LinkedIn"
+                          : "Unggah berkas CV (.pdf, .docx, .txt, .json)"}
                       </p>
                       <p className="text-xs text-[#4E3E36] mt-0.5 leading-relaxed">
-                        Seret berkas ke area ini atau klik tombol pilih berkas. Diproses 100% lokal di perangkatmu tanpa dikirim ke server.
+                        Seret file ke sini atau klik Pilih File. Diproses lokal di perangkatmu.
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
                         {activeTab === "linkedin" ? (
@@ -560,8 +560,8 @@ export const ImportPanel = () => {
                 <label className="grid gap-1.5 text-sm font-semibold text-[#251813]">
                   <span>
                     {activeTab === "linkedin"
-                      ? "Atau tempel teks hasil salin profil LinkedIn di sini"
-                      : "Atau tempel teks CV lama / JSON Resume di sini"}
+                      ? "Atau tempel teks profil LinkedIn"
+                      : "Atau tempel teks CV"}
                   </span>
                   <TextArea
                     rows={5}
@@ -569,8 +569,8 @@ export const ImportPanel = () => {
                     onChange={(event) => setRaw(event.target.value)}
                     placeholder={
                       activeTab === "linkedin"
-                        ? "Tempel teks dari halaman profil LinkedIn kamu (Summary / Tentang, Experience / Pengalaman, Education, Top Skills, Licenses & certifications)..."
-                        : "Salin-tempel seluruh teks dari dokumen PDF/Word atau berkas JSON Resume kamu di sini..."
+                        ? "Tempel isi profil LinkedIn (Tentang, Pengalaman, Pendidikan, Keahlian)..."
+                        : "Tempel teks dari PDF, Word, atau JSON Resume di sini..."
                     }
                   />
                 </label>
@@ -601,11 +601,6 @@ export const ImportPanel = () => {
                       Kosongkan
                     </Button>
                   ) : null}
-                  <span className="text-xs text-[#59483F]">
-                    {activeTab === "linkedin"
-                      ? "Mendukung format 2 kolom LinkedIn Save-to-PDF, salinan halaman profil (ID/EN), serta ekspor CSV."
-                      : "Mendukung berbagai format ATS: heading pipe (Posisi | Perusahaan), format 2 baris, keahlian per kategori, hingga JSON Resume."}
-                  </span>
                 </div>
               </div>
             </div>
