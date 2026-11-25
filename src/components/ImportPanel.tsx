@@ -9,16 +9,20 @@ import {
   FileDoc,
   FilePdf,
   FileTxt,
+  LinkedinLogo,
   Student,
   UploadSimple,
   WarningCircle,
   X
 } from "@phosphor-icons/react";
 import { extractTextFromFile } from "@/lib/file-extractor";
-import { parseResumeInput } from "@/lib/importers";
+import { looksLikeLinkedInText, parseLinkedInText, parseResumeInput } from "@/lib/importers";
 import { sampleDemoProfile, sampleFreshGradProfile } from "@/lib/defaults";
 import { useCvStore } from "@/lib/store";
-import { Button, TextArea } from "@/components/ui";
+import { Button, TextArea, TextInput } from "@/components/ui";
+import type { CvTemplate } from "@/types/resume";
+
+type ImportTabMode = "cv" | "linkedin";
 
 const TEMPLATE_LABELS = {
   compact_centered: "ATS Padat (Harvard / Tech)",
@@ -32,6 +36,8 @@ export const ImportPanel = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [importOpen, setImportOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<ImportTabMode>("cv");
+  const [linkedInUrl, setLinkedInUrl] = useState("");
   const [raw, setRaw] = useState("");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -39,9 +45,19 @@ export const ImportPanel = () => {
   const [readingFile, setReadingFile] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState("");
 
-  const applyParsedText = (text: string, sourceLabel?: string) => {
-    const result = parseResumeInput(text);
-    setResumeProfile(result.profile);
+  const applyParsedText = (text: string, sourceLabel?: string, forceLinkedInHint = false) => {
+    const cleanUrl = linkedInUrl.trim();
+    const result =
+      forceLinkedInHint || looksLikeLinkedInText(text)
+        ? parseLinkedInText(text, cleanUrl)
+        : parseResumeInput(text);
+
+    const profile =
+      cleanUrl && !result.profile.contact.linkedinUrl
+        ? { ...result.profile, contact: { ...result.profile.contact, linkedinUrl: cleanUrl } }
+        : result.profile;
+
+    setResumeProfile(profile);
     setCvTemplate(result.recommendedTemplate);
     const styleNote = ` Format disesuaikan otomatis ke gaya ${TEMPLATE_LABELS[result.recommendedTemplate]} (bisa diganti kapan saja di pratinjau atau ekspor).`;
     setMessage(
@@ -55,7 +71,7 @@ export const ImportPanel = () => {
 
   const handleImport = () => {
     if (!raw.trim()) return;
-    applyParsedText(raw);
+    applyParsedText(raw, undefined, activeTab === "linkedin" && looksLikeLinkedInText(raw));
   };
 
   const processSelectedFile = async (file: File) => {
@@ -66,12 +82,16 @@ export const ImportPanel = () => {
       const extracted = await extractTextFromFile(file);
       setRaw(extracted.text);
       setUploadedFileName(file.name);
-      applyParsedText(extracted.text, file.name);
+      applyParsedText(
+        extracted.text,
+        file.name,
+        extracted.detectedSource === "linkedin_pdf" || looksLikeLinkedInText(extracted.text)
+      );
     } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Gagal membaca berkas. Coba salin teks CV kamu lalu tempel di kolom bawah."
+          : "Gagal membaca berkas. Coba salin teks profil/CV kamu lalu tempel di kolom bawah."
       );
     } finally {
       setReadingFile(false);
@@ -89,6 +109,16 @@ export const ImportPanel = () => {
     setIsDragging(false);
     const file = event.dataTransfer.files?.[0];
     if (file) void processSelectedFile(file);
+  };
+
+  const openModeDrawer = (targetTab: ImportTabMode) => {
+    setErrorMessage("");
+    if (importOpen && activeTab === targetTab) {
+      setImportOpen(false);
+      return;
+    }
+    setActiveTab(targetTab);
+    setImportOpen(true);
   };
 
   const handleLoadFreshGrad = () => {
@@ -122,7 +152,7 @@ export const ImportPanel = () => {
           <div className="min-w-0">
             <p className="text-sm font-bold text-[#251813]">Cara mulai mengisi data CV</p>
             <p className="text-xs sm:text-[13px] text-[#4E3E36] mt-0.5 leading-relaxed">
-              Isi langsung dari nol di bawah, unggah CV lama (PDF / Word DOCX / TXT / JSON), atau muat contoh siap edit.
+              Isi dari nol di bawah, unggah CV lama (PDF / DOCX / TXT / JSON), impor resource ekspor LinkedIn, atau muat contoh.
             </p>
           </div>
         </div>
@@ -132,11 +162,21 @@ export const ImportPanel = () => {
             type="button"
             variant="secondary"
             className="min-h-[44px] px-3.5 text-xs sm:text-sm gap-1.5"
-            aria-expanded={importOpen}
-            onClick={() => setImportOpen((prev) => !prev)}
+            aria-expanded={importOpen && activeTab === "cv"}
+            onClick={() => openModeDrawer("cv")}
           >
             <FileArrowUp size={16} weight="duotone" aria-hidden="true" />
-            <span>{importOpen ? "Tutup Panel Impor" : "Impor / Unggah CV"}</span>
+            <span>{importOpen && activeTab === "cv" ? "Tutup Panel CV" : "Impor / Unggah CV"}</span>
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            className="min-h-[44px] px-3.5 text-xs sm:text-sm gap-1.5 bg-[#D6F3FA] border-[#94D1DF] text-[#124959] hover:bg-[#C3EBF5]"
+            aria-expanded={importOpen && activeTab === "linkedin"}
+            onClick={() => openModeDrawer("linkedin")}
+          >
+            <LinkedinLogo size={16} weight="duotone" aria-hidden="true" />
+            <span>{importOpen && activeTab === "linkedin" ? "Tutup Panel LinkedIn" : "Impor dari LinkedIn"}</span>
           </Button>
           <Button
             type="button"
@@ -170,7 +210,66 @@ export const ImportPanel = () => {
             className="overflow-hidden"
           >
             <div className="mt-4 border-t border-[#D9CEBC] pt-4 grid gap-4">
-              {/* Dropzone Unggah Berkas */}
+              <div
+                role="tablist"
+                aria-label="Sumber impor data"
+                className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-[#C2B49E] bg-[#FFF8DF] p-1 w-fit"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === "cv"}
+                  onClick={() => {
+                    setActiveTab("cv");
+                    setErrorMessage("");
+                  }}
+                  className={`min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 transition-colors ${
+                    activeTab === "cv"
+                      ? "bg-[#251813] text-[#FFFDF8]"
+                      : "text-[#4A3A2E] hover:bg-white/80"
+                  }`}
+                >
+                  <FileArrowUp size={15} weight="duotone" aria-hidden="true" />
+                  <span>Berkas / Teks CV</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === "linkedin"}
+                  onClick={() => {
+                    setActiveTab("linkedin");
+                    setErrorMessage("");
+                  }}
+                  className={`min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 transition-colors ${
+                    activeTab === "linkedin"
+                      ? "bg-[#124959] text-[#FFFDF8]"
+                      : "text-[#4A3A2E] hover:bg-white/80"
+                  }`}
+                >
+                  <LinkedinLogo size={15} weight="duotone" aria-hidden="true" />
+                  <span>Resource LinkedIn</span>
+                </button>
+              </div>
+
+              {activeTab === "linkedin" ? (
+                <div className="grid gap-3 rounded-xl border border-[#94D1DF] bg-[#D6F3FA]/45 p-3.5">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-[#124959]">
+                    <LinkedinLogo size={18} weight="duotone" aria-hidden="true" />
+                    <span>Impor Resource LinkedIn</span>
+                  </div>
+                  <label className="grid gap-1 text-xs font-semibold text-[#124959]">
+                    <span>Tautan Profil LinkedIn kamu (opsional, untuk melengkapi bagian kontak)</span>
+                    <TextInput
+                      type="url"
+                      value={linkedInUrl}
+                      onChange={(event) => setLinkedInUrl(event.target.value)}
+                      placeholder="https://www.linkedin.com/in/username-kamu"
+                      className="bg-white"
+                    />
+                  </label>
+                </div>
+              ) : null}
+
               <div
                 onDragOver={(event) => {
                   event.preventDefault();
@@ -204,7 +303,9 @@ export const ImportPanel = () => {
                     <div>
                       <p className="text-sm font-bold text-[#251813]">
                         {readingFile
-                          ? "Mengekstrak teks CV di browser..."
+                          ? "Mengekstrak teks di browser..."
+                          : activeTab === "linkedin"
+                          ? "Unggah Profile.pdf dari Save to PDF LinkedIn"
                           : "Unggah berkas CV lama kamu (.pdf, .docx, .txt, .json)"}
                       </p>
                       <p className="text-xs text-[#4E3E36] mt-0.5 leading-relaxed">
@@ -239,7 +340,7 @@ export const ImportPanel = () => {
                     className="shrink-0 min-h-[44px] gap-1.5"
                   >
                     <FileArrowUp size={16} weight="bold" aria-hidden="true" />
-                    <span>{readingFile ? "Membaca..." : "Pilih Berkas CV"}</span>
+                    <span>{readingFile ? "Membaca..." : "Pilih Berkas"}</span>
                   </Button>
                 </div>
               </div>
@@ -254,15 +355,18 @@ export const ImportPanel = () => {
                 </div>
               ) : null}
 
-              {/* Atau Tempel Teks Manual */}
               <div className="grid gap-2">
                 <label className="grid gap-1.5 text-sm font-semibold text-[#251813]">
-                  <span>Atau tempel teks CV lama / JSON Resume di sini</span>
+                  <span>
+                    {activeTab === "linkedin"
+                      ? "Atau tempel teks hasil salin profil LinkedIn di sini"
+                      : "Atau tempel teks CV lama / JSON Resume di sini"}
+                  </span>
                   <TextArea
                     rows={5}
                     value={raw}
                     onChange={(event) => setRaw(event.target.value)}
-                    placeholder="Salin-tempel seluruh teks dari dokumen PDF/Word atau berkas JSON Resume kamu di sini..."
+                    placeholder="Salin-tempel teks CV atau halaman profil LinkedIn kamu di sini..."
                   />
                 </label>
                 <div className="flex flex-wrap items-center gap-2.5">
@@ -282,9 +386,6 @@ export const ImportPanel = () => {
                       Kosongkan
                     </Button>
                   ) : null}
-                  <span className="text-xs text-[#59483F]">
-                    Mendukung berbagai format ATS: heading pipe (Posisi | Perusahaan), format 2 baris, keahlian per kategori, hingga JSON Resume.
-                  </span>
                 </div>
               </div>
             </div>
