@@ -9,11 +9,8 @@ import {
   FileText,
   Gauge,
   IdentificationCard,
-  LockSimple,
   NotePencil,
   PencilLine,
-  Student,
-  Translate,
   UserCircleCheck
 } from "@phosphor-icons/react";
 import { BulletRewriter } from "@/components/BulletRewriter";
@@ -53,7 +50,7 @@ const steps: Step[] = [
     order: 1,
     short: "Data CV",
     title: "Isi data CV",
-    body: "Kontak, pendidikan, proyek atau magang, pengalaman, dan keahlianmu.",
+    body: "Kontak, pendidikan, pengalaman, dan keahlian.",
     badgeColor: "bg-[#FFF0A8] text-[#4A3A2E] border-[#DFC25A]",
     barTint: "card-tint-butter",
     medallion: "bg-[#FFF0A8] text-[#251813] border-[#251813]",
@@ -64,8 +61,8 @@ const steps: Step[] = [
     href: "/lowongan",
     order: 2,
     short: "Lowongan",
-    title: "Tempel iklan lowongan",
-    body: "Pisahkan berkas administratif otomatis dan ukur kecocokan ATS secara jujur.",
+    title: "Cek lowongan",
+    body: "Bandingkan kualifikasi lowongan dengan isi CV kamu.",
     badgeColor: "bg-[#D6F3FA] text-[#124959] border-[#94D1DF]",
     barTint: "card-tint-sky",
     medallion: "bg-[#D6F3FA] text-[#124959] border-[#251813]",
@@ -76,8 +73,8 @@ const steps: Step[] = [
     href: "/optimasi",
     order: 3,
     short: "Optimasi",
-    title: "Perbaiki kalimat pengalaman & proyek",
-    body: "Susun ulang poinmu memakai pola Google XYZ / STAR tanpa menambah fakta palsu.",
+    title: "Rapikan kalimat CV",
+    body: "Pertajam poin pengalaman dan tambahkan hasil nyata.",
     badgeColor: "bg-[#DFF5DA] text-[#144C32] border-[#9FD499]",
     barTint: "card-tint-sage",
     medallion: "bg-[#DFF5DA] text-[#144C32] border-[#251813]",
@@ -88,8 +85,8 @@ const steps: Step[] = [
     href: "/export",
     order: 4,
     short: "Unduh",
-    title: "Unduh CV siap kirim",
-    body: "Pilih bahasa ID atau Full-Content ATS English lalu unduh PDF atau DOCX.",
+    title: "Unduh CV",
+    body: "Pilih gaya, bahasa, lalu unduh file PDF atau DOCX.",
     badgeColor: "bg-[#FFE3D8] text-[#7B1F14] border-[#E9A590]",
     barTint: "card-tint-clay",
     medallion: "bg-[#FFE3D8] text-[#7B1F14] border-[#251813]",
@@ -99,30 +96,30 @@ const steps: Step[] = [
 
 const pageCopy: Record<WorkspacePage, { title: string; body: string; step?: number; next?: StepId }> = {
   dashboard: {
-    title: "Ruang kerja CV kamu",
-    body: "Empat langkah dari data mentah sampai CV siap dikirim. Semua data tersimpan di browser perangkat ini, bukan di server."
+    title: "Ruang kerja CV",
+    body: "Empat langkah menyusun CV siap lamar."
   },
   master: {
     title: "Isi Data CV",
-    body: "Cocok untuk fresh graduate maupun pelamar berpengalaman. Tulis fakta apa adanya agar sistem membantu menyusunnya dengan rapi.",
+    body: "Lengkapi bagian yang relevan dengan profilmu.",
     step: 1,
     next: "target"
   },
   target: {
-    title: "Analisis Iklan Lowongan",
-    body: "Tempel iklan lowongan bahasa Indonesia, Inggris, atau campuran. Syarat berkas (KTP, SKCK, usia) dipisahkan otomatis dari skor ATS.",
+    title: "Cek Kecocokan Lowongan",
+    body: "Tempel iklan lowongan untuk melihat kata kunci yang cocok atau kurang.",
     step: 2,
     next: "rewrite"
   },
   rewrite: {
-    title: "Optimasi Kalimat Google XYZ / STAR",
-    body: "Pilih saran yang sesuai atau sunting langsung. Poin dari Proyek Kuliah, Magang, Pengalaman Kerja, hingga Organisasi didukung penuh.",
+    title: "Optimasi Poin CV",
+    body: "Perkuat kalimat pengalaman dan sesuaikan keahlian.",
     step: 3,
     next: "export"
   },
   export: {
-    title: "Unduh CV ATS-Safe",
-    body: "Pilih bahasa dokumen (Indonesia, Full ATS English, atau Otomatis) lalu ekspor PDF, DOCX, atau TXT langsung di perangkatmu.",
+    title: "Unduh CV",
+    body: "Pilih tampilan, bahasa dokumen, lalu unduh.",
     step: 4
   }
 };
@@ -190,28 +187,25 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
   const suggestionMetric = (() => {
     if (!analyzed) {
       return {
-        value: "Belum dianalisis",
-        help:
-          completeness < 30
-            ? "Lengkapi data CV dulu di Langkah 1, lalu analisis lowongan"
-            : "Jalankan analisis iklan lowongan di Langkah 2"
+        value: "Belum dicek",
+        help: completeness < 30 ? "Lengkapi data di Langkah 1" : "Cek lowongan di Langkah 2"
       };
     }
     if (!liveBullets.length) {
       return {
         value: "0 poin",
-        help: "Tambahkan poin pengalaman, proyek, atau organisasi di Langkah 1"
+        help: "Tambahkan poin di Langkah 1"
       };
     }
     if (pendingSuggestions > 0) {
       return {
-        value: `${pendingSuggestions} perlu dioptimasi`,
-        help: `Dari total ${liveBullets.length} poin kalimat di Langkah 3`
+        value: `${pendingSuggestions} perlu dirapikan`,
+        help: `Dari ${liveBullets.length} poin CV`
       };
     }
     return {
-      value: "Siap & Kuat",
-      help: `Seluruh ${liveBullets.length} poin sudah kuat (tetap bisa disunting di Langkah 3)`
+      value: "Sudah kuat",
+      help: `${liveBullets.length} poin siap pakai`
     };
   })();
 
@@ -226,14 +220,9 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
     progress?: number;
   }> = [
     {
-      label: "Kelengkapan data CV",
+      label: "Data CV",
       value: `${completeness}%`,
-      help:
-        completeness >= 80
-          ? "Siap dicocokkan dengan iklan lowongan"
-          : resumeProfile.experienceLevel === "fresh_graduate"
-          ? "Isi Profil, Pendidikan, Proyek/Organisasi, & Keahlian"
-          : "Perlu dilengkapi di Langkah 1",
+      help: completeness >= 80 ? "Siap dicocokkan ke lowongan" : "Lengkapi profil di Langkah 1",
       href: "/master-cv",
       bg: "bg-[#FFF4BF]",
       medallion: "bg-[#FFFFFF] text-[#251813] border-[#251813]",
@@ -241,9 +230,9 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
       progress: completeness
     },
     {
-      label: "Skor kecocokan ATS",
-      value: analyzed ? `${analytics.overallScore}%` : "Belum dianalisis",
-      help: analyzed ? `Untuk ${job.jobTitle || "lowongan target"}` : "Tempel iklan lowongan di Langkah 2",
+      label: "Skor kecocokan",
+      value: analyzed ? `${analytics.overallScore}%` : "Belum dicek",
+      help: analyzed ? job.jobTitle || "Lowongan target" : "Tempel lowongan di Langkah 2",
       href: "/lowongan",
       bg: "bg-[#D6F3FA]",
       medallion: "bg-[#FFFFFF] text-[#124959] border-[#251813]",
@@ -251,7 +240,7 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
       progress: analyzed ? analytics.overallScore : undefined
     },
     {
-      label: "Saran perbaikan kalimat",
+      label: "Perbaikan kalimat",
       value: suggestionMetric.value,
       help: suggestionMetric.help,
       href: "/optimasi",
@@ -294,34 +283,18 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
             <div className="grid gap-6 lg:grid-cols-[1fr_240px] lg:items-center">
               <div>
                 <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-[#251813] leading-tight">
-                  Susun CV yang <span className="doodle-title-mark">cocok dan jujur</span> untuk lowongan impianmu
+                  Susun CV yang <span className="doodle-title-mark">rapi dan relevan</span> untuk setiap lamaran
                 </h1>
-                <p className="mt-3 text-sm sm:text-base leading-relaxed text-[#4E3E36] max-w-2xl">
-                  Dirancang untuk fresh graduate, pelamar pemula, hingga profesional. Cocokkan kualifikasi lowongan, pisahkan syarat berkas administratif secara otomatis, terjemahkan isi CV ke English standar ATS, dan unduh langsung di browsermu.
+                <p className="mt-3 text-sm sm:text-base leading-relaxed text-[#4E3E36] max-w-xl">
+                  Isi data sekali, cocokan dengan syarat lowongan, lalu unduh CV PDF atau Word langsung di perangkatmu.
                 </p>
-
-                {/* Capability highlights dengan ikon duotone */}
-                <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#9FD499] bg-[#DFF5DA] px-2.5 py-1 text-[#144C32]">
-                    <LockSimple size={14} weight="duotone" aria-hidden="true" />
-                    100% Lokal di Browser
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#94D1DF] bg-[#D6F3FA] px-2.5 py-1 text-[#124959]">
-                    <Student size={14} weight="duotone" aria-hidden="true" />
-                    Ramah Fresh Graduate
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#DFC25A] bg-[#FFF0A8] px-2.5 py-1 text-[#4A3A2E]">
-                    <Translate size={14} weight="duotone" aria-hidden="true" />
-                    Bilingual ID & Full ATS English
-                  </span>
-                </div>
 
                 <div className="mt-5 flex flex-wrap items-center gap-3">
                   <Link
                     href={focusStep.href}
                     className="btn doodle-btn bg-[#1F6B57] text-white border-2 border-[#251813] shadow-[2px_3px_0_rgba(37,24,19,0.18)] hover:bg-[#154538] px-5 py-2.5 text-sm font-bold"
                   >
-                    Lanjutkan Langkah {focusStep.order}: {focusStep.short}
+                    Lanjut Langkah {focusStep.order}: {focusStep.short}
                   </Link>
                   <button
                     type="button"
@@ -329,7 +302,7 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
                     className="btn doodle-btn bg-white text-[#251813] border border-[#C2B49E] hover:bg-[#FFF8DF] px-4 py-2.5 text-sm font-bold gap-1.5"
                   >
                     <FileText size={16} weight="duotone" aria-hidden="true" />
-                    <span>Lihat Lembar CV Saat Ini</span>
+                    <span>Pratinjau CV</span>
                   </button>
                 </div>
               </div>
@@ -390,13 +363,8 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
           </section>
 
           {/* Alur 4 Langkah Kerja */}
-          <section aria-label="Alur 4 Langkah Kerja" className="grid gap-4">
-            <div>
-              <h2 className="text-xl font-bold text-[#251813]">Alur 4 Langkah Kerja</h2>
-              <p className="text-xs sm:text-sm text-[#4E3E36] mt-0.5">
-                Kerjakan berurutan agar isi CV selaras dengan lowongan yang kamu lamar.
-              </p>
-            </div>
+          <section aria-label="4 Langkah Kerja" className="grid gap-4">
+            <h2 className="text-lg sm:text-xl font-bold text-[#251813]">4 Langkah Penyusunan CV</h2>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {steps.map((step) => {
