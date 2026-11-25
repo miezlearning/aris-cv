@@ -11,7 +11,24 @@ import type {
   WorkType
 } from "@/types/resume";
 import { createId, emptyResumeProfile } from "@/lib/defaults";
+import {
+  looksLikeLinkedInText,
+  mergeResumeProfiles,
+  parseLinkedInCsvArchive,
+  parseLinkedInText,
+  type LinkedInImportStats,
+  type LinkedInParseResult
+} from "@/lib/linkedin-importer";
 import { splitList, unique } from "@/lib/text";
+
+export {
+  looksLikeLinkedInText,
+  mergeResumeProfiles,
+  parseLinkedInCsvArchive,
+  parseLinkedInText,
+  type LinkedInImportStats,
+  type LinkedInParseResult
+};
 
 export type ImportStats = {
   work: number;
@@ -104,6 +121,24 @@ export const parseResumeInput = (raw: string): ParsedResumeResult => {
       recommendedTemplate: "classic_editorial"
     };
   } catch {
+    if (looksLikeLinkedInText(value)) {
+      const linkedInResult = parseLinkedInText(value);
+      return {
+        profile: linkedInResult.profile,
+        message: linkedInResult.message,
+        stats: {
+          work: linkedInResult.stats.work,
+          education: linkedInResult.stats.education,
+          projects: linkedInResult.stats.projects,
+          organizations: linkedInResult.stats.organizations,
+          skillGroups: 0,
+          skills: linkedInResult.stats.skills,
+          certifications: linkedInResult.stats.certifications
+        },
+        recommendedTemplate: linkedInResult.recommendedTemplate
+      };
+    }
+
     const profile = fromStructuredText(value);
     const stats = computeStats(profile);
     const recommendedTemplate: CvTemplate =
