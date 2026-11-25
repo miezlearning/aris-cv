@@ -123,7 +123,7 @@ export const Header = ({
               </span>
               <span className="hidden xl:inline-flex items-center gap-1 text-[11px] font-bold text-[#1F6B57]">
                 <LockSimple size={12} weight="duotone" aria-hidden="true" />
-                <span>100% Privat di Browser</span>
+                <span>Privat di Browser</span>
               </span>
             </div>
           </Link>
