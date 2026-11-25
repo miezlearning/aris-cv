@@ -3,6 +3,7 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  ArrowsMerge,
   Briefcase,
   CheckCircle,
   FileArrowUp,
@@ -18,13 +19,14 @@ import {
   X
 } from "@phosphor-icons/react";
 import { extractTextFromFile } from "@/lib/file-extractor";
-import { looksLikeLinkedInText, parseLinkedInText, parseResumeInput } from "@/lib/importers";
+import { looksLikeLinkedInText, mergeResumeProfiles, parseLinkedInText, parseResumeInput } from "@/lib/importers";
 import { sampleDemoProfile, sampleFreshGradProfile } from "@/lib/defaults";
 import { useCvStore } from "@/lib/store";
 import { Button, TextArea, TextInput } from "@/components/ui";
-import type { CvTemplate } from "@/types/resume";
+import type { CvTemplate, ResumeProfile } from "@/types/resume";
 
 type ImportTabMode = "cv" | "linkedin";
+type ApplyImportMode = "replace" | "merge";
 
 const TEMPLATE_LABELS = {
   compact_centered: "ATS Padat (Harvard / Tech)",
@@ -33,12 +35,14 @@ const TEMPLATE_LABELS = {
 } as const;
 
 export const ImportPanel = () => {
+  const resumeProfile = useCvStore((state) => state.resumeProfile);
   const setResumeProfile = useCvStore((state) => state.setResumeProfile);
   const setCvTemplate = useCvStore((state) => state.setCvTemplate);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [importOpen, setImportOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ImportTabMode>("cv");
+  const [applyMode, setApplyMode] = useState<ApplyImportMode>("replace");
   const [showLinkedInGuide, setShowLinkedInGuide] = useState(false);
   const [linkedInUrl, setLinkedInUrl] = useState("");
   const [raw, setRaw] = useState("");
@@ -60,13 +64,22 @@ export const ImportPanel = () => {
         ? { ...result.profile, contact: { ...result.profile.contact, linkedinUrl: cleanUrl } }
         : result.profile;
 
-    setResumeProfile(profile);
-    setCvTemplate(result.recommendedTemplate);
-    const styleNote = ` Format disesuaikan otomatis ke gaya ${TEMPLATE_LABELS[result.recommendedTemplate]} (bisa diganti kapan saja di pratinjau atau ekspor).`;
+    const nextProfile: ResumeProfile =
+      applyMode === "merge"
+        ? mergeResumeProfiles(resumeProfile, profile)
+        : profile;
+    setResumeProfile(nextProfile);
+    if (applyMode === "replace") {
+      setCvTemplate(result.recommendedTemplate);
+    }
+    const modeNote =
+      applyMode === "merge"
+        ? " Item baru telah digabungkan ke data CV yang sudah ada."
+        : ` Format disesuaikan otomatis ke gaya ${TEMPLATE_LABELS[result.recommendedTemplate]} (bisa diganti kapan saja di pratinjau atau ekspor).`;
     setMessage(
       sourceLabel
-        ? `Berkas "${sourceLabel}" berhasil diimpor. ${result.message}${styleNote}`
-        : `${result.message}${styleNote}`
+        ? `Resource "${sourceLabel}" berhasil diimpor. ${result.message}${modeNote}`
+        : `${result.message}${modeNote}`
     );
     setErrorMessage("");
     setImportOpen(false);
@@ -213,10 +226,11 @@ export const ImportPanel = () => {
             className="overflow-hidden"
           >
             <div className="mt-4 border-t border-[#D9CEBC] pt-4 grid gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div
                 role="tablist"
                 aria-label="Sumber impor data"
-                className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-[#C2B49E] bg-[#FFF8DF] p-1 w-fit"
+                className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-[#C2B49E] bg-[#FFF8DF] p-1"
               >
                 <button
                   type="button"
@@ -253,6 +267,47 @@ export const ImportPanel = () => {
                   <span>Resource LinkedIn</span>
                 </button>
               </div>
+
+              <div
+                role="radiogroup"
+                aria-label="Cara menerapkan data impor"
+                className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-[#C2B49E] bg-white p-1"
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={applyMode === "replace"}
+                  onClick={() => setApplyMode("replace")}
+                  className={`min-h-[44px] px-3 rounded-lg text-xs font-bold transition-colors ${
+                    applyMode === "replace"
+                      ? "bg-[#FFF0A8] border border-[#DFC25A] text-[#251813]"
+                      : "text-[#59483F] hover:bg-[#FFF8DF]"
+                  }`}
+                >
+                  Ganti CV saat ini
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={applyMode === "merge"}
+                  onClick={() => setApplyMode("merge")}
+                  className={`min-h-[44px] px-3 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-colors ${
+                    applyMode === "merge"
+                      ? "bg-[#DFF5DA] border border-[#9FD499] text-[#144C32]"
+                      : "text-[#59483F] hover:bg-[#FFF8DF]"
+                  }`}
+                >
+                  <ArrowsMerge size={14} weight="bold" aria-hidden="true" />
+                  <span>Gabungkan ke CV yang ada</span>
+                </button>
+              </div>
+            </div>
+
+              {applyMode === "merge" ? (
+                <p className="text-xs text-[#144C32] bg-[#DFF5DA]/70 border border-[#9FD499] rounded-xl px-3 py-2 font-medium">
+                  Mode Gabung aktif: pengalaman, pendidikan, sertifikasi, dan keahlian baru akan ditambahkan tanpa menimpa kontak, ringkasan, atau proyek yang sudah terisi.
+                </p>
+              ) : null}
 
               {activeTab === "linkedin" ? (
                 <div className="grid gap-3 rounded-xl border border-[#94D1DF] bg-[#D6F3FA]/45 p-3.5">
@@ -412,8 +467,16 @@ export const ImportPanel = () => {
                   />
                 </label>
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <Button type="button" variant="secondary" onClick={handleImport} disabled={!raw.trim() || readingFile}>
-                    Ekstrak & Isi Formulir
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleImport}
+                    disabled={!raw.trim() || readingFile}
+                    className="min-h-[44px]"
+                  >
+                    {applyMode === "merge"
+                      ? "Ekstrak & Gabungkan ke CV"
+                      : "Ekstrak & Isi Formulir"}
                   </Button>
                   {raw ? (
                     <Button
