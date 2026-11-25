@@ -46,23 +46,23 @@ const TEMPLATE_OPTIONS: Array<{
 }> = [
   {
     value: "compact_centered",
-    label: "ATS Padat (Harvard / Tech)",
-    badge: "Muat 1 Halaman",
-    hint: "Header rata tengah, baris Posisi | Instansi dalam satu baris dengan tanggal di kanan, ideal untuk pengalaman padat agar tetap 1 halaman A4.",
+    label: "ATS Padat",
+    badge: "Muat 1 Hal.",
+    hint: "Ringkas untuk pengalaman padat agar muat 1 halaman A4.",
     icon: <Rows size={17} weight="duotone" aria-hidden="true" />
   },
   {
     value: "classic_editorial",
-    label: "ATS Standar (Klasik Lega)",
-    badge: "Umum & BUMN",
-    hint: "Header rata tengah dengan tipografi dan jarak antar-baris lebih lega. Nyaman dibaca HR korporat lokal, instansi, dan pelamar umum.",
+    label: "ATS Standar",
+    badge: "Umum",
+    hint: "Jarak baris lebih lega dan nyaman dibaca HR.",
     icon: <Layout size={17} weight="duotone" aria-hidden="true" />
   },
   {
     value: "executive_left",
-    label: "ATS Formal (Rata Kiri Serif)",
-    badge: "Klasik 2 Baris",
-    hint: "Header rata kiri bergaris tegas dengan font Serif formal serta format posisi dan instansi bertingkat. Cocok untuk keuangan, konsultan, dan akademik.",
+    label: "ATS Formal Serif",
+    badge: "Formal",
+    hint: "Header rata kiri dengan tipografi Serif klasik.",
     icon: <TextAlignLeft size={17} weight="duotone" aria-hidden="true" />
   }
 ];
@@ -70,18 +70,18 @@ const TEMPLATE_OPTIONS: Array<{
 const LANGUAGE_OPTIONS: Array<{ value: CvLanguage; label: string; hint: string }> = [
   {
     value: "auto",
-    label: "Asli CV (Bahasa Asli Teks CV)",
-    hint: "Mempertahankan bahasa teks CV aslimu agar akurat dibanding iklan dan mudah membandingkan perubahan skor saat diterjemahkan."
+    label: "Sesuai Asli",
+    hint: "Ikuti bahasa asli teks CV kamu."
   },
   {
     value: "id",
-    label: "Bahasa Indonesia (Full Translation)",
-    hint: "Judul seksi dan isi CV berbahasa Inggris diterjemahkan ke Bahasa Indonesia baku ATS dan langsung memperbarui skor ATS Live."
+    label: "Bahasa Indonesia",
+    hint: "Judul seksi dan isi CV berbahasa Indonesia."
   },
   {
     value: "en",
-    label: "English (ATS Full Translation)",
-    hint: "Judul seksi dan seluruh isi CV diterjemahkan ke English standar industri ATS serta menaikkan kecocokan untuk lowongan berbahasa Inggris."
+    label: "English (ATS)",
+    hint: "Terjemahkan CV ke Bahasa Inggris."
   }
 ];
 
@@ -244,8 +244,8 @@ export const ExportPanel = () => {
 
   return (
     <SectionCard
-      title="Unduh CV Siap Kirim (100% Gratis & Privat)"
-      description="Berkas disusun langsung di browser perangkatmu tanpa dikirim ke server mana pun. Pilih jenis gaya tata letak ATS, bahasa, lalu unduh sebagai PDF, Word DOCX, atau TXT."
+      title="Unduh CV"
+      description="Pilih gaya tata letak, bahasa, lalu unduh berkas langsung di perangkatmu."
       accent="clay"
       icon={<Export size={20} weight="duotone" />}
     >
@@ -263,14 +263,12 @@ export const ExportPanel = () => {
                 <Layout size={18} weight="duotone" />
               </span>
               <div>
-                <h3 className="text-sm font-bold text-[#251813]">Jenis Tata Letak ATS</h3>
-                <p className="text-xs text-[#59483F] mt-0.5">
-                  Ketiganya 100% satu kolom linear tanpa tabel agar lolos mesin ATS sekaligus sesuai preferensi industrimu.
-                </p>
+                <h3 className="text-sm font-bold text-[#251813]">Gaya Tata Letak</h3>
+                <p className="text-xs text-[#59483F] mt-0.5">Semua gaya memakai layout 1 kolom rapi tanpa tabel.</p>
               </div>
             </div>
             <span className="rounded-lg border border-[#DFC25A] bg-[#FFF8DF] px-2.5 py-1 text-xs font-bold text-[#4A3A2E]">
-              Dipilih: {activeTemplateMeta.label}
+              {activeTemplateMeta.label}
             </span>
           </div>
 
@@ -319,14 +317,12 @@ export const ExportPanel = () => {
                 <Translate size={18} weight="duotone" />
               </span>
               <div>
-                <h3 className="text-sm font-bold text-[#251813]">Bahasa Judul & Isi Dokumen CV</h3>
-                <p className="text-xs text-[#59483F] mt-0.5">
-                  Mendukung terjemahan 2 arah (Indonesia ke English maupun English ke Indonesia) langsung di browser.
-                </p>
+                <h3 className="text-sm font-bold text-[#251813]">Bahasa Dokumen</h3>
+                <p className="text-xs text-[#59483F] mt-0.5">Pilih bahasa asli atau terjemahkan otomatis (ID / EN).</p>
               </div>
             </div>
             <span className="rounded-lg border border-[#9FD499] bg-[#DFF5DA] px-2.5 py-1 text-xs font-bold text-[#144C32]">
-              Aktif: {activeLang === "id" ? "Bahasa Indonesia" : "English (ATS)"}
+              Aktif: {activeLang === "id" ? "Indonesia" : "English"}
             </span>
           </div>
 
@@ -354,17 +350,15 @@ export const ExportPanel = () => {
 
           {/* Kontrol Terjemahan Full-Content 2 Arah (ID <-> EN) */}
           <div className="mt-4 rounded-xl border border-[#94D1DF] card-tint-sky p-3.5 sm:p-4 grid gap-3">
-            <label className="flex items-start gap-2.5 cursor-pointer min-h-[44px]">
+            <label className="flex items-center gap-2.5 cursor-pointer min-h-[40px]">
               <input
                 type="checkbox"
                 checked={autoTranslateContent}
                 onChange={(event) => setAutoTranslateContent(event.target.checked)}
-                className="checkbox checkbox-sm mt-0.5 border-[#124959]/50 checked:bg-[#1F6B57] checked:border-[#1F6B57]"
+                className="checkbox checkbox-sm border-[#124959]/50 checked:bg-[#1F6B57] checked:border-[#1F6B57]"
               />
-              <span className="text-xs sm:text-sm font-semibold text-[#124959] leading-relaxed">
-                {activeLang === "en"
-                  ? "Terjemahkan seluruh isi CV ke English standar industri ATS (saat mode ID/EN dipilih)"
-                  : "Terjemahkan seluruh isi CV ke Bahasa Indonesia baku standar ATS (saat mode ID/EN dipilih)"}
+              <span className="text-xs sm:text-sm font-semibold text-[#124959]">
+                Terjemahkan seluruh isi CV saat mode Indonesia atau English dipilih
               </span>
             </label>
 
@@ -467,33 +461,28 @@ export const ExportPanel = () => {
           <div className="rounded-xl border border-[#E9A590] bg-[#FFE3D8] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <p className="text-sm font-bold text-[#7B1F14]">Data CV masih kosong</p>
-              <p className="text-xs sm:text-sm text-[#7B1F14] mt-0.5">
-                Isi minimal nama dan satu bagian CV (Pendidikan, Proyek, atau Pengalaman) di Langkah 1 sebelum mengunduh.
+              <p className="text-xs text-[#7B1F14] mt-0.5">
+                Isi nama dan minimal satu bagian CV di Langkah 1.
               </p>
             </div>
             <Link
               href="/master-cv"
               className="btn doodle-btn shrink-0 bg-[#1F6B57] text-white border-2 border-[#251813] hover:bg-[#154538] px-4 py-2 text-xs sm:text-sm font-bold"
             >
-              Isi Data CV Dulu
+              Isi Data CV
             </Link>
           </div>
         ) : (
-          <div className="rounded-xl border border-[#9FD499] bg-[#DFF5DA] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="flex items-start gap-2.5">
-              <SealCheck size={22} weight="duotone" className="text-[#144C32] shrink-0 mt-0.5" aria-hidden="true" />
-              <div>
-                <p className="text-sm font-bold text-[#144C32]">
-                  Dokumen siap diunduh (Estimasi {pageInfo.estimatedPages} halaman A4, gaya {activeTemplateMeta.label})
-                </p>
-                <p className="text-xs text-[#144C32] mt-0.5">
-                  100% gratis, tanpa tanda air (watermark), dan 100% teks linear yang bisa diseleksi.
-                </p>
-              </div>
+          <div className="rounded-xl border border-[#9FD499] bg-[#DFF5DA] p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <SealCheck size={20} weight="duotone" className="text-[#144C32] shrink-0" aria-hidden="true" />
+              <p className="text-xs sm:text-sm font-bold text-[#144C32]">
+                Siap diunduh (~{pageInfo.estimatedPages} hal. A4 &middot; {activeTemplateMeta.label})
+              </p>
             </div>
             {resume.experienceLevel === "fresh_graduate" && pageInfo.estimatedPages > 1 ? (
-              <span className="rounded-lg border border-[#DFC25A] bg-[#FFF0A8] px-3 py-1.5 text-xs font-bold text-[#4A3A2E]">
-                Tips: pilih gaya ATS Padat agar ringkas 1 halaman A4
+              <span className="rounded-lg border border-[#DFC25A] bg-[#FFF0A8] px-2.5 py-1 text-xs font-bold text-[#4A3A2E]">
+                Tip: pilih ATS Padat agar muat 1 halaman
               </span>
             ) : null}
           </div>
@@ -509,11 +498,11 @@ export const ExportPanel = () => {
                   <FilePdf size={16} weight="duotone" aria-hidden="true" />
                   <span>PDF</span>
                 </span>
-                <span className="text-xs font-bold text-[#144C32]">Format Utama</span>
+                <span className="text-xs font-bold text-[#144C32]">Siap Kirim</span>
               </div>
               <h3 className="font-bold text-base text-[#251813]">Dokumen PDF (A4)</h3>
               <p className="mt-1.5 text-xs sm:text-[13px] text-[#4E3E36] leading-relaxed">
-                Tata letak tetap satu kolom, teks murni bisa di-select, bebas tabel dan ikon grafis yang mengganggu parser ATS.
+                Tata letak rapi 1 kolom dan teks dapat diseleksi.
               </p>
             </div>
             <div className="mt-5 pt-3 border-t border-[#D9CEBC]">
@@ -537,11 +526,11 @@ export const ExportPanel = () => {
                   <FileDoc size={16} weight="duotone" aria-hidden="true" />
                   <span>DOCX</span>
                 </span>
-                <span className="text-xs font-semibold text-[#59483F]">Dapat Diedit</span>
+                <span className="text-xs font-semibold text-[#59483F]">Bisa Diedit</span>
               </div>
-              <h3 className="font-bold text-base text-[#251813]">Dokumen Word (DOCX)</h3>
+              <h3 className="font-bold text-base text-[#251813]">Dokumen Word</h3>
               <p className="mt-1.5 text-xs sm:text-[13px] text-[#4E3E36] leading-relaxed">
-                Bisa diedit bebas di Word atau Google Docs. Memakai Heading semantik dan daftar poin asli untuk portal ATS korporat.
+                Mudah disesuaikan ulang di Microsoft Word atau Google Docs.
               </p>
             </div>
             <div className="mt-5 pt-3 border-t border-[#D9CEBC]">
@@ -566,11 +555,11 @@ export const ExportPanel = () => {
                   <FileTxt size={16} weight="duotone" aria-hidden="true" />
                   <span>TXT</span>
                 </span>
-                <span className="text-xs font-semibold text-[#59483F]">Teks Salin</span>
+                <span className="text-xs font-semibold text-[#59483F]">Teks Polos</span>
               </div>
               <h3 className="font-bold text-base text-[#251813]">Teks Polos (TXT)</h3>
               <p className="mt-1.5 text-xs sm:text-[13px] text-[#4E3E36] leading-relaxed">
-                Format teks murni untuk memeriksa urutan baca mesin ATS atau disalin ke formulir rekrutmen online.
+                Praktis untuk disalin ke formulir rekrutmen online.
               </p>
             </div>
             <div className="mt-5 pt-3 border-t border-[#D9CEBC]">
@@ -595,21 +584,6 @@ export const ExportPanel = () => {
               {message}
             </div>
           ) : null}
-        </div>
-
-        {/* ATS Compliance Checklist */}
-        <div className="rounded-xl border border-[#D9CEBC] bg-[#FAF5E8] p-4 sm:p-5">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-[#59483F] mb-3">
-            Standar Ekspor ATS-Safe yang Terpenuhi
-          </h4>
-          <ul className="grid gap-2 sm:grid-cols-2 text-xs sm:text-[13px] text-[#4E3E36]">
-            <li>&bull; 100% tata letak satu kolom linear tanpa tabel atau kotak teks mengambang</li>
-            <li>&bull; Seluruh teks PDF bisa diseleksi dan diekstrak secara berurutan</li>
-            <li>&bull; 3 pilihan gaya tata letak ATS (Padat 1 halaman, Standar Lega, & Formal Serif)</li>
-            <li>&bull; Bahasa judul & isi CV otomatis diterjemahkan saat memilih mode English</li>
-            <li>&bull; Tanpa ikon grafis atau bar persentase di dalam file dokumen</li>
-            <li>&bull; Dikompilasi 100% di browser perangkatmu untuk menjaga privasi data</li>
-          </ul>
         </div>
       </div>
       <TranslationComparePanel open={compareOpen} onClose={() => setCompareOpen(false)} />
