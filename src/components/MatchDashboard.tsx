@@ -43,25 +43,25 @@ const languageLabels = {
 const verdictFor = (score: number) => {
   if (score >= 75) {
     return {
-      label: "Kecocokan Kuat",
+      label: "Cocok Kuat",
       note: "green" as const,
       ringColor: "#1F6B57",
-      body: "Sebagian besar kualifikasi utama lowongan ini sudah terbaca jelas di CV kamu. Pertahankan bukti nyata di poin proyek atau pengalaman."
+      body: "Sebagian besar syarat utama sudah tercantum di CV kamu."
     };
   }
   if (score >= 50) {
     return {
-      label: "Kecocokan Cukup Baik",
+      label: "Cukup Cocok",
       note: "yellow" as const,
       ringColor: "#9B6B12",
-      body: "Beberapa kualifikasi sudah cocok atau memiliki padanan istilah. Menjelaskan kata kunci yang relevan dari pengalaman/proyek aslimu atau menyesuaikan bahasa akan memperkuat skor."
+      body: "Beberapa syarat cocok. Tambahkan keahlian yang belum muncul atau selaraskan bahasa CV."
     };
   }
   return {
     label: "Perlu Penyesuaian",
     note: "red" as const,
     ringColor: "#A3291B",
-    body: "Masih banyak kualifikasi inti lowongan yang belum muncul atau bahasa CV berbeda dengan lowongan. Periksa rincian celah dan toggle keahlian di bawah sesuai kemampuan nyatamu."
+    body: "Beberapa kata kunci utama belum muncul atau bahasa CV berbeda dengan lowongan."
   };
 };
 
@@ -77,14 +77,14 @@ export const MatchDashboard = () => {
   if (!analytics.hasAnalyzed) {
     return (
       <SectionCard
-        title="Hasil Analisis & Skor Kecocokan ATS"
-        description="Skor kecocokan muncul setelah kamu menempelkan iklan lowongan dan menekan Cocokkan dengan CV Saya."
+        title="Hasil Analisis"
+        description="Skor kecocokan muncul setelah iklan lowongan dianalisis."
         accent="butter"
         icon={<Gauge size={20} weight="duotone" />}
       >
         <EmptyState
-          title="Belum ada analisis yang dijalankan"
-          description="Tempel iklan lowongan di atas atau klik salah satu contoh lowongan cepat untuk melihat rincian skor ATS, kecocokan lintas bahasa, dan checklist berkas administratif."
+          title="Belum ada lowongan dianalisis"
+          description="Tempel iklan lowongan di atas atau klik salah satu contoh cepat."
           icon={<Gauge size={20} weight="duotone" />}
         />
       </SectionCard>
@@ -109,7 +109,7 @@ export const MatchDashboard = () => {
     icon: ReactNode;
   }> = [
     {
-      label: "Hard Skills & Alat Kerja",
+      label: "Hard Skills & Alat",
       score: breakdown.hardSkillsScore,
       weightPct: Math.round(breakdown.weights.hardSkills * 100),
       active: breakdown.weights.hardSkills > 0,
@@ -117,7 +117,7 @@ export const MatchDashboard = () => {
       icon: <Wrench size={15} weight="duotone" className="text-[#144C32]" aria-hidden="true" />
     },
     {
-      label: "Pendidikan & Relevansi Domain",
+      label: "Pendidikan & Bidang",
       score: breakdown.educationAndDomainScore,
       weightPct: Math.round(breakdown.weights.educationAndDomain * 100),
       active: breakdown.weights.educationAndDomain > 0,
@@ -125,7 +125,7 @@ export const MatchDashboard = () => {
       icon: <GraduationCap size={15} weight="duotone" className="text-[#124959]" aria-hidden="true" />
     },
     {
-      label: "Struktur, Kelengkapan & Dampak CV",
+      label: "Struktur & Kelengkapan",
       score: breakdown.structureAndImpactScore,
       weightPct: Math.round(breakdown.weights.structureAndImpact * 100),
       active: breakdown.weights.structureAndImpact > 0,
@@ -133,7 +133,7 @@ export const MatchDashboard = () => {
       icon: <CheckSquareOffset size={15} weight="duotone" className="text-[#4A3A2E]" aria-hidden="true" />
     },
     {
-      label: "Keselarasan Bahasa CV & Lowongan",
+      label: "Bahasa CV vs Lowongan",
       score: breakdown.languageAlignmentScore ?? languageAlignment?.score ?? 100,
       weightPct: Math.round((breakdown.weights.languageAlignment ?? 0.1) * 100),
       active: (breakdown.weights.languageAlignment ?? 0) > 0,
@@ -141,7 +141,7 @@ export const MatchDashboard = () => {
       icon: <Translate size={15} weight="duotone" className="text-[#7B1F14]" aria-hidden="true" />
     },
     {
-      label: "Karakter Kerja (Bobot Rendah)",
+      label: "Soft Skills",
       score: breakdown.softSkillsScore,
       weightPct: Math.round(breakdown.weights.softSkills * 100),
       active: breakdown.weights.softSkills > 0,
@@ -157,8 +157,8 @@ export const MatchDashboard = () => {
 
   return (
     <SectionCard
-      title="Hasil Analisis & Rincian Skor ATS (Live)"
-      description="Skor diperbarui seketika saat kamu mengaktifkan toggle keahlian, mengoptimalkan kalimat, atau mengubah bahasa CV (ID / EN)."
+      title="Hasil Analisis"
+      description="Skor diperbarui otomatis saat keahlian, kalimat, atau bahasa CV diubah."
       accent="sage"
       icon={<Gauge size={20} weight="duotone" />}
     >
@@ -308,10 +308,10 @@ export const MatchDashboard = () => {
                 </span>
                 <div>
                   <h3 className="text-sm sm:text-base font-bold text-[#251813]">
-                    Checklist Berkas & Syarat Administratif (Di Luar Skor ATS)
+                    Checklist Berkas Lamaran
                   </h3>
-                  <p className="mt-1 text-xs sm:text-[13px] text-[#4E3E36] leading-relaxed">
-                    Persyaratan berkas fisik, usia, atau domisili di bawah ini otomatis dikecualikan dari skor ATS agar tidak mengacaukan isi CV kamu. Centang sebagai pengingat dokumen lamaranmu:
+                  <p className="mt-0.5 text-xs text-[#4E3E36]">
+                    Syarat fisik/berkas di luar skor CV sebagai pengingat.
                   </p>
                 </div>
               </div>
