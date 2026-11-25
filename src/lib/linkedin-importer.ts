@@ -280,3 +280,242 @@ const readCell = (row: Record<string, string>, keys: string[]): string => {
   }
   return "";
 };
+
+export const parseLinkedInCsvArchive = (
+  filesByName: Record<string, string>,
+  overrideLinkedinUrl?: string
+): LinkedInParseResult => {
+  const profile = emptyResumeProfile();
+
+  const profileRows = findCsvTable(filesByName, ["profile.csv"]);
+  const emailRows = findCsvTable(filesByName, ["email addresses.csv", "emails.csv"]);
+  const phoneRows = findCsvTable(filesByName, ["phonenumbers.csv", "phone numbers.csv"]);
+  const positionRows = findCsvTable(filesByName, ["positions.csv"]);
+  const eduRows = findCsvTable(filesByName, ["education.csv"]);
+  const skillRows = findCsvTable(filesByName, ["skills.csv"]);
+  const certRows = findCsvTable(filesByName, ["certifications.csv"]);
+  const projectRows = findCsvTable(filesByName, ["projects.csv"]);
+  const volunteerRows = findCsvTable(filesByName, ["volunteering.csv", "volunteer.csv"]);
+  const languageRows = findCsvTable(filesByName, ["languages.csv"]);
+  const honorRows = findCsvTable(filesByName, ["honors.csv"]);
+
+  if (profileRows.length > 0) {
+    const p0 = profileRows[0];
+    const first = readCell(p0, ["First Name"]);
+    const last = readCell(p0, ["Last Name"]);
+    profile.contact.fullName = [first, last].filter(Boolean).join(" ").trim();
+    profile.contact.headline = readCell(p0, ["Headline"]);
+    profile.contact.location = readCell(p0, ["Geo Location", "Address"]);
+    profile.summary = readCell(p0, ["Summary"]);
+
+    const webLinks = cleanLinkedInWebsites(readCell(p0, ["Websites"]));
+    if (webLinks.linkedinUrl) profile.contact.linkedinUrl = webLinks.linkedinUrl;
+    if (webLinks.portfolioUrl) profile.contact.portfolioUrl = webLinks.portfolioUrl;
+  }
+
+  if (overrideLinkedinUrl?.trim()) {
+    profile.contact.linkedinUrl = overrideLinkedinUrl
+      .trim()
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "");
+  }
+
+  if (emailRows.length > 0) {
+    const primaryRow =
+      emailRows.find((r) => /^(yes|true|1)$/i.test(readCell(r, ["Primary", "Is primary", "Is Primary"]))) ??
+      emailRows.find((r) => /^(yes|true|1)$/i.test(readCell(r, ["Confirmed"]))) ??
+      emailRows[0];
+    const email = readCell(primaryRow, ["Email Address", "Email"]);
+    if (email) profile.contact.email = email;
+  }
+
+  if (phoneRows.length > 0) {
+    const num = readCell(phoneRows[0], ["Number", "Phone Number"]);
+    if (num) profile.contact.phone = num;
+  }
+
+  const workExperience: WorkExperience[] = positionRows
+    .map((row): WorkExperience | null => {
+      const company = readCell(row, ["Company Name", "Company"]);
+      const role = readCell(row, ["Title", "Position", "Role"]);
+      if (!company && !role) return null;
+      const startDate = readCell(row, ["Started On", "Start Date"]);
+      const rawEnd = readCell(row, ["Finished On", "End Date"]);
+      const isCurrent = !rawEnd;
+      const description = readCell(row, ["Description"]);
+      return {
+        id: createId(),
+        company,
+        role,
+        type: inferWorkType(`${role} ${description}`),
+        location: readCell(row, ["Location"]),
+        startDate,
+        endDate: isCurrent ? "Present" : rawEnd,
+        isCurrent,
+        bulletPoints: splitDescriptionToBullets(description)
+      };
+    })
+    .filter((w): w is WorkExperience => w !== null);
+
+  const educationList: Education[] = eduRows
+    .map((row): Education | null => {
+      const institution = readCell(row, ["School Name", "School", "Institution"]);
+      const degreeName = readCell(row, ["Degree Name", "Degree"]);
+      const notes = readCell(row, ["Notes"]);
+      const activities = readCell(row, ["Activities"]);
+      if (!institution && !degreeName) return null;
+      const parsedDeg = splitDegreeFieldCsv(degreeName);
+      const gpaHit = `${notes} ${activities}`.match(/(?:IPK|GPA|Grade|Nilai)\s*:?\s*([0-4](?:[.,]\d{1,2})?(?:\s*\/\s*4(?:[.,]00?)?)?)/i);
+      const start = readCell(row, ["Start Date"]);
+      const end = readCell(row, ["End Date"]);
+      const graduationDate = [start, end].filter(Boolean).join(" - ");
+
+      return {
+        id: createId(),
+        institution,
+        degree: parsedDeg.degree,
+        fieldOfStudy: parsedDeg.fieldOfStudy,
+        gpa: gpaHit ? gpaHit[1].replace(/\s+/g, "") : "",
+        graduationDate,
+        thesisTitle: "",
+        relevantCoursework: [],
+        achievements: [activities, gpaHit ? notes.replace(gpaHit[0], "").trim() : notes]
+          .filter(Boolean)
+          .join("; ")
+      };
+    })
+    .filter((e): e is Education => e !== null);
+
+  if (honorRows.length > 0 && educationList.length > 0) {
+    const honorSummary = honorRows
+      .map((h) => readCell(h, ["Title"]))
+      .filter(Boolean)
+      .slice(0, 3)
+      .join("; ");
+    if (honorSummary) {
+      educationList[0].achievements = [educationList[0].achievements, honorSummary]
+        .filter(Boolean)
+        .join("; ");
+    }
+  }
+
+  const projects: ProjectItem[] = projectRows
+    .map((row): ProjectItem | null => {
+      const name = readCell(row, ["Title", "Name"]);
+      if (!name) return null;
+      const start = readCell(row, ["Started On", "Start Date"]);
+      const end = readCell(row, ["Finished On", "End Date"]);
+      return {
+        id: createId(),
+        name,
+        role: "",
+        context: "Proyek LinkedIn",
+        period: [start, end || (start ? "Present" : "")].filter(Boolean).join(" - "),
+        technologies: [],
+        url: readCell(row, ["Url"]),
+        bulletPoints: splitDescriptionToBullets(readCell(row, ["Description"]))
+      };
+    })
+    .filter((p): p is ProjectItem => p !== null);
+
+  const organizations: OrganizationItem[] = volunteerRows
+    .map((row): OrganizationItem | null => {
+      const organization = readCell(row, ["Company Name", "Organization"]);
+      const role = readCell(row, ["Role", "Title"]);
+      if (!organization && !role) return null;
+      const start = readCell(row, ["Started On", "Start Date"]);
+      const end = readCell(row, ["Finished On", "End Date"]);
+      const desc = readCell(row, ["Description"]);
+      const cause = readCell(row, ["Cause"]);
+      return {
+        id: createId(),
+        organization,
+        role: role || cause || "Volunteer",
+        period: [start, end || (start ? "Present" : "")].filter(Boolean).join(" - "),
+        bulletPoints: splitDescriptionToBullets(desc)
+      };
+    })
+    .filter((o): o is OrganizationItem => o !== null);
+
+  const certificationItems: CertificationItem[] = certRows
+    .map((row): CertificationItem | null => {
+      const name = readCell(row, ["Name", "Title"]);
+      if (!name) return null;
+      return {
+        id: createId(),
+        name,
+        issuer: readCell(row, ["Authority", "Issuer"]),
+        year: extractYear(readCell(row, ["Started On", "Finished On"]))
+      };
+    })
+    .filter((c): c is CertificationItem => c !== null);
+
+  const rawSkills = skillRows.map((row) => readCell(row, ["Name", "Skill"])).filter(Boolean);
+  const rawLanguages = languageRows
+    .map((row) => {
+      const name = readCell(row, ["Name", "Language"]);
+      const prof = readCell(row, ["Proficiency"]);
+      return name ? (prof ? `${name} (${prof})` : name) : "";
+    })
+    .filter(Boolean);
+
+  const classifiedSkills = classifyLinkedInSkills([...rawSkills, ...rawLanguages]);
+
+  const internCount = workExperience.filter((w) => w.type === "internship").length;
+  const experienceLevel =
+    workExperience.length >= 3 && internCount <= workExperience.length / 2
+      ? "experienced"
+      : workExperience.length >= 1
+      ? "early_career"
+      : "fresh_graduate";
+
+  const finalProfile: ResumeProfile = {
+    ...profile,
+    experienceLevel,
+    workExperience,
+    education: educationList.length ? educationList : profile.education,
+    projects,
+    organizations,
+    certificationItems,
+    skills: classifiedSkills
+  };
+
+  const stats: LinkedInImportStats = {
+    work: workExperience.length,
+    education: educationList.length,
+    projects: projects.length,
+    organizations: organizations.length,
+    skills: unique([...classifiedSkills.hardSkills, ...classifiedSkills.tools, ...classifiedSkills.softSkills]).length,
+    certifications: certificationItems.length,
+    sourceKind: "linkedin_archive"
+  };
+
+  const recommendedTemplate: CvTemplate =
+    stats.work >= 4 || stats.organizations > 0 || stats.projects >= 2 ? "compact_centered" : "classic_editorial";
+
+  return {
+    profile: finalProfile,
+    stats,
+    message: buildLinkedInStatsMessage(stats),
+    recommendedTemplate
+  };
+};
+
+export const buildLinkedInStatsMessage = (stats: LinkedInImportStats): string => {
+  const parts: string[] = [];
+  if (stats.work) parts.push(`${stats.work} pengalaman`);
+  if (stats.education) parts.push(`${stats.education} pendidikan`);
+  if (stats.projects) parts.push(`${stats.projects} proyek`);
+  if (stats.organizations) parts.push(`${stats.organizations} organisasi/sukarela`);
+  if (stats.skills) parts.push(`${stats.skills} keahlian`);
+  if (stats.certifications) parts.push(`${stats.certifications} sertifikasi`);
+
+  const sourceLabel =
+    stats.sourceKind === "linkedin_archive"
+      ? "Arsip Data LinkedIn (ZIP/CSV)"
+      : "Profil LinkedIn (PDF/Teks)";
+
+  return parts.length
+    ? `${sourceLabel} berhasil diimpor (${parts.join(", ")}). Periksa hasilnya di tab formulir di bawah.`
+    : `${sourceLabel} berhasil dibaca. Lengkapi detail yang masih kosong di tab formulir di bawah.`;
+};
