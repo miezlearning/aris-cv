@@ -1,13 +1,15 @@
-export type SupportedFileType = "pdf" | "docx" | "txt" | "json";
+export type SupportedFileType = "pdf" | "docx" | "txt" | "json" | "zip" | "csv";
 
 export type ExtractedFileResult = {
   text: string;
   fileType: SupportedFileType;
   pageCount?: number;
-  detectedSource?: "linkedin_pdf";
+  linkedInCsvFiles?: Record<string, string>;
+  detectedSource?: "linkedin_pdf" | "linkedin_archive";
 };
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_ZIP_SIZE_BYTES = 25 * 1024 * 1024;
 
 export type RawTextToken = {
   text: string;
@@ -30,6 +32,14 @@ const resolveFileType = (file: File): SupportedFileType => {
   ) {
     return "docx";
   }
+  if (
+    ext === "zip" ||
+    file.type === "application/zip" ||
+    file.type === "application/x-zip-compressed"
+  ) {
+    return "zip";
+  }
+  if (ext === "csv" || file.type === "text/csv") return "csv";
   if (ext === "json" || file.type === "application/json") return "json";
   if (ext === "txt" || file.type === "text/plain") return "txt";
 
@@ -39,7 +49,9 @@ const resolveFileType = (file: File): SupportedFileType => {
     );
   }
 
-  throw new Error("Format berkas belum didukung. Gunakan berkas .pdf, .docx, .txt, atau .json.");
+  throw new Error(
+    "Format berkas belum didukung. Gunakan berkas .pdf, .docx, .zip, .csv, .txt, atau .json."
+  );
 };
 
 const isLinkedInPageMarker = (value: string): boolean =>
@@ -436,19 +448,141 @@ const extractTextFromDocx = async (file: File): Promise<ExtractedFileResult> => 
   };
 };
 
-export const extractTextFromFile = async (file: File): Promise<ExtractedFileResult> => {
-  if (file.size > MAX_FILE_SIZE_BYTES) {
-    throw new Error("Ukuran berkas melebihi batas 10 MB. Silakan gunakan berkas CV yang lebih ringkas.");
+const extractTextFromZip = async (file: File): Promise<ExtractedFileResult> => {
+  if (typeof window === "undefined") {
+    throw new Error("Ekstraksi arsip ZIP hanya dapat dijalankan di browser.");
+  }
+  if (file.size > MAX_ZIP_SIZE_BYTES) {
+    throw new Error(
+      "Ukuran arsip ZIP melebihi batas 25 MB. Kamu dapat mengekstrak berkas .csv intinya (Profile, Positions, Education, Skills) lalu mengunggahnya bersamaan."
+    );
   }
 
+  const { default: JSZip } = await import("jszip");
+  const buffer = await file.arrayBuffer();
+  let zip: Awaited<ReturnType<typeof JSZip.loadAsync>>;
+  try {
+    zip = await JSZip.loadAsync(buffer);
+  } catch {
+    throw new Error("Berkas ZIP tidak valid atau rusak sehingga tidak dapat dibaca.");
+  }
+
+  const csvFiles: Record<string, string> = {};
+  const fallbackTexts: string[] = [];
+
+  for (const [entryPath, entry] of Object.entries(zip.files)) {
+    if (entry.dir || entryPath.startsWith("__MACOSX/")) continue;
+    const baseName = entryPath.split("/").pop() || entryPath;
+    const ext = getExtension(baseName);
+
+    if (ext === "csv") {
+      const content = await entry.async("string");
+      if (content.trim() && (!csvFiles[baseName] || content.length > csvFiles[baseName].length)) {
+        csvFiles[baseName] = content;
+      }
+    } else if (ext === "txt" || ext === "json") {
+      const content = (await entry.async("string")).trim();
+      if (content) fallbackTexts.push(content);
+    }
+  }
+
+  const csvNames = Object.keys(csvFiles);
+  if (csvNames.length > 0) {
+    return {
+      text: `[Arsip LinkedIn CSV: ${csvNames.join(", ")}]`,
+      fileType: "zip",
+      linkedInCsvFiles: csvFiles,
+      detectedSource: "linkedin_archive"
+    };
+  }
+
+  if (fallbackTexts.length > 0) {
+    return {
+      text: fallbackTexts.join("\n\n").trim(),
+      fileType: "zip"
+    };
+  }
+
+  throw new Error(
+    "Arsip ZIP ini tidak berisi berkas CSV ekspor LinkedIn maupun berkas teks/JSON yang didukung."
+  );
+};
+
+export const extractTextFromFile = async (file: File): Promise<ExtractedFileResult> => {
   const fileType = resolveFileType(file);
+
+  if (fileType === "zip") {
+    return extractTextFromZip(file);
+  }
+
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    throw new Error("Ukuran berkas melebihi batas 10 MB. Silakan gunakan berkas yang lebih ringkas.");
+  }
+
   if (fileType === "pdf") return extractTextFromPdf(file);
   if (fileType === "docx") return extractTextFromDocx(file);
 
   const text = (await file.text()).trim();
   if (!text) {
-    throw new Error("Berkas terlihat kosong. Pilih berkas lain atau tempel teks CV di bawah.");
+    throw new Error("Berkas terlihat kosong. Pilih berkas lain atau tempel teks di kolom bawah.");
+  }
+
+  if (fileType === "csv") {
+    return {
+      text,
+      fileType: "csv",
+      linkedInCsvFiles: { [file.name]: text },
+      detectedSource: "linkedin_archive"
+    };
   }
 
   return { text, fileType };
+};
+
+/**
+ * Extracts one LinkedIn export resource (`.zip`, `.pdf`, or one/more `.csv` files)
+ * locally in the browser without uploading files to any server.
+ */
+export const extractLinkedInFiles = async (
+  files: FileList | File[]
+): Promise<ExtractedFileResult> => {
+  const list = Array.from(files ?? []);
+  if (list.length === 0) {
+    throw new Error("Pilih minimal satu berkas terlebih dahulu.");
+  }
+
+  if (list.length === 1) {
+    return extractTextFromFile(list[0]);
+  }
+
+  let totalBytes = 0;
+  const csvFiles: Record<string, string> = {};
+
+  for (const file of list) {
+    totalBytes += file.size;
+    if (totalBytes > MAX_ZIP_SIZE_BYTES) {
+      throw new Error("Total ukuran berkas melebihi batas 25 MB.");
+    }
+    if (getExtension(file.name) !== "csv") {
+      throw new Error(
+        "Untuk mengunggah banyak berkas sekaligus, pilih kumpulan berkas .csv hasil ekspor LinkedIn (atau unggah 1 arsip .zip / 1 berkas .pdf)."
+      );
+    }
+    const content = (await file.text()).trim();
+    if (content) {
+      csvFiles[file.name] = content;
+    }
+  }
+
+  const names = Object.keys(csvFiles);
+  if (names.length === 0) {
+    throw new Error("Semua berkas CSV yang dipilih terlihat kosong.");
+  }
+
+  return {
+    text: `[Berkas LinkedIn CSV: ${names.join(", ")}]`,
+    fileType: "csv",
+    linkedInCsvFiles: csvFiles,
+    detectedSource: "linkedin_archive"
+  };
 };
