@@ -1128,3 +1128,114 @@ export const buildLinkedInStatsMessage = (stats: LinkedInImportStats): string =>
     ? `${sourceLabel} berhasil diimpor (${parts.join(", ")}). Periksa hasilnya di tab formulir di bawah.`
     : `${sourceLabel} berhasil dibaca. Lengkapi detail yang masih kosong di tab formulir di bawah.`;
 };
+
+/**
+ * Menggabungkan data baru dari LinkedIn ke profil CV yang sudah ada tanpa menimpa kontak,
+ * ringkasan, maupun entri unik yang sudah ditulis pengguna.
+ */
+export const mergeResumeProfiles = (base: ResumeProfile, incoming: ResumeProfile): ResumeProfile => {
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+
+  const existingWorkKeys = new Set(
+    (base.workExperience ?? []).map((w) => `${norm(w.role)}|${norm(w.company)}|${norm(w.startDate)}`)
+  );
+  const mergedWork = [
+    ...(base.workExperience ?? []),
+    ...(incoming.workExperience ?? []).filter((w) => {
+      const key = `${norm(w.role)}|${norm(w.company)}|${norm(w.startDate)}`;
+      if (!w.role.trim() && !w.company.trim()) return false;
+      if (existingWorkKeys.has(key)) return false;
+      existingWorkKeys.add(key);
+      return true;
+    })
+  ];
+
+  const baseNonBlankEdu = (base.education ?? []).filter(
+    (e) => e.institution.trim() || e.degree.trim() || e.fieldOfStudy.trim()
+  );
+  const existingEduKeys = new Set(
+    baseNonBlankEdu.map((e) => `${norm(e.institution)}|${norm(e.degree)}`)
+  );
+  const incomingNonBlankEdu = (incoming.education ?? []).filter(
+    (e) => e.institution.trim() || e.degree.trim() || e.fieldOfStudy.trim()
+  );
+  const mergedEdu = [
+    ...baseNonBlankEdu,
+    ...incomingNonBlankEdu.filter((e) => {
+      const key = `${norm(e.institution)}|${norm(e.degree)}`;
+      if (existingEduKeys.has(key)) return false;
+      existingEduKeys.add(key);
+      return true;
+    })
+  ];
+
+  const existingProjKeys = new Set((base.projects ?? []).map((p) => norm(p.name)));
+  const mergedProjects = [
+    ...(base.projects ?? []),
+    ...(incoming.projects ?? []).filter((p) => p.name.trim() && !existingProjKeys.has(norm(p.name)))
+  ];
+
+  const existingOrgKeys = new Set(
+    (base.organizations ?? []).map((o) => `${norm(o.role)}|${norm(o.organization)}`)
+  );
+  const mergedOrgs = [
+    ...(base.organizations ?? []),
+    ...(incoming.organizations ?? []).filter((o) => {
+      const key = `${norm(o.role)}|${norm(o.organization)}`;
+      return (o.organization.trim() || o.role.trim()) && !existingOrgKeys.has(key);
+    })
+  ];
+
+  const existingCertKeys = new Set((base.certificationItems ?? []).map((c) => norm(c.name)));
+  const mergedCerts = [
+    ...(base.certificationItems ?? []),
+    ...(incoming.certificationItems ?? []).filter((c) => c.name.trim() && !existingCertKeys.has(norm(c.name)))
+  ];
+
+  const mergedHard = unique([...(base.skills?.hardSkills ?? []), ...(incoming.skills?.hardSkills ?? [])]);
+  const mergedTools = unique([...(base.skills?.tools ?? []), ...(incoming.skills?.tools ?? [])]);
+  const mergedSoft = unique([...(base.skills?.softSkills ?? []), ...(incoming.skills?.softSkills ?? [])]);
+
+  let mergedGroups = base.skills?.groups ?? [];
+  if (mergedGroups.length > 0) {
+    const existingGroupItems = new Set(mergedGroups.flatMap((g) => g.items.map(norm)));
+    const newExtras = [...mergedHard, ...mergedTools, ...mergedSoft].filter((s) => !existingGroupItems.has(norm(s)));
+    if (newExtras.length > 0) {
+      mergedGroups = [
+        ...mergedGroups,
+        { id: createId(), category: "Dari LinkedIn", items: newExtras }
+      ];
+    }
+  }
+
+  return {
+    ...base,
+    experienceLevel:
+      mergedWork.length >= 3
+        ? "experienced"
+        : mergedWork.length >= 1
+        ? "early_career"
+        : base.experienceLevel,
+    contact: {
+      fullName: base.contact.fullName.trim() || incoming.contact.fullName,
+      headline: base.contact.headline?.trim() || incoming.contact.headline || "",
+      email: base.contact.email.trim() || incoming.contact.email,
+      phone: base.contact.phone.trim() || incoming.contact.phone,
+      location: base.contact.location.trim() || incoming.contact.location,
+      linkedinUrl: base.contact.linkedinUrl.trim() || incoming.contact.linkedinUrl,
+      portfolioUrl: base.contact.portfolioUrl.trim() || incoming.contact.portfolioUrl
+    },
+    summary: base.summary.trim() || incoming.summary,
+    workExperience: mergedWork,
+    education: mergedEdu.length ? mergedEdu : emptyResumeProfile().education,
+    projects: mergedProjects,
+    organizations: mergedOrgs,
+    certificationItems: mergedCerts,
+    skills: {
+      hardSkills: mergedHard,
+      tools: mergedTools,
+      softSkills: mergedSoft,
+      groups: mergedGroups
+    }
+  };
+};
