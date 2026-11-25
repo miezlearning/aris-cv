@@ -131,8 +131,8 @@ export const JobAnalyzer = () => {
 
   return (
     <SectionCard
-      title="Tempel Iklan Lowongan Target"
-      description="Salin seluruh isi iklan lowongan (paragraf, poin campuran, ID/EN). Sistem memisahkan syarat berkas administratif (KTP, SKCK, usia) agar tidak mengacaukan skor kecocokan CV."
+      title="Target Lowongan"
+      description="Tempel deskripsi lowongan untuk melihat kecocokan skill. Syarat berkas (KTP, SKCK, usia) dipisahkan otomatis."
       accent="sky"
       icon={<FileMagnifyingGlass size={20} weight="duotone" />}
       actions={
@@ -144,18 +144,18 @@ export const JobAnalyzer = () => {
             className="gap-1.5"
           >
             <MagnifyingGlass size={16} weight="bold" aria-hidden="true" />
-            <span>Cocokkan dengan CV Saya</span>
+            <span>Cek Kecocokan</span>
           </Button>
           <Button
             type="button"
             variant="secondary"
             onClick={handleAiAssist}
             disabled={status === "loading" || !job.rawDescription.trim()}
-            title="Opsional: menyempurnakan ekstraksi istilah tidak biasa tanpa mengirim nama/kontak pribadimu"
+            title="Opsional: analisis istilah tambahan tanpa mengirim nama atau kontak"
             className="gap-1.5"
           >
             <ShieldCheck size={16} weight="duotone" aria-hidden="true" />
-            <span>{status === "loading" ? "Memproses..." : "Ekstraksi Lanjutan (Tanpa PII)"}</span>
+            <span>{status === "loading" ? "Memproses..." : "Analisis Lanjutan"}</span>
           </Button>
         </div>
       }
@@ -163,7 +163,7 @@ export const JobAnalyzer = () => {
       <div className="min-w-0 grid gap-5">
         {/* Tombol cepat contoh lowongan */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-bold text-[#59483F]">Coba cepat dengan contoh:</span>
+          <span className="text-xs font-bold text-[#59483F]">Coba contoh:</span>
           {SAMPLE_JOBS.map((sample) => (
             <button
               key={sample.id}
@@ -191,38 +191,35 @@ export const JobAnalyzer = () => {
         </div>
 
         <div className="min-w-0 grid gap-4 sm:grid-cols-2 items-start">
-          <Field label="Judul posisi atau jabatan" hint="Membantu mendeteksi kompetensi domain yang relevan.">
+          <Field label="Judul posisi">
             <TextInput
               value={job.jobTitle}
               onChange={(event) => updateJobTarget({ jobTitle: event.target.value })}
-              placeholder="Contoh: IT Rumah Sakit, Admin Gudang, Junior Frontend"
+              placeholder="Contoh: Staf IT / Junior Frontend"
             />
           </Field>
-          <Field label="Nama perusahaan / instansi" hint="Opsional, membantu konteks analisis.">
+          <Field label="Perusahaan (opsional)">
             <TextInput
               value={job.companyName}
               onChange={(event) => updateJobTarget({ companyName: event.target.value })}
-              placeholder="Nama perusahaan, RS, atau BUMN"
+              placeholder="Nama perusahaan atau instansi"
             />
           </Field>
         </div>
 
-        <Field
-          label="Isi lengkap iklan lowongan"
-          hint="Tempel semua bagian: kualifikasi pendidikan, keahlian teknis, deskripsi kerja, maupun syarat berkas."
-        >
+        <Field label="Deskripsi & kualifikasi lowongan">
           <TextArea
             rows={7}
             value={job.rawDescription}
             onChange={(event) => updateJobTarget({ rawDescription: event.target.value })}
-            placeholder="Tempel isi iklan lowongan dari Jobstreet, Glints, LinkedIn, website BUMN/RS, atau pesan WhatsApp lowongan..."
+            placeholder="Tempel kualifikasi, tanggung jawab, dan syarat lowongan di sini..."
           />
         </Field>
 
         <div role="status" aria-live="polite">
           {status === "loading" && (
             <p className="rounded-xl border border-[#94D1DF] bg-[#D6F3FA] p-3.5 text-sm font-bold text-[#124959]">
-              Sedang menormalisasi kualifikasi dan mencocokkan dengan isi CV kamu...
+              Mencocokkan syarat lowongan dengan CV kamu...
             </p>
           )}
           {status === "error" && (
@@ -232,9 +229,7 @@ export const JobAnalyzer = () => {
           )}
           {status === "success" && (
             <div className="rounded-xl border border-[#9FD499] bg-[#DFF5DA] p-3.5 text-sm font-bold text-[#144C32] flex flex-wrap items-center justify-between gap-2">
-              <span>
-                Analisis selesai. Lihat rincian skor di bawah atau lanjut ke Langkah 3 untuk mengoptimalkan kalimat.
-              </span>
+              <span>Analisis selesai. Cek hasil di bawah atau lanjut ke Langkah 3.</span>
               {modeNote ? (
                 <span className="rounded-lg border border-[#9FD499] bg-white px-2.5 py-1 text-xs font-bold text-[#144C32]">
                   {modeNote}
@@ -247,10 +242,10 @@ export const JobAnalyzer = () => {
         {/* Ringkasan Ekstraksi Terklasifikasi */}
         <div className="min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <h3 className="text-sm font-bold text-[#251813]">Hasil Klasifikasi Kualifikasi Iklan</h3>
+            <h3 className="text-sm font-bold text-[#251813]">Kata Kunci Terdeteksi</h3>
             {adminCount > 0 ? (
               <span className="max-w-full rounded-lg border border-[#94D1DF] bg-[#D6F3FA] px-2.5 py-1 text-xs font-bold text-[#124959] break-words">
-                {adminCount} syarat berkas/administratif dipisahkan dari skor ATS
+                {adminCount} syarat berkas dipisah
               </span>
             ) : null}
           </div>
