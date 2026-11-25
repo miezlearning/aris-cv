@@ -56,7 +56,7 @@ export const LiveAtsBar = ({ compact = false }: { compact?: boolean }) => {
             className={`inline-flex items-center gap-1.5 rounded-xl border-2 px-3 py-1 text-xs sm:text-sm font-black ${scoreTone}`}
           >
             <Gauge size={16} weight="duotone" aria-hidden="true" />
-            <span>Skor ATS Live: {analytics.overallScore}%</span>
+            <span>Skor ATS: {analytics.overallScore}%</span>
           </span>
 
           {delta !== 0 ? (
@@ -72,14 +72,12 @@ export const LiveAtsBar = ({ compact = false }: { compact?: boolean }) => {
               ) : (
                 <TrendDown size={13} weight="bold" aria-hidden="true" />
               )}
-              <span>
-                {delta > 0 ? `+${delta}%` : `${delta}%`} sesi ini
-              </span>
+              <span>{delta > 0 ? `+${delta}%` : `${delta}%`}</span>
             </span>
           ) : null}
 
           <span className="text-xs font-semibold text-[#59483F] truncate max-w-[260px]">
-            Target: {job.jobTitle || "Lowongan Langkah 2"}
+            {job.jobTitle || "Lowongan Target"}
           </span>
         </div>
 
@@ -88,7 +86,7 @@ export const LiveAtsBar = ({ compact = false }: { compact?: boolean }) => {
             Hard Skill: {analytics.breakdown.hardSkillsScore}%
           </span>
           <span className="rounded-md border border-[#D9CEBC] bg-[#FAF5E8] px-2 py-0.5">
-            Struktur & XYZ: {analytics.breakdown.structureAndImpactScore}%
+            Struktur: {analytics.breakdown.structureAndImpactScore}%
           </span>
           <span
             className={`rounded-md border px-2 py-0.5 ${
