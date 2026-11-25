@@ -5,11 +5,13 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowsMerge,
   Briefcase,
+  CaretDown,
   CheckCircle,
+  FileArchive,
   FileArrowUp,
+  FileCsv,
   FileDoc,
   FilePdf,
-  CaretDown,
   FileTxt,
   Info,
   LinkedinLogo,
@@ -18,8 +20,14 @@ import {
   WarningCircle,
   X
 } from "@phosphor-icons/react";
-import { extractTextFromFile } from "@/lib/file-extractor";
-import { looksLikeLinkedInText, mergeResumeProfiles, parseLinkedInText, parseResumeInput } from "@/lib/importers";
+import { extractLinkedInFiles } from "@/lib/file-extractor";
+import {
+  looksLikeLinkedInText,
+  mergeResumeProfiles,
+  parseLinkedInCsvArchive,
+  parseLinkedInText,
+  parseResumeInput
+} from "@/lib/importers";
 import { sampleDemoProfile, sampleFreshGradProfile } from "@/lib/defaults";
 import { useCvStore } from "@/lib/store";
 import { Button, TextArea, TextInput } from "@/components/ui";
@@ -52,37 +60,68 @@ export const ImportPanel = () => {
   const [readingFile, setReadingFile] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState("");
 
-  const applyParsedText = (text: string, sourceLabel?: string, forceLinkedInHint = false) => {
-    const cleanUrl = linkedInUrl.trim();
-    const result =
-      forceLinkedInHint || looksLikeLinkedInText(text)
-        ? parseLinkedInText(text, cleanUrl)
-        : parseResumeInput(text);
-
-    const profile =
-      cleanUrl && !result.profile.contact.linkedinUrl
-        ? { ...result.profile, contact: { ...result.profile.contact, linkedinUrl: cleanUrl } }
-        : result.profile;
-
-    const nextProfile: ResumeProfile =
+  const applyResolvedProfile = (
+    incomingProfile: ResumeProfile,
+    summaryMessage: string,
+    recommendedTemplate: CvTemplate,
+    sourceLabel?: string
+  ) => {
+    const nextProfile =
       applyMode === "merge"
-        ? mergeResumeProfiles(resumeProfile, profile)
-        : profile;
+        ? mergeResumeProfiles(resumeProfile, incomingProfile)
+        : incomingProfile;
+
     setResumeProfile(nextProfile);
     if (applyMode === "replace") {
-      setCvTemplate(result.recommendedTemplate);
+      setCvTemplate(recommendedTemplate);
     }
+
     const modeNote =
       applyMode === "merge"
         ? " Item baru telah digabungkan ke data CV yang sudah ada."
-        : ` Format disesuaikan otomatis ke gaya ${TEMPLATE_LABELS[result.recommendedTemplate]} (bisa diganti kapan saja di pratinjau atau ekspor).`;
+        : ` Format disesuaikan otomatis ke gaya ${TEMPLATE_LABELS[recommendedTemplate]} (bisa diganti kapan saja di pratinjau atau ekspor).`;
+
     setMessage(
       sourceLabel
-        ? `Resource "${sourceLabel}" berhasil diimpor. ${result.message}${modeNote}`
-        : `${result.message}${modeNote}`
+        ? `Resource "${sourceLabel}" berhasil diimpor. ${summaryMessage}${modeNote}`
+        : `${summaryMessage}${modeNote}`
     );
     setErrorMessage("");
     setImportOpen(false);
+  };
+
+  const applyParsedText = (
+    text: string,
+    sourceLabel?: string,
+    forceLinkedInHint = false
+  ) => {
+    const cleanUrl = linkedInUrl.trim();
+    if (forceLinkedInHint || looksLikeLinkedInText(text)) {
+      const parsed = parseLinkedInText(text, cleanUrl);
+      applyResolvedProfile(
+        parsed.profile,
+        parsed.message,
+        parsed.recommendedTemplate,
+        sourceLabel
+      );
+      return;
+    }
+
+    const result = parseResumeInput(text);
+    const enrichedProfile =
+      cleanUrl && !result.profile.contact.linkedinUrl
+        ? {
+            ...result.profile,
+            contact: { ...result.profile.contact, linkedinUrl: cleanUrl }
+          }
+        : result.profile;
+
+    applyResolvedProfile(
+      enrichedProfile,
+      result.message,
+      result.recommendedTemplate,
+      sourceLabel
+    );
   };
 
   const handleImport = () => {
@@ -90,19 +129,42 @@ export const ImportPanel = () => {
     applyParsedText(raw, undefined, activeTab === "linkedin" && looksLikeLinkedInText(raw));
   };
 
-  const processSelectedFile = async (file: File) => {
+  const processSelectedFiles = async (files: FileList | File[]) => {
+    const list = Array.from(files ?? []);
+    if (!list.length) return;
+
     setReadingFile(true);
     setErrorMessage("");
     setMessage("");
+
+    const label =
+      list.length === 1
+        ? list[0].name
+        : `${list.length} berkas CSV (${list[0].name}, ...)`;
+
     try {
-      const extracted = await extractTextFromFile(file);
+      const extracted = await extractLinkedInFiles(list);
+      setUploadedFileName(label);
+
+      if (extracted.linkedInCsvFiles && Object.keys(extracted.linkedInCsvFiles).length > 0) {
+        const parsed = parseLinkedInCsvArchive(
+          extracted.linkedInCsvFiles,
+          linkedInUrl.trim()
+        );
+        setRaw("");
+        applyResolvedProfile(
+          parsed.profile,
+          parsed.message,
+          parsed.recommendedTemplate,
+          label
+        );
+        return;
+      }
+
       setRaw(extracted.text);
-      setUploadedFileName(file.name);
-      applyParsedText(
-        extracted.text,
-        file.name,
-        extracted.detectedSource === "linkedin_pdf" || looksLikeLinkedInText(extracted.text)
-      );
+      const isLinkedInSource =
+        extracted.detectedSource === "linkedin_pdf" || looksLikeLinkedInText(extracted.text);
+      applyParsedText(extracted.text, label, isLinkedInSource);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -116,15 +178,17 @@ export const ImportPanel = () => {
   };
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) void processSelectedFile(file);
+    if (event.target.files && event.target.files.length > 0) {
+      void processSelectedFiles(event.target.files);
+    }
   };
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDragging(false);
-    const file = event.dataTransfer.files?.[0];
-    if (file) void processSelectedFile(file);
+    if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+      void processSelectedFiles(event.dataTransfer.files);
+    }
   };
 
   const openModeDrawer = (targetTab: ImportTabMode) => {
@@ -168,7 +232,7 @@ export const ImportPanel = () => {
           <div className="min-w-0">
             <p className="text-sm font-bold text-[#251813]">Cara mulai mengisi data CV</p>
             <p className="text-xs sm:text-[13px] text-[#4E3E36] mt-0.5 leading-relaxed">
-              Isi dari nol di bawah, unggah CV lama (PDF / DOCX / TXT / JSON), impor resource ekspor LinkedIn, atau muat contoh.
+              Isi dari nol di bawah, unggah CV lama (PDF / DOCX / TXT / JSON), impor resource ekspor LinkedIn (PDF / ZIP / CSV), atau muat contoh.
             </p>
           </div>
         </div>
@@ -192,7 +256,9 @@ export const ImportPanel = () => {
             onClick={() => openModeDrawer("linkedin")}
           >
             <LinkedinLogo size={16} weight="duotone" aria-hidden="true" />
-            <span>{importOpen && activeTab === "linkedin" ? "Tutup Panel LinkedIn" : "Impor dari LinkedIn"}</span>
+            <span>
+              {importOpen && activeTab === "linkedin" ? "Tutup Panel LinkedIn" : "Impor dari LinkedIn"}
+            </span>
           </Button>
           <Button
             type="button"
@@ -226,82 +292,83 @@ export const ImportPanel = () => {
             className="overflow-hidden"
           >
             <div className="mt-4 border-t border-[#D9CEBC] pt-4 grid gap-4">
+              {/* Tab Pemilih Sumber & Mode Penerapan */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <div
-                role="tablist"
-                aria-label="Sumber impor data"
-                className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-[#C2B49E] bg-[#FFF8DF] p-1"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeTab === "cv"}
-                  onClick={() => {
-                    setActiveTab("cv");
-                    setErrorMessage("");
-                  }}
-                  className={`min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 transition-colors ${
-                    activeTab === "cv"
-                      ? "bg-[#251813] text-[#FFFDF8]"
-                      : "text-[#4A3A2E] hover:bg-white/80"
-                  }`}
+                <div
+                  role="tablist"
+                  aria-label="Sumber impor data"
+                  className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-[#C2B49E] bg-[#FFF8DF] p-1"
                 >
-                  <FileArrowUp size={15} weight="duotone" aria-hidden="true" />
-                  <span>Berkas / Teks CV</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeTab === "linkedin"}
-                  onClick={() => {
-                    setActiveTab("linkedin");
-                    setErrorMessage("");
-                  }}
-                  className={`min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 transition-colors ${
-                    activeTab === "linkedin"
-                      ? "bg-[#124959] text-[#FFFDF8]"
-                      : "text-[#4A3A2E] hover:bg-white/80"
-                  }`}
-                >
-                  <LinkedinLogo size={15} weight="duotone" aria-hidden="true" />
-                  <span>Resource LinkedIn</span>
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === "cv"}
+                    onClick={() => {
+                      setActiveTab("cv");
+                      setErrorMessage("");
+                    }}
+                    className={`min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 transition-colors ${
+                      activeTab === "cv"
+                        ? "bg-[#251813] text-[#FFFDF8]"
+                        : "text-[#4A3A2E] hover:bg-white/80"
+                    }`}
+                  >
+                    <FileArrowUp size={15} weight="duotone" aria-hidden="true" />
+                    <span>Berkas / Teks CV</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === "linkedin"}
+                    onClick={() => {
+                      setActiveTab("linkedin");
+                      setErrorMessage("");
+                    }}
+                    className={`min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 transition-colors ${
+                      activeTab === "linkedin"
+                        ? "bg-[#124959] text-[#FFFDF8]"
+                        : "text-[#4A3A2E] hover:bg-white/80"
+                    }`}
+                  >
+                    <LinkedinLogo size={15} weight="duotone" aria-hidden="true" />
+                    <span>Resource LinkedIn</span>
+                  </button>
+                </div>
 
-              <div
-                role="radiogroup"
-                aria-label="Cara menerapkan data impor"
-                className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-[#C2B49E] bg-white p-1"
-              >
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={applyMode === "replace"}
-                  onClick={() => setApplyMode("replace")}
-                  className={`min-h-[44px] px-3 rounded-lg text-xs font-bold transition-colors ${
-                    applyMode === "replace"
-                      ? "bg-[#FFF0A8] border border-[#DFC25A] text-[#251813]"
-                      : "text-[#59483F] hover:bg-[#FFF8DF]"
-                  }`}
+                <div
+                  role="radiogroup"
+                  aria-label="Cara menerapkan data impor"
+                  className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-[#C2B49E] bg-white p-1"
                 >
-                  Ganti CV saat ini
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={applyMode === "merge"}
-                  onClick={() => setApplyMode("merge")}
-                  className={`min-h-[44px] px-3 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-colors ${
-                    applyMode === "merge"
-                      ? "bg-[#DFF5DA] border border-[#9FD499] text-[#144C32]"
-                      : "text-[#59483F] hover:bg-[#FFF8DF]"
-                  }`}
-                >
-                  <ArrowsMerge size={14} weight="bold" aria-hidden="true" />
-                  <span>Gabungkan ke CV yang ada</span>
-                </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={applyMode === "replace"}
+                    onClick={() => setApplyMode("replace")}
+                    className={`min-h-[44px] px-3 rounded-lg text-xs font-bold transition-colors ${
+                      applyMode === "replace"
+                        ? "bg-[#FFF0A8] border border-[#DFC25A] text-[#251813]"
+                        : "text-[#59483F] hover:bg-[#FFF8DF]"
+                    }`}
+                  >
+                    Ganti CV saat ini
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={applyMode === "merge"}
+                    onClick={() => setApplyMode("merge")}
+                    className={`min-h-[44px] px-3 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-colors ${
+                      applyMode === "merge"
+                        ? "bg-[#DFF5DA] border border-[#9FD499] text-[#144C32]"
+                        : "text-[#59483F] hover:bg-[#FFF8DF]"
+                    }`}
+                  >
+                    <ArrowsMerge size={14} weight="bold" aria-hidden="true" />
+                    <span>Gabungkan ke CV yang ada</span>
+                  </button>
+                </div>
               </div>
-            </div>
 
               {applyMode === "merge" ? (
                 <p className="text-xs text-[#144C32] bg-[#DFF5DA]/70 border border-[#9FD499] rounded-xl px-3 py-2 font-medium">
@@ -354,6 +421,7 @@ export const ImportPanel = () => {
                       </motion.ol>
                     ) : null}
                   </AnimatePresence>
+
                   <label className="grid gap-1 text-xs font-semibold text-[#124959]">
                     <span>Tautan Profil LinkedIn kamu (opsional, untuk melengkapi bagian kontak)</span>
                     <TextInput
@@ -367,6 +435,7 @@ export const ImportPanel = () => {
                 </div>
               ) : null}
 
+              {/* Dropzone Unggah Berkas */}
               <div
                 onDragOver={(event) => {
                   event.preventDefault();
@@ -383,7 +452,8 @@ export const ImportPanel = () => {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf,.docx,.txt,.json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,application/json"
+                  multiple
+                  accept=".pdf,.docx,.zip,.csv,.txt,.json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/zip,text/csv,text/plain,application/json"
                   onChange={handleFileChange}
                   className="sr-only"
                   id="cv-file-upload-input"
@@ -393,34 +463,61 @@ export const ImportPanel = () => {
                   <div className="flex items-start gap-3">
                     <span
                       aria-hidden="true"
-                      className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-[#DFC25A] bg-[#FFF8DF] text-[#251813]"
+                      className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl border text-[#251813] ${
+                        activeTab === "linkedin"
+                          ? "border-[#94D1DF] bg-[#D6F3FA] text-[#124959]"
+                          : "border-[#DFC25A] bg-[#FFF8DF]"
+                      }`}
                     >
-                      <FileArrowUp size={22} weight="duotone" />
+                      {activeTab === "linkedin" ? (
+                        <LinkedinLogo size={22} weight="duotone" />
+                      ) : (
+                        <FileArrowUp size={22} weight="duotone" />
+                      )}
                     </span>
                     <div>
                       <p className="text-sm font-bold text-[#251813]">
                         {readingFile
-                          ? "Mengekstrak teks di browser..."
+                          ? "Mengekstrak resource di browser..."
                           : activeTab === "linkedin"
-                          ? "Unggah Profile.pdf dari Save to PDF LinkedIn"
+                          ? "Unggah resource ekspor LinkedIn (Profile.pdf, arsip .zip, atau beberapa .csv)"
                           : "Unggah berkas CV lama kamu (.pdf, .docx, .txt, .json)"}
                       </p>
                       <p className="text-xs text-[#4E3E36] mt-0.5 leading-relaxed">
-                        Seret berkas ke area ini atau klik tombol Pilih Berkas. Diproses 100% lokal di perangkatmu tanpa dikirim ke server.
+                        Seret berkas ke area ini atau klik tombol pilih berkas. Diproses 100% lokal di perangkatmu tanpa dikirim ke server.
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
-                        <span className="inline-flex items-center gap-1 rounded-md border border-[#E9A590] bg-[#FFE3D8] px-2 py-0.5 text-[#7B1F14]">
-                          <FilePdf size={13} weight="duotone" aria-hidden="true" />
-                          <span>PDF Teks</span>
-                        </span>
-                        <span className="inline-flex items-center gap-1 rounded-md border border-[#94D1DF] bg-[#D6F3FA] px-2 py-0.5 text-[#124959]">
-                          <FileDoc size={13} weight="duotone" aria-hidden="true" />
-                          <span>Word .DOCX</span>
-                        </span>
-                        <span className="inline-flex items-center gap-1 rounded-md border border-[#DFC25A] bg-[#FFF0A8] px-2 py-0.5 text-[#4A3A2E]">
-                          <FileTxt size={13} weight="duotone" aria-hidden="true" />
-                          <span>TXT / JSON</span>
-                        </span>
+                        {activeTab === "linkedin" ? (
+                          <>
+                            <span className="inline-flex items-center gap-1 rounded-md border border-[#E9A590] bg-[#FFE3D8] px-2 py-0.5 text-[#7B1F14]">
+                              <FilePdf size={13} weight="duotone" aria-hidden="true" />
+                              <span>Save to PDF</span>
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-md border border-[#94D1DF] bg-[#D6F3FA] px-2 py-0.5 text-[#124959]">
+                              <FileArchive size={13} weight="duotone" aria-hidden="true" />
+                              <span>Arsip .ZIP</span>
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-md border border-[#9FD499] bg-[#DFF5DA] px-2 py-0.5 text-[#144C32]">
+                              <FileCsv size={13} weight="duotone" aria-hidden="true" />
+                              <span>Multi .CSV</span>
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="inline-flex items-center gap-1 rounded-md border border-[#E9A590] bg-[#FFE3D8] px-2 py-0.5 text-[#7B1F14]">
+                              <FilePdf size={13} weight="duotone" aria-hidden="true" />
+                              <span>PDF Teks</span>
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-md border border-[#94D1DF] bg-[#D6F3FA] px-2 py-0.5 text-[#124959]">
+                              <FileDoc size={13} weight="duotone" aria-hidden="true" />
+                              <span>Word .DOCX</span>
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-md border border-[#DFC25A] bg-[#FFF0A8] px-2 py-0.5 text-[#4A3A2E]">
+                              <FileTxt size={13} weight="duotone" aria-hidden="true" />
+                              <span>TXT / JSON</span>
+                            </span>
+                          </>
+                        )}
                         {uploadedFileName ? (
                           <span className="inline-flex items-center gap-1 rounded-md border border-[#9FD499] bg-[#DFF5DA] px-2 py-0.5 text-[#144C32]">
                             Terakhir: {uploadedFileName}
@@ -437,7 +534,13 @@ export const ImportPanel = () => {
                     className="shrink-0 min-h-[44px] gap-1.5"
                   >
                     <FileArrowUp size={16} weight="bold" aria-hidden="true" />
-                    <span>{readingFile ? "Membaca..." : "Pilih Berkas"}</span>
+                    <span>
+                      {readingFile
+                        ? "Membaca..."
+                        : activeTab === "linkedin"
+                        ? "Pilih Resource LinkedIn"
+                        : "Pilih Berkas CV"}
+                    </span>
                   </Button>
                 </div>
               </div>
@@ -452,6 +555,7 @@ export const ImportPanel = () => {
                 </div>
               ) : null}
 
+              {/* Atau Tempel Teks Manual */}
               <div className="grid gap-2">
                 <label className="grid gap-1.5 text-sm font-semibold text-[#251813]">
                   <span>
@@ -463,7 +567,11 @@ export const ImportPanel = () => {
                     rows={5}
                     value={raw}
                     onChange={(event) => setRaw(event.target.value)}
-                    placeholder="Salin-tempel teks CV atau halaman profil LinkedIn kamu di sini..."
+                    placeholder={
+                      activeTab === "linkedin"
+                        ? "Tempel teks dari halaman profil LinkedIn kamu (Summary / Tentang, Experience / Pengalaman, Education, Top Skills, Licenses & certifications)..."
+                        : "Salin-tempel seluruh teks dari dokumen PDF/Word atau berkas JSON Resume kamu di sini..."
+                    }
                   />
                 </label>
                 <div className="flex flex-wrap items-center gap-2.5">
@@ -478,12 +586,14 @@ export const ImportPanel = () => {
                       ? "Ekstrak & Gabungkan ke CV"
                       : "Ekstrak & Isi Formulir"}
                   </Button>
-                  {raw ? (
+                  {raw || linkedInUrl ? (
                     <Button
                       type="button"
                       variant="ghost"
+                      className="min-h-[44px]"
                       onClick={() => {
                         setRaw("");
+                        setLinkedInUrl("");
                         setUploadedFileName("");
                         setErrorMessage("");
                       }}
@@ -491,6 +601,11 @@ export const ImportPanel = () => {
                       Kosongkan
                     </Button>
                   ) : null}
+                  <span className="text-xs text-[#59483F]">
+                    {activeTab === "linkedin"
+                      ? "Mendukung format 2 kolom LinkedIn Save-to-PDF, salinan halaman profil (ID/EN), serta ekspor CSV."
+                      : "Mendukung berbagai format ATS: heading pipe (Posisi | Perusahaan), format 2 baris, keahlian per kategori, hingga JSON Resume."}
+                  </span>
                 </div>
               </div>
             </div>
@@ -513,7 +628,7 @@ export const ImportPanel = () => {
               type="button"
               onClick={() => setMessage("")}
               aria-label="Tutup pemberitahuan"
-              className="min-h-[32px] min-w-[32px] grid place-items-center rounded-lg hover:bg-white/60 shrink-0"
+              className="min-h-[44px] min-w-[44px] grid place-items-center rounded-lg hover:bg-white/60 shrink-0"
             >
               <X size={14} weight="bold" aria-hidden="true" />
             </button>
