@@ -8,7 +8,9 @@ import {
   FileArrowUp,
   FileDoc,
   FilePdf,
+  CaretDown,
   FileTxt,
+  Info,
   LinkedinLogo,
   Student,
   UploadSimple,
@@ -37,6 +39,7 @@ export const ImportPanel = () => {
 
   const [importOpen, setImportOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ImportTabMode>("cv");
+  const [showLinkedInGuide, setShowLinkedInGuide] = useState(false);
   const [linkedInUrl, setLinkedInUrl] = useState("");
   const [raw, setRaw] = useState("");
   const [message, setMessage] = useState("");
@@ -253,10 +256,49 @@ export const ImportPanel = () => {
 
               {activeTab === "linkedin" ? (
                 <div className="grid gap-3 rounded-xl border border-[#94D1DF] bg-[#D6F3FA]/45 p-3.5">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-[#124959]">
-                    <LinkedinLogo size={18} weight="duotone" aria-hidden="true" />
-                    <span>Impor Resource LinkedIn</span>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-[#124959]">
+                      <LinkedinLogo size={18} weight="duotone" aria-hidden="true" />
+                      <span>Dukung PDF &quot;Save to PDF&quot;, Arsip Data .zip / .csv, atau Salin Profil</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowLinkedInGuide((prev) => !prev)}
+                      aria-expanded={showLinkedInGuide}
+                      className="min-h-[44px] px-3 rounded-lg border border-[#94D1DF] bg-white text-xs font-bold text-[#124959] hover:bg-[#F1FBFE] inline-flex items-center gap-1.5"
+                    >
+                      <Info size={15} weight="duotone" aria-hidden="true" />
+                      <span>{showLinkedInGuide ? "Tutup Panduan" : "Cara Ekspor dari LinkedIn"}</span>
+                      <CaretDown
+                        size={13}
+                        weight="bold"
+                        aria-hidden="true"
+                        className={`transition-transform ${showLinkedInGuide ? "rotate-180" : ""}`}
+                      />
+                    </button>
                   </div>
+
+                  <AnimatePresence initial={false}>
+                    {showLinkedInGuide ? (
+                      <motion.ol
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.18 }}
+                        className="overflow-hidden grid gap-1.5 text-xs text-[#251813] bg-white/90 border border-[#94D1DF] rounded-xl p-3 list-decimal list-inside leading-relaxed"
+                      >
+                        <li>
+                          <strong>Save to PDF (Tercepat):</strong> Buka halaman profil LinkedIn kamu, klik tombol <strong>More / Lainnya</strong> di sebelah foto profil, lalu pilih <strong>Save to PDF</strong> (<code>Profile.pdf</code>).
+                        </li>
+                        <li>
+                          <strong>Arsip Data LinkedIn (.zip / .csv):</strong> Buka <strong>Settings &amp; Privacy</strong> -&gt; <strong>Data privacy</strong> -&gt; <strong>Get a copy of your data</strong>, centang <em>Profile, Positions, Education, Skills, Certifications</em>, lalu unggah berkas <code>.zip</code> atau kumpulan berkas <code>.csv</code>.
+                        </li>
+                        <li>
+                          <strong>Salin Teks Halaman Profil:</strong> Jika PDF/ZIP tidak tersedia, blok teks profil LinkedIn (Tentang, Pengalaman, Pendidikan, Keahlian) dan tempel ke kotak teks di bawah.
+                        </li>
+                      </motion.ol>
+                    ) : null}
+                  </AnimatePresence>
                   <label className="grid gap-1 text-xs font-semibold text-[#124959]">
                     <span>Tautan Profil LinkedIn kamu (opsional, untuk melengkapi bagian kontak)</span>
                     <TextInput
