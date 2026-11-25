@@ -501,6 +501,615 @@ export const parseLinkedInCsvArchive = (
   };
 };
 
+// --- 2. LinkedIn Profile PDF ("Save to PDF") & Web Copy-Paste Parser ---
+
+type LinkedInSectionKey =
+  | "header"
+  | "contact"
+  | "summary"
+  | "experience"
+  | "education"
+  | "skills"
+  | "certifications"
+  | "projects"
+  | "organizations"
+  | "languages"
+  | "honors";
+
+const LINKEDIN_SECTION_HEADINGS: Array<{ key: LinkedInSectionKey; regex: RegExp }> = [
+  { key: "contact", regex: /^(contact|kontak|contact info|info kontak)$/i },
+  {
+    key: "summary",
+    regex: /^(summary|about|tentang|tentang saya|ringkasan|ringkasan profil|profil)$/i
+  },
+  {
+    key: "experience",
+    regex: /^(experience|pengalaman|pengalaman kerja|work experience|riwayat pekerjaan)$/i
+  },
+  {
+    key: "education",
+    regex: /^(education|pendidikan|riwayat pendidikan)$/i
+  },
+  {
+    key: "skills",
+    regex: /^(top skills|skills|keahlian teratas|keahlian utama|keahlian|keterampilan)$/i
+  },
+  {
+    key: "certifications",
+    regex: /^(certifications|licenses & certifications|licenses and certifications|lisensi & sertifikasi|lisensi dan sertifikasi|sertifikasi|kursus|courses)$/i
+  },
+  {
+    key: "projects",
+    regex: /^(projects|proyek|proyek & publikasi)$/i
+  },
+  {
+    key: "organizations",
+    regex: /^(volunteering|volunteer experience|kegiatan sukarela|kesukarelawanan|pengalaman sukarela|organizations|organisasi)$/i
+  },
+  { key: "languages", regex: /^(languages|bahasa)$/i },
+  { key: "honors", regex: /^(honors-awards|honors & awards|honors and awards|penghargaan|penghargaan & kehormatan)$/i }
+];
+
+const LINKEDIN_NOISE_RE =
+  /^(?:page\s+\d+\s+of\s+\d+|halaman\s+\d+\s+dari\s+\d+|show all\s+\d+.*|tampilkan semua.*|see all\s+\d+.*|see more|lihat lebih banyak|\.\.\.more|show credential|tampilkan kredensial|connect|message|ikutilah|ikuti|terhubung|open to work|500\+\s+connections|\d+\s+(?:connections|koneksi|followers|pengikut)|\d+(?:st|nd|rd|th)?\s+degree connection|activity|aktivitas|featured|unggulan|recommendations|rekomendasi)$/i;
+
+const LINKEDIN_SUBMETA_RE =
+  /^(?:credential id\b.*|id kredensial\b.*|issued\s+.*|diterbitkan\s+.*|endorsed by\s+.*|disetujui oleh\s+.*|\d+\s+endorsements?)$/i;
+
+export const looksLikeLinkedInText = (raw: string): boolean => {
+  const clean = raw.trim();
+  if (!clean) return false;
+  let signals = 0;
+
+  if (/\b(?:top skills|keahlian teratas|licenses\s*&\s*certifications|lisensi\s*&\s*sertifikasi)\b/i.test(clean)) {
+    signals += 2;
+  }
+  if (/linkedin\.com\/in\/[^\s|]+\s*\(LinkedIn\)/i.test(clean)) signals += 2;
+  if (/^page\s+\d+\s+of\s+\d+\s*$/im.test(clean)) signals += 2;
+  if (/\(\s*\d+\s+(?:yrs?|years?|mos?|months?|tahun|bulan|thn|bln)[^)]*\)/i.test(clean)) signals += 2;
+  if (/·\s*(?:\d+\s+(?:yrs?|mos?|thn|bln)|full-time|internship|part-time|on-site|hybrid|remote|purnawaktu|magang)/i.test(clean)) {
+    signals += 2;
+  }
+  if (/^(?:summary|about|experience|education|top skills|contact)$/im.test(clean) && !clean.includes("|")) {
+    signals += 1;
+  }
+
+  return signals >= 2;
+};
+
+const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
+const LINKEDIN_URL_RE = /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[^\s|()]+/i;
+const URL_TOKEN_RE = /(?:https?:\/\/[^\s|()]+|(?:github|gitlab|behance|dribbble|medium|vercel|netlify)\.(?:com|net|app|io)\/[^\s|()]+|\b[a-z0-9-]+\.(?:dev|io|me|id|app|tech|xyz|co)\b(?:\/[^\s|()]*)?)/i;
+const PHONE_RE = /(?:\+?\d[\d\s().-]{7,}\d)/;
+
+const WORK_TYPE_SUFFIX_RE =
+  /\s*[·•]\s*(full[- ]?time|part[- ]?time|internship|freelance|contract|self-employed|purnawaktu|paruh waktu|magang|lepas|kontrak)\s*$/i;
+
+const LOCATION_SUFFIX_RE =
+  /\s*[·•]\s*(on[- ]?site|hybrid|remote|di lokasi|hibrida|jarak jauh)\s*$/i;
+
+const looksLikeLocationLine = (line: string): boolean => {
+  const clean = line.replace(LOCATION_SUFFIX_RE, "").trim();
+  if (!clean || clean.length > 72 || /[.!?]$/.test(clean)) return false;
+  if (LOCATION_SUFFIX_RE.test(line)) return true;
+  if (/^(remote|jakarta|bandung|surabaya|semarang|yogyakarta|jogja|medan|bekasi|tangerang|depok|bogor|malang|solo|surakarta|bali|denpasar|makassar|singapore|indonesia)\b/i.test(clean)) {
+    return true;
+  }
+  if (/^[A-Za-z\s.-]+,\s*[A-Za-z\s.-]+(?:,\s*[A-Za-z\s.-]+)?$/.test(clean) && clean.split(/\s+/).length <= 7) {
+    return true;
+  }
+  return false;
+};
+
+const extractLocationAndTypeFromLine = (
+  raw: string
+): { cleanName: string; workType?: WorkType } => {
+  const match = raw.match(WORK_TYPE_SUFFIX_RE);
+  if (!match) return { cleanName: raw.trim() };
+  return {
+    cleanName: raw.slice(0, match.index).trim(),
+    workType: inferWorkType(match[1])
+  };
+};
+
+const parseLinkedInExperienceLines = (
+  lines: string[]
+): { entries: WorkExperience[]; inlineSkills: string[] } => {
+  const inlineSkills: string[] = [];
+  // Pre-filter duplicate adjacent identical company lines produced by LinkedIn Web DOM copy-paste
+  const cleaned: string[] = [];
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || LINKEDIN_NOISE_RE.test(line)) continue;
+    const inlineSkillMatch = line.match(/^(?:Skills|Keahlian)\s*:\s*(.+)$/i);
+    if (inlineSkillMatch) {
+      inlineSkillMatch[1]
+        .split(/\s*[·•,]\s*/)
+        .map((s) => s.trim())
+        .filter((s) => s && !/^and\s+\+\d+\s+skills?$/i.test(s))
+        .forEach((s) => inlineSkills.push(s));
+      continue;
+    }
+    if (cleaned.length > 0 && cleaned[cleaned.length - 1] === line && line.length <= 70) {
+      continue;
+    }
+    cleaned.push(line);
+  }
+
+  // Locate every anchor date range line inside experience
+  const dateAnchors: number[] = [];
+  for (let i = 0; i < cleaned.length; i += 1) {
+    if (parseLinkedInDateRange(cleaned[i])) {
+      dateAnchors.push(i);
+    }
+  }
+
+  if (dateAnchors.length === 0) {
+    return { entries: [], inlineSkills };
+  }
+
+  const entries: WorkExperience[] = [];
+  let groupedCompany = "";
+  let prevBodyEnd = 0;
+
+  for (let aIdx = 0; aIdx < dateAnchors.length; aIdx += 1) {
+    const anchor = dateAnchors[aIdx];
+    const nextAnchor = dateAnchors[aIdx + 1] ?? cleaned.length;
+    const dateInfo = parseLinkedInDateRange(cleaned[anchor])!;
+
+    // Look backward in [prevBodyEnd .. anchor - 1] for Role & Company
+    const preSlice = cleaned.slice(prevBodyEnd, anchor).filter((l) => l.trim().length > 0);
+    let company = "";
+    let role = "";
+    let explicitType: WorkType | undefined;
+
+    if (preSlice.length >= 3) {
+      // Check for grouped multi-role header: Company \n Total Duration \n Role
+      const maybeDurationIdx = preSlice.findIndex((l) => LINKEDIN_TOTAL_DURATION_RE.test(l));
+      if (maybeDurationIdx > 0) {
+        const compInfo = extractLocationAndTypeFromLine(preSlice[maybeDurationIdx - 1]);
+        company = compInfo.cleanName;
+        groupedCompany = company;
+        explicitType = compInfo.workType;
+        role = preSlice.slice(maybeDurationIdx + 1).join(" ").trim();
+      } else {
+        const lastTwo = preSlice.slice(-2);
+        const info0 = extractLocationAndTypeFromLine(lastTwo[0]);
+        const info1 = extractLocationAndTypeFromLine(lastTwo[1]);
+        if (info1.workType) {
+          // Web Copy-Paste style: Role \n Company · Full-time
+          role = info0.cleanName;
+          company = info1.cleanName;
+          explicitType = info1.workType;
+        } else {
+          // Standard LinkedIn PDF: Company \n Role
+          company = info0.cleanName;
+          role = info1.cleanName;
+        }
+        groupedCompany = company;
+      }
+    } else if (preSlice.length === 2) {
+      const info0 = extractLocationAndTypeFromLine(preSlice[0]);
+      const info1 = extractLocationAndTypeFromLine(preSlice[1]);
+      if (LINKEDIN_TOTAL_DURATION_RE.test(info0.cleanName)) {
+        company = groupedCompany;
+        role = info1.cleanName;
+        explicitType = info1.workType;
+      } else if (info1.workType) {
+        role = info0.cleanName;
+        company = info1.cleanName;
+        explicitType = info1.workType;
+        groupedCompany = company;
+      } else {
+        company = info0.cleanName;
+        role = info1.cleanName;
+        groupedCompany = company;
+      }
+    } else if (preSlice.length === 1) {
+      const info0 = extractLocationAndTypeFromLine(preSlice[0]);
+      role = info0.cleanName;
+      explicitType = info0.workType;
+      company = groupedCompany;
+    }
+
+    // Look forward until next entry's header starts
+    let bodyStop = nextAnchor;
+    if (aIdx + 1 < dateAnchors.length) {
+      // Keep at most 2 header lines (or 3 if total duration line exists) right before nextAnchor
+      let headerLinesCount = 2;
+      if (nextAnchor - 2 >= anchor + 1 && LINKEDIN_TOTAL_DURATION_RE.test(cleaned[nextAnchor - 2])) {
+        headerLinesCount = 3;
+      } else if (nextAnchor - 1 >= anchor + 1 && !cleaned[nextAnchor - 2]) {
+        headerLinesCount = 1;
+      }
+      // If previous entry shares groupedCompany (no company change line), header might only be 1 line
+      const candidateTwoBack = (cleaned[nextAnchor - 2] ?? "").trim();
+      const candidateOneBack = (cleaned[nextAnchor - 1] ?? "").trim();
+      const twoBackWordCount = candidateTwoBack ? candidateTwoBack.split(/\s+/).length : 0;
+      const twoBackLooksLikeProse = Boolean(
+        candidateTwoBack &&
+          (/^(?:[•●▪◦‣*]|\d+[.)]\s+|-\s+)/.test(candidateTwoBack) ||
+            (candidateTwoBack.length > 68 && !/[·•|]/.test(candidateTwoBack)) ||
+            (/[.!]$/.test(candidateTwoBack) &&
+              !/\b(?:inc|ltd|llc|corp|co|pte|tbk|bhd|sdn|pt|cv)\.?$/i.test(candidateTwoBack) &&
+              twoBackWordCount >= 4) ||
+            (twoBackWordCount >= 6 &&
+              !/\b(?:pt|cv|university|universitas|institut|institute|bank|group|corp|inc|ltd|tbk|studio|agency|foundation|ministry|kementerian|dinas)\b/i.test(
+                candidateTwoBack
+              )))
+      );
+      if (nextAnchor - anchor <= 2 || twoBackLooksLikeProse) {
+        headerLinesCount = candidateOneBack ? 1 : 0;
+      }
+      bodyStop = Math.max(anchor + 1, nextAnchor - headerLinesCount);
+    }
+
+    let bodyCursor = anchor + 1;
+    let location = "";
+    if (bodyCursor < bodyStop && looksLikeLocationLine(cleaned[bodyCursor])) {
+      location = cleaned[bodyCursor].replace(LOCATION_SUFFIX_RE, "").trim();
+      bodyCursor += 1;
+    }
+
+    const bodyLines = cleaned.slice(bodyCursor, bodyStop);
+    const bulletPoints = bodyLines.length
+      ? splitDescriptionToBullets(bodyLines.join("\n"))
+      : [""];
+
+    entries.push({
+      id: createId(),
+      company,
+      role: role || "Pengalaman",
+      type: explicitType ?? inferWorkType(`${role} ${bodyLines.join(" ")}`),
+      location,
+      startDate: dateInfo.startDate,
+      endDate: dateInfo.endDate,
+      isCurrent: dateInfo.isCurrent,
+      bulletPoints
+    });
+
+    prevBodyEnd = bodyStop;
+  }
+
+  return { entries, inlineSkills };
+};
+
+const parseLinkedInEducationLines = (lines: string[]): Education[] => {
+  const entries: Education[] = [];
+  let current: Education | null = null;
+
+  const flush = () => {
+    if (current && (current.institution || current.degree || current.fieldOfStudy)) {
+      entries.push(current);
+    }
+    current = null;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || LINKEDIN_NOISE_RE.test(line)) continue;
+
+    // LinkedIn PDF: "Bachelor's degree, Computer Science · (2021 - 2025)"
+    const pdfDegPeriodMatch = line.match(
+      /^(.+?)\s*[·•]\s*\(\s*([^)]+)\s*\)\s*$/
+    );
+    if (pdfDegPeriodMatch && current) {
+      const parsedDeg = splitDegreeFieldCsv(pdfDegPeriodMatch[1]);
+      if (!current.degree) current.degree = parsedDeg.degree;
+      if (!current.fieldOfStudy) current.fieldOfStudy = parsedDeg.fieldOfStudy;
+      if (!current.graduationDate) current.graduationDate = pdfDegPeriodMatch[2].trim();
+      continue;
+    }
+
+    const gradeMatch = line.match(/^(?:Grade|Nilai|IPK|GPA)\s*:?\s*([0-4](?:[.,]\d{1,2})?(?:\s*\/\s*4(?:[.,]00?)?)?)/i);
+    if (gradeMatch && current) {
+      current.gpa = gradeMatch[1].replace(/\s+/g, "");
+      continue;
+    }
+
+    const actMatch = line.match(/^(?:Activities and societies|Aktivitas dan organisasi|Activities)\s*:\s*(.+)$/i);
+    if (actMatch && current) {
+      current.achievements = actMatch[1].trim();
+      continue;
+    }
+
+    const dateInfo = parseLinkedInDateRange(line);
+    if (dateInfo && current) {
+      current.graduationDate = dateInfo.period;
+      continue;
+    }
+
+    const parenRangeMatch = line.match(/\(\s*((?:19|20)\d{2}\s*[-–]\s*(?:(?:19|20)\d{2}|Present|Sekarang))\s*\)/i);
+    if (parenRangeMatch && current && !current.graduationDate) {
+      current.graduationDate = parenRangeMatch[1].trim();
+      const remainder = line
+        .replace(parenRangeMatch[0], "")
+        .replace(/[·•,\-\s]+$/, "")
+        .trim();
+      if (remainder && !current.degree && !current.fieldOfStudy) {
+        const parsedDeg = splitDegreeFieldCsv(remainder);
+        current.degree = parsedDeg.degree;
+        current.fieldOfStudy = parsedDeg.fieldOfStudy;
+      }
+      continue;
+    }
+
+    if (!current || (current.institution && (current.degree || current.graduationDate) && !line.includes(","))) {
+      flush();
+      current = {
+        id: createId(),
+        institution: line,
+        degree: "",
+        fieldOfStudy: "",
+        gpa: "",
+        graduationDate: "",
+        thesisTitle: "",
+        relevantCoursework: [],
+        achievements: ""
+      };
+    } else if (!current.degree && !current.fieldOfStudy) {
+      const parsedDeg = splitDegreeFieldCsv(line);
+      current.degree = parsedDeg.degree;
+      current.fieldOfStudy = parsedDeg.fieldOfStudy;
+    } else if (!current.achievements) {
+      current.achievements = line;
+    }
+  }
+
+  flush();
+  return entries.length ? entries : emptyResumeProfile().education;
+};
+
+const parseLinkedInCertificationLines = (lines: string[]): CertificationItem[] => {
+  const cleanLines = lines
+    .map((l) => l.trim())
+    .filter((l) => l && !LINKEDIN_NOISE_RE.test(l));
+
+  const items: CertificationItem[] = [];
+  for (const line of cleanLines) {
+    const issuedYearMatch = line.match(/^(?:issued|diterbitkan)\s+.*?\b((?:19|20)\d{2})\b/i);
+    if (issuedYearMatch) {
+      if (items.length > 0 && !items[items.length - 1].year) {
+        items[items.length - 1].year = issuedYearMatch[1];
+      }
+      continue;
+    }
+    if (LINKEDIN_SUBMETA_RE.test(line)) continue;
+    const parenMatch = line.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+    if (parenMatch && items.length > 0 && /^(?:19|20)\d{2}$/.test(parenMatch[2].trim())) {
+      items[items.length - 1].year = parenMatch[2].trim();
+      continue;
+    }
+    const yearMatch = line.match(/\b((?:19|20)\d{2})\b/);
+    // Heuristic: short organization names following an un-issued cert row attach as issuer
+    if (
+      items.length > 0 &&
+      !items[items.length - 1].issuer &&
+      !/[.;:]/.test(line) &&
+      line.split(/\s+/).length <= 5 &&
+      /(?:dicoding|google|aws|amazon|microsoft|coursera|udemy|bnsp|kominfo|cisco|oracle|meta|ibm|alibaba|ruangguru|revou|myskill|hacktiv)/i.test(
+        line
+      )
+    ) {
+      items[items.length - 1].issuer = line;
+      continue;
+    }
+    items.push({
+      id: createId(),
+      name: line,
+      issuer: "",
+      year: yearMatch?.[1] ?? ""
+    });
+  }
+  return items;
+};
+
+const parseLinkedInOrganizationLines = (lines: string[]): OrganizationItem[] => {
+  const { entries } = parseLinkedInExperienceLines(lines);
+  return entries.map((e) => ({
+    id: createId(),
+    organization: e.company,
+    role: e.role,
+    period: [e.startDate, e.endDate].filter(Boolean).join(" - "),
+    bulletPoints: e.bulletPoints
+  }));
+};
+
+const parseLinkedInProjectLines = (lines: string[]): ProjectItem[] => {
+  const { entries } = parseLinkedInExperienceLines(lines);
+  if (entries.length > 0) {
+    return entries.map((e) => ({
+      id: createId(),
+      name: e.company || e.role,
+      role: e.company ? e.role : "",
+      context: "Proyek LinkedIn",
+      period: [e.startDate, e.endDate].filter(Boolean).join(" - "),
+      technologies: [],
+      url: "",
+      bulletPoints: e.bulletPoints
+    }));
+  }
+
+  const projects: ProjectItem[] = [];
+  for (const line of lines.filter((l) => l.trim() && !LINKEDIN_NOISE_RE.test(l))) {
+    projects.push({
+      id: createId(),
+      name: line.trim(),
+      role: "",
+      context: "Proyek LinkedIn",
+      period: "",
+      technologies: [],
+      url: "",
+      bulletPoints: [""]
+    });
+  }
+  return projects;
+};
+
+export const parseLinkedInText = (
+  raw: string,
+  overrideLinkedinUrl?: string
+): LinkedInParseResult => {
+  const sections: Record<LinkedInSectionKey, string[]> = {
+    header: [],
+    contact: [],
+    summary: [],
+    experience: [],
+    education: [],
+    skills: [],
+    certifications: [],
+    projects: [],
+    organizations: [],
+    languages: [],
+    honors: []
+  };
+
+  let current: LinkedInSectionKey = "header";
+  const allLines = raw
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/\u00a0/g, " ").trim())
+    .filter((line) => Boolean(line) && !LINKEDIN_NOISE_RE.test(line));
+
+  for (const line of allLines) {
+    const candidate = line
+      .replace(/[:\s]+$/, "")
+      .replace(/^[-•*\s]+/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (candidate.length > 0 && candidate.length < 48) {
+      const matched = LINKEDIN_SECTION_HEADINGS.find((h) => h.regex.test(candidate));
+      if (matched) {
+        current = matched.key;
+        continue;
+      }
+    }
+
+    sections[current].push(line);
+  }
+
+  const profile = emptyResumeProfile();
+
+  // Parse header (Name, Headline, Location) + Contact sidebar
+  const contactSource = [...sections.header, ...sections.contact];
+  const headerTextLines: string[] = [];
+
+  for (const line of contactSource) {
+    const cleanLine = line.replace(/\s*\(LinkedIn\)\s*/gi, " ").trim();
+    if (EMAIL_RE.test(cleanLine) && !profile.contact.email) {
+      profile.contact.email = cleanLine.match(EMAIL_RE)?.[0] ?? "";
+    }
+    if (LINKEDIN_URL_RE.test(cleanLine) && !profile.contact.linkedinUrl) {
+      profile.contact.linkedinUrl = (cleanLine.match(LINKEDIN_URL_RE)?.[0] ?? "")
+        .replace(/^https?:\/\//i, "")
+        .replace(/^www\./i, "");
+    }
+    if (URL_TOKEN_RE.test(cleanLine) && !EMAIL_RE.test(cleanLine) && !LINKEDIN_URL_RE.test(cleanLine) && !profile.contact.portfolioUrl) {
+      profile.contact.portfolioUrl = (cleanLine.match(URL_TOKEN_RE)?.[0] ?? "")
+        .replace(/^https?:\/\//i, "")
+        .replace(/^www\./i, "");
+    }
+    if (PHONE_RE.test(cleanLine) && !profile.contact.phone && cleanLine.replace(/\D/g, "").length >= 8 && !EMAIL_RE.test(cleanLine)) {
+      profile.contact.phone = cleanLine;
+    }
+
+    if (
+      sections.header.includes(line) &&
+      !EMAIL_RE.test(line) &&
+      !LINKEDIN_URL_RE.test(line) &&
+      !URL_TOKEN_RE.test(line)
+    ) {
+      headerTextLines.push(cleanLine);
+    }
+  }
+
+  if (headerTextLines.length > 0) {
+    profile.contact.fullName = headerTextLines[0];
+  }
+  if (headerTextLines.length >= 2) {
+    const lastLine = headerTextLines[headerTextLines.length - 1];
+    if (headerTextLines.length >= 3 && looksLikeLocationLine(lastLine)) {
+      profile.contact.location = lastLine;
+      profile.contact.headline = headerTextLines.slice(1, -1).join(" ");
+    } else if (looksLikeLocationLine(lastLine)) {
+      profile.contact.location = lastLine;
+    } else {
+      profile.contact.headline = headerTextLines.slice(1).join(" ");
+    }
+  }
+
+  if (overrideLinkedinUrl?.trim()) {
+    profile.contact.linkedinUrl = overrideLinkedinUrl
+      .trim()
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "");
+  }
+
+  profile.summary = sections.summary.join(" ").replace(/\s+/g, " ").trim();
+
+  const { entries: workExperience, inlineSkills } = parseLinkedInExperienceLines(sections.experience);
+  const education = parseLinkedInEducationLines(sections.education);
+  const certificationItems = parseLinkedInCertificationLines(sections.certifications);
+  const organizations = parseLinkedInOrganizationLines(sections.organizations);
+  const projects = parseLinkedInProjectLines(sections.projects);
+
+  const skillItemsFromSection = sections.skills
+    .flatMap((line) => line.split(/[·•,;]+/))
+    .map((s) => s.trim())
+    .filter((s) => s && !LINKEDIN_SUBMETA_RE.test(s));
+
+  const languageItems = sections.languages
+    .map((l) => l.trim())
+    .filter((l) => l && !LINKEDIN_NOISE_RE.test(l));
+
+  const skills = classifyLinkedInSkills([...skillItemsFromSection, ...inlineSkills, ...languageItems]);
+
+  if (sections.honors.length > 0 && education.length > 0) {
+    const honorsText = sections.honors.slice(0, 3).join("; ");
+    education[0].achievements = [education[0].achievements, honorsText].filter(Boolean).join("; ");
+  }
+
+  const internCount = workExperience.filter((w) => w.type === "internship").length;
+  const experienceLevel =
+    workExperience.length >= 3 && internCount <= workExperience.length / 2
+      ? "experienced"
+      : workExperience.length >= 1
+      ? "early_career"
+      : "fresh_graduate";
+
+  const finalProfile: ResumeProfile = {
+    ...profile,
+    experienceLevel,
+    workExperience,
+    education,
+    projects,
+    organizations,
+    certificationItems,
+    skills
+  };
+
+  const stats: LinkedInImportStats = {
+    work: workExperience.length,
+    education: education.filter((e) => e.institution.trim() || e.degree.trim()).length,
+    projects: projects.length,
+    organizations: organizations.length,
+    skills: unique([...skills.hardSkills, ...skills.tools, ...skills.softSkills]).length,
+    certifications: certificationItems.length,
+    sourceKind: "linkedin_profile"
+  };
+
+  const recommendedTemplate: CvTemplate =
+    stats.work >= 4 || stats.organizations > 0 || stats.projects >= 2 ? "compact_centered" : "classic_editorial";
+
+  return {
+    profile: finalProfile,
+    stats,
+    message: buildLinkedInStatsMessage(stats),
+    recommendedTemplate
+  };
+};
+
 export const buildLinkedInStatsMessage = (stats: LinkedInImportStats): string => {
   const parts: string[] = [];
   if (stats.work) parts.push(`${stats.work} pengalaman`);
