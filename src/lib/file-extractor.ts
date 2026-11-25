@@ -55,7 +55,7 @@ const resolveFileType = (file: File): SupportedFileType => {
 };
 
 const isLinkedInPageMarker = (value: string): boolean =>
-  /^Page\s+\d+\s+of\s+\d+$/i.test(value.trim());
+  /^(?:Page\s+\d+\s+of\s+\d+|Halaman\s+\d+\s+dari\s+\d+)$/i.test(value.trim());
 
 const estimateTokenEndX = (token: RawTextToken): number =>
   token.x + Math.max(token.width, token.text.trim().length * 3.2);
@@ -242,8 +242,12 @@ export const extractTwoColumnPdfLines = (
 
 const looksLikeLinkedInPdfContent = (text: string): boolean => {
   const hasLinkedInUrl = /(?:https?:\/\/)?(?:[\w-]+\.)?linkedin\.com\/in\//i.test(text);
-  const hasSidebarHeader = /\b(?:Top Skills|Contact|Honors-Awards)\b/i.test(text);
-  const hasMainHeader = /\b(?:Summary|Experience|Education)\b/i.test(text);
+  const hasSidebarHeader =
+    /\b(?:Top Skills|Contact|Hubungi|Keahlian Teratas|Keahlian Utama|Keterampilan Utama|Honors-Awards|Penghargaan)\b/i.test(
+      text
+    );
+  const hasMainHeader =
+    /\b(?:Summary|Ringkasan|Tentang|Experience|Pengalaman|Education|Pendidikan)\b/i.test(text);
   return hasLinkedInUrl || (hasSidebarHeader && hasMainHeader);
 };
 
