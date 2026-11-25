@@ -66,9 +66,9 @@ export const GapTogglePanel = ({
       field,
       kind: inProfile ? "added" : match.matchKind === "cross_language" ? "cross_language" : "gap",
       reason: inProfile
-        ? "Sudah diaktifkan di Keahlian CV. Matikan toggle jika tidak relevan atau ingin melepasnya."
+        ? "Aktif di daftar keahlian CV."
         : match.matchedVia
-        ? `${match.matchedVia}. Aktifkan jika kamu ingin menyertakan istilah "${match.term}" secara eksplisit.`
+        ? `${match.matchedVia}. Aktifkan jika perlu ditulis eksplisit.`
         : match.guidance,
       enabled: inProfile
     });
@@ -84,7 +84,7 @@ export const GapTogglePanel = ({
       term: comp.skill,
       field: inferToolVsHard(comp.skill),
       kind: inProfile ? "added" : "implicit",
-      reason: `Saran domain (${comp.domain}): ${comp.reason}`,
+      reason: `Terkait (${comp.domain}): ${comp.reason}`,
       enabled: inProfile
     });
   }
@@ -100,7 +100,7 @@ export const GapTogglePanel = ({
       term: addedTerm,
       field: inferToolVsHard(addedTerm),
       kind: "added",
-      reason: "Sudah diaktifkan ke Keahlian CV. Matikan toggle kapan saja jika ingin melepasnya.",
+      reason: "Aktif di daftar keahlian CV.",
       enabled: true
     });
   }
@@ -128,10 +128,10 @@ export const GapTogglePanel = ({
           </span>
           <div className="min-w-0">
             <h3 className="text-xs sm:text-sm font-bold text-[#251813]">
-              Tambah Cepat Kualifikasi yang Masih Kurang ({gapOnlyCount} celah)
+              Tambah Cepat Keahlian Kurang ({gapOnlyCount})
             </h3>
-            <p className="text-xs text-[#59483F] leading-relaxed">
-              Aktifkan toggle hanya untuk keahlian yang benar-benar kamu kuasai. Skor ATS langsung naik/turun seketika.
+            <p className="text-xs text-[#59483F]">
+              Aktifkan hanya yang benar-benar kamu kuasai.
             </p>
           </div>
         </div>
@@ -209,7 +209,7 @@ export const GapTogglePanel = ({
                   {item.enabled ? (
                     <p className="inline-flex items-center gap-1 text-[11px] font-bold text-[#144C32]">
                       <CheckCircle size={13} weight="fill" aria-hidden="true" />
-                      <span>Terpasang di Keahlian CV (klik OFF untuk membatalkan)</span>
+                      <span>Terpasang di CV</span>
                     </p>
                   ) : null}
                 </div>
