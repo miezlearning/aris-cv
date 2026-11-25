@@ -4,11 +4,12 @@ export type ExtractedFileResult = {
   text: string;
   fileType: SupportedFileType;
   pageCount?: number;
+  detectedSource?: "linkedin_pdf";
 };
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
-type RawTextToken = {
+export type RawTextToken = {
   text: string;
   x: number;
   y: number;
@@ -39,6 +40,116 @@ const resolveFileType = (file: File): SupportedFileType => {
   }
 
   throw new Error("Format berkas belum didukung. Gunakan berkas .pdf, .docx, .txt, atau .json.");
+};
+
+const isLinkedInPageMarker = (value: string): boolean =>
+  /^Page\s+\d+\s+of\s+\d+$/i.test(value.trim());
+
+const estimateTokenEndX = (token: RawTextToken): number =>
+  token.x + Math.max(token.width, token.text.trim().length * 3.2);
+
+const hasHeavySplitCrossing = (tokens: RawTextToken[], splitX: number): boolean => {
+  let crossing = 0;
+  for (const token of tokens) {
+    const trimmed = token.text.trim();
+    if (trimmed.length < 2 || isLinkedInPageMarker(trimmed)) continue;
+    if (token.x < splitX - 2 && estimateTokenEndX(token) > splitX + 2) {
+      crossing += 1;
+    }
+  }
+  return crossing > 3;
+};
+
+/**
+ * Detects whether a PDF page uses a two-column sidebar layout (like LinkedIn's
+ * Save-to-PDF export) and returns the gutter x-coordinate separating them.
+ */
+export const detectTwoColumnSplitX = (
+  tokens: RawTextToken[],
+  pageWidth = 595
+): number | null => {
+  const cleanTokens = tokens.filter((token) => {
+    const trimmed = token.text.trim();
+    return trimmed.length > 0 && !isLinkedInPageMarker(trimmed);
+  });
+  if (cleanTokens.length < 12) return null;
+
+  const maxTokenEnd = cleanTokens.reduce(
+    (max, token) => Math.max(max, estimateTokenEndX(token)),
+    0
+  );
+  const effectiveWidth = Math.max(pageWidth > 0 ? pageWidth : 595, maxTokenEnd, 420);
+
+  const rows: Array<{ y: number; tokens: RawTextToken[] }> = [];
+  for (const token of [...cleanTokens].sort((a, b) => b.y - a.y || a.x - b.x)) {
+    const row = rows.find((item) => Math.abs(item.y - token.y) <= 3);
+    if (row) {
+      row.tokens.push(token);
+    } else {
+      rows.push({ y: token.y, tokens: [token] });
+    }
+  }
+
+  const minSplit = Math.round(effectiveWidth * 0.27);
+  const maxSplit = Math.round(effectiveWidth * 0.44);
+  const rightMarginCeiling = effectiveWidth * 0.56;
+
+  let bestSplitX: number | null = null;
+  let bestScore = -Infinity;
+
+  for (let candidate = minSplit; candidate <= maxSplit; candidate += 4) {
+    let crossingCount = 0;
+    let leftTokenCount = 0;
+    let rightTokenCount = 0;
+    let minGapAroundSplit = Infinity;
+
+    for (const token of cleanTokens) {
+      const endX = estimateTokenEndX(token);
+      if (token.x < candidate - 2 && endX > candidate + 2) {
+        if (token.text.trim().length >= 2) {
+          crossingCount += 1;
+        }
+      } else if (endX <= candidate + 2) {
+        leftTokenCount += 1;
+        minGapAroundSplit = Math.min(minGapAroundSplit, Math.max(0, candidate - endX));
+      } else {
+        rightTokenCount += 1;
+        minGapAroundSplit = Math.min(minGapAroundSplit, Math.max(0, token.x - candidate));
+      }
+    }
+
+    if (crossingCount > 1 || leftTokenCount < 4 || rightTokenCount < 8) {
+      continue;
+    }
+
+    let totalLeftRows = 0;
+    let leftOnlyRows = 0;
+    let rightMarginRows = 0;
+
+    for (const row of rows) {
+      const hasLeft = row.tokens.some((t) => estimateTokenEndX(t) <= candidate + 2);
+      const hasRightNearColumnStart = row.tokens.some(
+        (t) => t.x >= candidate - 2 && t.x <= rightMarginCeiling
+      );
+      if (hasLeft) totalLeftRows += 1;
+      if (hasLeft && !hasRightNearColumnStart) leftOnlyRows += 1;
+      if (hasRightNearColumnStart) rightMarginRows += 1;
+    }
+
+    if (totalLeftRows < 3 || rightMarginRows < 5 || (leftOnlyRows < 2 && totalLeftRows < 4)) {
+      continue;
+    }
+
+    const gutterBonus = Number.isFinite(minGapAroundSplit) ? Math.min(minGapAroundSplit, 24) : 0;
+    const score = totalLeftRows * 2 + rightMarginRows * 3 + gutterBonus - crossingCount * 40;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestSplitX = candidate;
+    }
+  }
+
+  return bestSplitX;
 };
 
 const groupPdfTokensIntoLines = (tokens: RawTextToken[]): string[] => {
@@ -90,6 +201,40 @@ const groupPdfTokensIntoLines = (tokens: RawTextToken[]): string[] => {
   return lines;
 };
 
+/**
+ * Splits a page's PDF tokens around `splitX` and returns clean reading lines
+ * for the left sidebar and right main column separately.
+ */
+export const extractTwoColumnPdfLines = (
+  tokens: RawTextToken[],
+  splitX: number
+): { leftLines: string[]; rightLines: string[] } => {
+  const leftTokens: RawTextToken[] = [];
+  const rightTokens: RawTextToken[] = [];
+
+  for (const token of tokens) {
+    const trimmed = token.text.trim();
+    if (!trimmed || isLinkedInPageMarker(trimmed)) continue;
+    if (estimateTokenEndX(token) <= splitX + 2) {
+      leftTokens.push(token);
+    } else {
+      rightTokens.push(token);
+    }
+  }
+
+  return {
+    leftLines: groupPdfTokensIntoLines(leftTokens).filter((line) => !isLinkedInPageMarker(line)),
+    rightLines: groupPdfTokensIntoLines(rightTokens).filter((line) => !isLinkedInPageMarker(line))
+  };
+};
+
+const looksLikeLinkedInPdfContent = (text: string): boolean => {
+  const hasLinkedInUrl = /(?:https?:\/\/)?(?:[\w-]+\.)?linkedin\.com\/in\//i.test(text);
+  const hasSidebarHeader = /\b(?:Top Skills|Contact|Honors-Awards)\b/i.test(text);
+  const hasMainHeader = /\b(?:Summary|Experience|Education)\b/i.test(text);
+  return hasLinkedInUrl || (hasSidebarHeader && hasMainHeader);
+};
+
 const extractTextFromPdf = async (file: File): Promise<ExtractedFileResult> => {
   if (typeof window === "undefined") {
     throw new Error("Ekstraksi PDF hanya dapat dijalankan di browser.");
@@ -104,10 +249,12 @@ const extractTextFromPdf = async (file: File): Promise<ExtractedFileResult> => {
 
   try {
     pdf = await loadingTask.promise;
-    const pageTexts: string[] = [];
+    const pageData: Array<{ tokens: RawTextToken[]; pageWidth: number }> = [];
 
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
       const page = await pdf.getPage(pageNum);
+      const pageWidth =
+        typeof page.getViewport === "function" ? page.getViewport({ scale: 1 }).width : 595;
       const textContent = await page.getTextContent();
       const tokens: RawTextToken[] = [];
 
@@ -124,11 +271,44 @@ const extractTextFromPdf = async (file: File): Promise<ExtractedFileResult> => {
         });
       }
 
-      const lines = groupPdfTokensIntoLines(tokens);
-      if (lines.length) pageTexts.push(lines.join("\n"));
+      pageData.push({ tokens, pageWidth });
     }
 
-    const combined = pageTexts.join("\n").trim();
+    let activeSplitX: number | null = null;
+    const mainColumnLines: string[] = [];
+    const sidebarLines: string[] = [];
+    const fallbackPageTexts: string[] = [];
+
+    for (const { tokens, pageWidth } of pageData) {
+      const pageSplitX = detectTwoColumnSplitX(tokens, pageWidth);
+      const resolvedSplitX: number | null =
+        pageSplitX ??
+        (activeSplitX !== null && !hasHeavySplitCrossing(tokens, activeSplitX)
+          ? activeSplitX
+          : null);
+
+      if (resolvedSplitX !== null) {
+        activeSplitX = resolvedSplitX;
+        const { leftLines, rightLines } = extractTwoColumnPdfLines(tokens, resolvedSplitX);
+        if (rightLines.length) mainColumnLines.push(...rightLines);
+        if (leftLines.length) sidebarLines.push(...leftLines);
+      } else {
+        const lines = groupPdfTokensIntoLines(tokens).filter((line) => !isLinkedInPageMarker(line));
+        if (lines.length) {
+          if (activeSplitX !== null) {
+            mainColumnLines.push(...lines);
+          } else {
+            fallbackPageTexts.push(lines.join("\n"));
+          }
+        }
+      }
+    }
+
+    const combined =
+      activeSplitX !== null
+        ? [...mainColumnLines, ...sidebarLines].join("\n").trim()
+        : fallbackPageTexts.join("\n").trim();
+
     if (combined.replace(/\s+/g, "").length < 20) {
       throw new Error(
         "Berkas PDF ini tampak seperti hasil pindaian gambar sehingga teksnya tidak bisa diseleksi. Coba unggah versi DOCX/PDF teks atau salin teks CV kamu lalu tempel di kolom bawah."
@@ -138,7 +318,11 @@ const extractTextFromPdf = async (file: File): Promise<ExtractedFileResult> => {
     return {
       text: combined,
       fileType: "pdf",
-      pageCount: pdf.numPages
+      pageCount: pdf.numPages,
+      detectedSource:
+        activeSplitX !== null && looksLikeLinkedInPdfContent(combined)
+          ? "linkedin_pdf"
+          : undefined
     };
   } finally {
     if (pdf) {
