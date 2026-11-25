@@ -93,7 +93,7 @@ export const CvPreview = ({
                 </span>
               ) : null}
             </div>
-            <p className="mt-0.5 text-xs text-[#59483F]">Satu kolom linear standar ATS ({TEMPLATE_NAMES[cvTemplate]})</p>
+            <p className="mt-0.5 text-xs text-[#59483F]">{TEMPLATE_NAMES[cvTemplate]}</p>
           </div>
         </div>
 
@@ -291,8 +291,8 @@ export const CvPreview = ({
                 <FileText size={24} weight="duotone" aria-hidden="true" />
               </div>
               <p className="text-base font-bold text-[#251813]">Lembar CV masih kosong</p>
-              <p className="mt-1 max-w-sm text-xs leading-relaxed text-[#59483F]">
-                Isi data di <span className="font-bold text-[#251813]">Langkah 1 (Data CV)</span> atau unggah berkas CV lamamu. Dokumen akan langsung tersusun di sini.
+              <p className="mt-1 max-w-xs text-xs leading-relaxed text-[#59483F]">
+                Isi data atau impor CV di Langkah 1 untuk melihat pratinjau.
               </p>
             </div>
           ) : (
