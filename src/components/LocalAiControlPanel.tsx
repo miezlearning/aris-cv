@@ -512,8 +512,8 @@ export const LocalAiControlPanel = ({
                   ) : null}
 
                   <Field
-                    label="Pilih model browser (unduh 1x, tersimpan di cache)"
-                    hint="Ukuran lebih kecil mengunduh lebih cepat; 1.5B-3B memberi hasil terjemahan dan penulisan terbaik."
+                    label="Pilih model browser"
+                    hint="Diunduh sekali lalu berjalan offline di perangkat."
                   >
                     {!showFullCatalog ? (
                       <SelectInput
@@ -611,7 +611,7 @@ export const LocalAiControlPanel = ({
                       />
                     </Field>
 
-                    <Field label="API Key" hint="Hanya disimpan di sesi tab browser ini (sessionStorage).">
+                    <Field label="API Key" hint="Tersimpan hanya di tab ini.">
                       <TextInput
                         type="password"
                         value={restApiKey}
@@ -640,9 +640,7 @@ export const LocalAiControlPanel = ({
                       <Globe size={15} weight="duotone" aria-hidden="true" />
                       <span>{busyCheck ? "Menguji koneksi..." : "Tes & Aktifkan"}</span>
                     </Button>
-                    <span className="text-[11px] text-[#59483F]">
-                      Permintaan dikirim langsung dari browser ke API pilihanmu.
-                    </span>
+                    <span className="text-[11px] text-[#59483F]">Langsung dari browser ke API.</span>
                   </div>
                 </div>
               ) : null}
