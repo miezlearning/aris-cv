@@ -144,7 +144,7 @@ export const BulletRewriter = () => {
     setDrafts((prev) => ({ ...prev, [record.id]: nextValue }));
     setCardMessage((prev) => ({
       ...prev,
-      [record.id]: "Diterapkan ke CV. Skor ATS Live dan Pratinjau otomatis diperbarui."
+      [record.id]: "Tersimpan ke CV."
     }));
   };
 
@@ -154,7 +154,7 @@ export const BulletRewriter = () => {
     setDrafts((prev) => ({ ...prev, [record.id]: original }));
     setCardMessage((prev) => ({
       ...prev,
-      [record.id]: "Kalimat dikembalikan ke teks sebelum optimasi sesi ini."
+      [record.id]: "Dikembalikan ke teks awal."
     }));
   };
 
@@ -166,7 +166,7 @@ export const BulletRewriter = () => {
     setDrafts((prev) => ({ ...prev, [record.id]: updated }));
     setCardMessage((prev) => ({
       ...prev,
-      [record.id]: "Kata kerja pembuka diperkuat (Quick Action instan). Klik 'Terapkan ke CV' atau sunting bebas."
+      [record.id]: "Kata kerja pembuka diganti."
     }));
   };
 
@@ -176,7 +176,7 @@ export const BulletRewriter = () => {
     setDrafts((prev) => ({ ...prev, [record.id]: updated }));
     setCardMessage((prev) => ({
       ...prev,
-      [record.id]: "Slot angka jujur ditambahkan. Ganti teks di dalam kurung siku [...] dengan angkanya jika ada datanya."
+      [record.id]: "Slot angka ditambahkan. Isi teks di dalam [...]."
     }));
   };
 
@@ -186,7 +186,7 @@ export const BulletRewriter = () => {
     setDrafts((prev) => ({ ...prev, [record.id]: updated }));
     setCardMessage((prev) => ({
       ...prev,
-      [record.id]: `Kata kunci '${keyword}' diselipkan. Klik 'Terapkan ke CV' jika sudah sesuai dengan pengalaman aslimu.`
+      [record.id]: `'${keyword}' ditambahkan ke draft.`
     }));
   };
 
@@ -195,7 +195,7 @@ export const BulletRewriter = () => {
       setCardMessage((prev) => ({
         ...prev,
         [record.id]:
-          "Asisten AI sedang OFF. Gunakan tombol Quick Action instan di atas, atau nyalakan toggle Asisten AI untuk polesan kontekstual AI."
+          "Asisten AI sedang OFF. Pakai tombol cepat atau aktifkan AI di atas."
       }));
       return;
     }
@@ -310,8 +310,8 @@ export const BulletRewriter = () => {
 
   return (
     <SectionCard
-      title="Optimasi Kalimat Hybrid (Quick Action + Opsional AI)"
-      description="Ubah poin pasif menjadi kalimat aktif berpola Google XYZ / STAR. Gunakan tombol Quick Action instan (cocok untuk semua pengguna), sunting langsung kapan saja, atau aktifkan AI bila ingin penyesuaian kontekstual."
+      title="Perkuat Kalimat CV"
+      description="Pertajam poin pengalaman atau proyek dengan kata kerja aktif dan hasil terukur."
       accent="sage"
       icon={<PencilLine size={20} weight="duotone" />}
     >
@@ -331,12 +331,9 @@ export const BulletRewriter = () => {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-xs sm:text-sm font-bold text-[#251813]">
-                  Selaraskan Ringkasan Profil dengan{" "}
-                  <span className="text-[#144C32]">{job.jobTitle || "Lowongan Target"}</span>
+                  Ringkasan Profil ({job.jobTitle || "Lowongan Target"})
                 </p>
-                <p className="text-xs text-[#59483F]">
-                  Menonjolkan kekuatan nyatamu tanpa mengarang pengalaman baru. Bisa langsung diedit kapan saja.
-                </p>
+                <p className="text-xs text-[#59483F]">Sesuaikan ringkasan dengan target lowongan.</p>
               </div>
               <Button
                 type="button"
@@ -445,7 +442,7 @@ export const BulletRewriter = () => {
             <div className="flex items-center gap-2">
               <Lightbulb size={16} weight="duotone" className="text-[#4A3A2E] shrink-0" aria-hidden="true" />
               <p className="text-xs sm:text-[13px] font-semibold text-[#251813]">
-                Pola Google XYZ: Kata kerja aktif + ruang lingkup + alat + ukuran hasil nyata
+                Rumus singkat: Kata kerja aktif + tugas + hasil terukur
               </p>
             </div>
             <button
@@ -623,7 +620,7 @@ export const BulletRewriter = () => {
                     <div className="grid gap-4 md:grid-cols-2 items-start">
                       <div>
                         <p className="text-xs font-bold uppercase tracking-wider text-[#59483F] mb-1.5">
-                          Teks tersimpan di CV saat ini
+                          Teks saat ini
                         </p>
                         <div className="rounded-xl border border-[#D9CEBC] bg-[#FAF5E8] p-3.5 text-sm leading-relaxed text-[#251813]">
                           {record.text}
@@ -631,11 +628,8 @@ export const BulletRewriter = () => {
                       </div>
 
                       <div>
-                        <p className="text-xs font-bold uppercase tracking-wider text-[#144C32] mb-1.5 flex items-center justify-between">
-                          <span>Suntingan & saran perbaikan</span>
-                          <span className="text-[11px] font-normal text-[#59483F]">
-                            Selalu bisa langsung diedit
-                          </span>
+                        <p className="text-xs font-bold uppercase tracking-wider text-[#144C32] mb-1.5">
+                          Draft perbaikan
                         </p>
                         <TextArea
                           rows={3}
@@ -643,7 +637,7 @@ export const BulletRewriter = () => {
                           onChange={(event) =>
                             setDrafts((current) => ({ ...current, [record.id]: event.target.value }))
                           }
-                          placeholder="Tulis atau sunting kalimat pengalamanmu di sini..."
+                          placeholder="Sunting kalimat di sini..."
                         />
                       </div>
                     </div>
@@ -653,7 +647,7 @@ export const BulletRewriter = () => {
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#4E3E36] mr-1">
                           <Lightning size={13} weight="duotone" aria-hidden="true" />
-                          <span>Quick Action:</span>
+                          <span>Aksi cepat:</span>
                         </span>
                         <button
                           type="button"
@@ -661,7 +655,7 @@ export const BulletRewriter = () => {
                           className="inline-flex items-center gap-1 min-h-[36px] rounded-lg border border-[#D9CEBC] bg-white px-2.5 text-xs font-bold text-[#251813] hover:bg-[#FFF0A8] transition-colors"
                         >
                           <ArrowsClockwise size={13} weight="bold" aria-hidden="true" />
-                          <span>Ganti Kata Kerja Aktif</span>
+                          <span>Ganti Kata Kerja</span>
                         </button>
 
                         {showMetricQuickAdd ? (
@@ -671,7 +665,7 @@ export const BulletRewriter = () => {
                             className="inline-flex items-center gap-1 min-h-[36px] rounded-lg border border-[#D9CEBC] bg-white px-2.5 text-xs font-bold text-[#251813] hover:bg-[#FFF0A8] transition-colors"
                           >
                             <PlusCircle size={13} weight="duotone" aria-hidden="true" />
-                            <span>Tambah Slot Angka</span>
+                            <span>Tambah Angka</span>
                           </button>
                         ) : null}
 
@@ -687,16 +681,14 @@ export const BulletRewriter = () => {
                         >
                           <Sparkle size={13} weight="duotone" aria-hidden="true" />
                           <span>
-                            {aiLoading[record.id] ? "Memoles AI..." : "Poles dengan AI"}
+                            {aiLoading[record.id] ? "Memoles AI..." : "Poles AI"}
                           </span>
                         </button>
                       </div>
 
                       {candidateKeywords.length > 0 ? (
                         <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[#EFE7D6]">
-                          <span className="text-[11px] font-semibold text-[#59483F] mr-1">
-                            Sisipkan kata kunci lowongan (jika sesuai):
-                          </span>
+                          <span className="text-[11px] font-semibold text-[#59483F] mr-1">Sisipkan kata kunci:</span>
                           {candidateKeywords.map((kw) => (
                             <button
                               key={kw}
@@ -770,15 +762,15 @@ export const BulletRewriter = () => {
         </div>
       ) : (
         <EmptyState
-          title="Belum ada poin pengalaman atau proyek yang tertulis"
-          description="Isi minimal satu poin di bagian Proyek / Skripsi, Pengalaman Magang/Kerja, atau Organisasi pada Langkah 1 agar bisa dioptimalkan dengan Quick Action maupun AI."
+          title="Belum ada poin pengalaman atau proyek"
+          description="Tambahkan minimal satu poin pada Proyek, Pengalaman, atau Organisasi di Langkah 1."
           icon={<PencilLine size={20} weight="duotone" />}
           action={
             <Link
               className="btn doodle-btn bg-[#1F6B57] text-white border-2 border-[#251813] hover:bg-[#154538] px-4 py-2 text-sm font-bold"
               href="/master-cv"
             >
-              Lengkapi di Langkah 1: Data CV
+              Isi di Langkah 1
             </Link>
           }
         />
