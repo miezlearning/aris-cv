@@ -517,7 +517,7 @@ type LinkedInSectionKey =
   | "honors";
 
 const LINKEDIN_SECTION_HEADINGS: Array<{ key: LinkedInSectionKey; regex: RegExp }> = [
-  { key: "contact", regex: /^(contact|kontak|contact info|info kontak)$/i },
+  { key: "contact", regex: /^(contact|kontak|hubungi|contact info|info kontak|informasi kontak)$/i },
   {
     key: "summary",
     regex: /^(summary|about|tentang|tentang saya|ringkasan|ringkasan profil|profil)$/i
@@ -532,7 +532,7 @@ const LINKEDIN_SECTION_HEADINGS: Array<{ key: LinkedInSectionKey; regex: RegExp 
   },
   {
     key: "skills",
-    regex: /^(top skills|skills|keahlian teratas|keahlian utama|keahlian|keterampilan)$/i
+    regex: /^(top skills|skills|keahlian teratas|keahlian utama|keterampilan utama|keahlian|keterampilan)$/i
   },
   {
     key: "certifications",
@@ -540,7 +540,7 @@ const LINKEDIN_SECTION_HEADINGS: Array<{ key: LinkedInSectionKey; regex: RegExp 
   },
   {
     key: "projects",
-    regex: /^(projects|proyek|proyek & publikasi)$/i
+    regex: /^(projects|proyek|proyek & publikasi|publications|publikasi)$/i
   },
   {
     key: "organizations",
@@ -561,16 +561,27 @@ export const looksLikeLinkedInText = (raw: string): boolean => {
   if (!clean) return false;
   let signals = 0;
 
-  if (/\b(?:top skills|keahlian teratas|licenses\s*&\s*certifications|lisensi\s*&\s*sertifikasi)\b/i.test(clean)) {
+  if (
+    /\b(?:top skills|keahlian teratas|keahlian utama|keterampilan utama|licenses\s*&\s*certifications|lisensi\s*&\s*sertifikasi)\b/i.test(
+      clean
+    )
+  ) {
     signals += 2;
   }
-  if (/linkedin\.com\/in\/[^\s|]+\s*\(LinkedIn\)/i.test(clean)) signals += 2;
-  if (/^page\s+\d+\s+of\s+\d+\s*$/im.test(clean)) signals += 2;
+  if (/linkedin\.com\/in\/[^\s|]+\s*\(LinkedIn\)/i.test(clean) || /^\(LinkedIn\)$/im.test(clean)) {
+    signals += 2;
+  }
+  if (/^(?:page\s+\d+\s+of\s+\d+|halaman\s+\d+\s+dari\s+\d+)\s*$/im.test(clean)) signals += 2;
   if (/\(\s*\d+\s+(?:yrs?|years?|mos?|months?|tahun|bulan|thn|bln)[^)]*\)/i.test(clean)) signals += 2;
   if (/·\s*(?:\d+\s+(?:yrs?|mos?|thn|bln)|full-time|internship|part-time|on-site|hybrid|remote|purnawaktu|magang)/i.test(clean)) {
     signals += 2;
   }
-  if (/^(?:summary|about|experience|education|top skills|contact)$/im.test(clean) && !clean.includes("|")) {
+  if (
+    /^(?:summary|ringkasan|about|experience|pengalaman|education|pendidikan|top skills|keahlian teratas|contact|hubungi)$/im.test(
+      clean
+    ) &&
+    !clean.includes("|")
+  ) {
     signals += 1;
   }
 
@@ -774,6 +785,9 @@ const parseLinkedInExperienceLines = (
   return { entries, inlineSkills };
 };
 
+const INSTITUTION_HINT_RE =
+  /\b(?:universit(?:as|y)|institut(?:e)?|sekolah|sma|sman|smk|smkn|smp|smpn|sdn|politeknik|akademi|college|school|faculty|fakultas|stikom|binus)\b/i;
+
 const parseLinkedInEducationLines = (lines: string[]): Education[] => {
   const entries: Education[] = [];
   let current: Education | null = null;
@@ -787,7 +801,15 @@ const parseLinkedInEducationLines = (lines: string[]): Education[] => {
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
-    if (!line || LINKEDIN_NOISE_RE.test(line)) continue;
+    if (
+      !line ||
+      LINKEDIN_NOISE_RE.test(line) ||
+      EMAIL_RE.test(line) ||
+      LINKEDIN_URL_RE.test(line) ||
+      /^(?:\(LinkedIn\)|hubungi|contact|kontak)$/i.test(line)
+    ) {
+      continue;
+    }
 
     // LinkedIn PDF: "Bachelor's degree, Computer Science · (2021 - 2025)"
     const pdfDegPeriodMatch = line.match(
@@ -834,7 +856,12 @@ const parseLinkedInEducationLines = (lines: string[]): Education[] => {
       continue;
     }
 
-    if (!current || (current.institution && (current.degree || current.graduationDate) && !line.includes(","))) {
+    if (
+      !current ||
+      (current.institution &&
+        ((current.degree || current.graduationDate) && !line.includes(",") ||
+          INSTITUTION_HINT_RE.test(line)))
+    ) {
       flush();
       current = {
         id: createId(),
@@ -946,6 +973,41 @@ const parseLinkedInProjectLines = (lines: string[]): ProjectItem[] => {
   return projects;
 };
 
+const unwrapSidebarContactLines = (lines: string[]): string[] => {
+  const result: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    let line = lines[i].trim();
+    if (!line) continue;
+
+    while (
+      /(?:linkedin\.com\/|https?:\/\/|www\.)\S*$/i.test(line) &&
+      !/\(LinkedIn\)$/i.test(line) &&
+      i + 1 < lines.length
+    ) {
+      const next = lines[i + 1].trim();
+      if (/^\(LinkedIn\)$/i.test(next)) {
+        line = `${line} (LinkedIn)`;
+        i += 1;
+        break;
+      }
+      if (
+        next &&
+        !EMAIL_RE.test(next) &&
+        /^[a-z0-9._/?=&%+-]+(?:\s*\(LinkedIn\))?$/i.test(next)
+      ) {
+        line = `${line}${next}`;
+        i += 1;
+        if (/\(LinkedIn\)$/i.test(next)) break;
+      } else {
+        break;
+      }
+    }
+
+    result.push(line);
+  }
+  return result;
+};
+
 export const parseLinkedInText = (
   raw: string,
   overrideLinkedinUrl?: string
@@ -992,7 +1054,8 @@ export const parseLinkedInText = (
   const profile = emptyResumeProfile();
 
   // Parse header (Name, Headline, Location) + Contact sidebar
-  const contactSource = [...sections.header, ...sections.contact];
+  const unwrappedContactLines = unwrapSidebarContactLines(sections.contact);
+  const contactSource = [...sections.header, ...unwrappedContactLines];
   const headerTextLines: string[] = [];
 
   for (const line of contactSource) {
@@ -1021,6 +1084,21 @@ export const parseLinkedInText = (
       !URL_TOKEN_RE.test(line)
     ) {
       headerTextLines.push(cleanLine);
+    }
+  }
+
+  // Fallback scan across all unwrapped lines if contact heading was missing or split
+  if (!profile.contact.email || !profile.contact.linkedinUrl) {
+    for (const line of unwrapSidebarContactLines(allLines)) {
+      const cleanLine = line.replace(/\s*\(LinkedIn\)\s*/gi, " ").trim();
+      if (!profile.contact.email && EMAIL_RE.test(cleanLine)) {
+        profile.contact.email = cleanLine.match(EMAIL_RE)?.[0] ?? "";
+      }
+      if (!profile.contact.linkedinUrl && LINKEDIN_URL_RE.test(cleanLine)) {
+        profile.contact.linkedinUrl = (cleanLine.match(LINKEDIN_URL_RE)?.[0] ?? "")
+          .replace(/^https?:\/\//i, "")
+          .replace(/^www\./i, "");
+      }
     }
   }
 
