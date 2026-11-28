@@ -109,14 +109,62 @@ export const deriveGetQueryDisplayLabel = (baseUrl: string, modelId?: string): s
   return "GET API";
 };
 
+export const KNOWN_PROMPT_PARAMS = [
+  "text",
+  "q",
+  "query",
+  "message",
+  "ask",
+  "content",
+  "input",
+  "prompt"
+] as const;
+
+const detectedPromptParamCache = new Map<string, string>();
+
+const getUrlCacheKey = (rawUrl: string): string => {
+  try {
+    const parsed = new URL(rawUrl.trim());
+    return `${parsed.origin}${parsed.pathname}`.toLowerCase();
+  } catch {
+    return rawUrl.trim().toLowerCase();
+  }
+};
+
+export const getDetectedPromptParam = (rawUrl: string): string | undefined =>
+  detectedPromptParamCache.get(getUrlCacheKey(rawUrl));
+
+export const detectMissingParamFromError = (rawError: string): string | null => {
+  const clean = (rawError ?? "").trim();
+  if (!clean) return null;
+
+  for (const param of KNOWN_PROMPT_PARAMS) {
+    const beforeKeyword = new RegExp(
+      `(?:^|[\\s"'\\(\\{\\[:])(${param})(?:["'\\)\\]\\}])?\\s+(?:is\\s+)?(?:required|missing|empty|needed|wajib|dibutuhkan|harus\\s+diisi)\\b`,
+      "i"
+    );
+    const afterKeyword = new RegExp(
+      `(?:missing|required|need|provide|empty)\\s+(?:query\\s+|url\\s+)?(?:param(?:eter)?|field|arg)?\\s*[:=]?\\s*["'\`]?(${param})["'\`]?(?:\\b|$)`,
+      "i"
+    );
+    if (beforeKeyword.test(clean) || afterKeyword.test(clean)) {
+      return param;
+    }
+  }
+
+  return null;
+};
+
 export const buildGetQueryUrl = (
   rawBaseUrl: string,
   messages: LocalChatMessage[],
-  temperature: number
+  temperature: number,
+  options?: { promptParam?: string }
 ): string => {
+  const trimmedRaw = rawBaseUrl.trim();
   let parsed: URL;
   try {
-    parsed = new URL(rawBaseUrl.trim());
+    parsed = new URL(trimmedRaw);
   } catch {
     throw new Error("Format URL endpoint GET tidak valid. Pastikan diawali https://.");
   }
@@ -139,13 +187,72 @@ export const buildGetQueryUrl = (
           .map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content.trim()}`)
           .join("\n");
 
-  parsed.searchParams.set("prompt", promptText);
-  if (systemText) {
-    parsed.searchParams.set("system", systemText);
-  } else {
-    parsed.searchParams.delete("system");
+  const combinedText = systemText ? `${systemText}\n\n${promptText}` : promptText;
+  const tempStr = String(Number(temperature.toFixed(2)));
+
+  if (/\{prompt\}|%7Bprompt%7D/i.test(trimmedRaw)) {
+    const hasSystemPlaceholder = /\{system\}|%7Bsystem%7D/i.test(trimmedRaw);
+    const primaryValue = hasSystemPlaceholder ? promptText : combinedText;
+    return trimmedRaw
+      .replace(/\{prompt\}|%7Bprompt%7D/gi, encodeURIComponent(primaryValue))
+      .replace(/\{system\}|%7Bsystem%7D/gi, encodeURIComponent(systemText))
+      .replace(/\{temperature\}|%7Btemperature%7D/gi, encodeURIComponent(tempStr));
   }
-  parsed.searchParams.set("temperature", String(Number(temperature.toFixed(2))));
+
+  let promptKey: string;
+  let systemKey: string | null = null;
+  const explicitOverride = options?.promptParam?.trim().toLowerCase();
+
+  if (explicitOverride) {
+    promptKey = explicitOverride;
+    if (promptKey === "prompt") {
+      systemKey = "system";
+    }
+  } else if (parsed.searchParams.has("text") && parsed.searchParams.has("prompt")) {
+    promptKey = "text";
+    systemKey = "prompt";
+  } else if (parsed.searchParams.has("text") && parsed.searchParams.has("system")) {
+    promptKey = "text";
+    systemKey = "system";
+  } else {
+    const matchedParam = KNOWN_PROMPT_PARAMS.find((p) => parsed.searchParams.has(p));
+    if (matchedParam) {
+      promptKey = matchedParam;
+      if (matchedParam === "prompt") {
+        systemKey = "system";
+      }
+    } else {
+      promptKey = "prompt";
+      systemKey = "system";
+    }
+  }
+
+  if (promptKey === "prompt") {
+    parsed.searchParams.set("prompt", promptText);
+    if (systemText) {
+      parsed.searchParams.set("system", systemText);
+    } else {
+      parsed.searchParams.delete("system");
+    }
+    parsed.searchParams.set("temperature", tempStr);
+  } else if (systemKey) {
+    parsed.searchParams.set(promptKey, promptText);
+    if (systemText) {
+      parsed.searchParams.set(systemKey, systemText);
+    } else {
+      parsed.searchParams.delete(systemKey);
+    }
+    if (parsed.searchParams.has("temperature")) {
+      parsed.searchParams.set("temperature", tempStr);
+    }
+  } else {
+    if (explicitOverride) {
+      parsed.searchParams.delete("prompt");
+      parsed.searchParams.delete("system");
+      parsed.searchParams.delete("temperature");
+    }
+    parsed.searchParams.set(promptKey, combinedText);
+  }
 
   return parsed.toString();
 };
@@ -448,94 +555,132 @@ const formatRestError = (status: number, rawMessage?: string): string => {
   return `Permintaan REST API gagal dengan status HTTP ${status}${snippet}.`;
 };
 
+const extractRawErrorMessage = (parsedJson: unknown, fallbackBody: string): string => {
+  const errObj = (parsedJson && typeof parsedJson === "object" ? parsedJson : {}) as Record<string, unknown>;
+  if (typeof errObj.error === "string" && errObj.error.trim()) return errObj.error.trim();
+  if (typeof errObj.message === "string" && errObj.message.trim()) return errObj.message.trim();
+  const nestedErr = errObj.error as Record<string, unknown> | undefined;
+  if (typeof nestedErr?.message === "string" && nestedErr.message.trim()) return nestedErr.message.trim();
+  return fallbackBody;
+};
+
 const runGetQueryCompletion = async (
   config: Extract<ActiveLocalAiConfig, { mode: "rest_api" }>,
   messages: LocalChatMessage[],
   temperature: number
 ): Promise<string> => {
-  const targetUrl = buildGetQueryUrl(config.baseUrl, messages, temperature);
   const trimmedKey = config.apiKey.trim();
-  const headers: Record<string, string> = {};
-  if (trimmedKey) {
-    headers.Authorization = `Bearer ${trimmedKey}`;
-  }
+  const cacheKey = getUrlCacheKey(config.baseUrl);
+  const hasTemplatePlaceholder = /\{prompt\}|%7Bprompt%7D/i.test(config.baseUrl);
 
-  let status = 0;
-  let ok = false;
-  let rawText = "";
-
-  try {
-    const response = await fetch(targetUrl, {
-      method: "GET",
-      headers,
-      signal: AbortSignal.timeout(30000)
+  const executeGetAttempt = async (
+    promptParamOverride?: string
+  ): Promise<{ status: number; ok: boolean; trimmedBody: string; parsedJson: unknown; rawMsg: string }> => {
+    const targetUrl = buildGetQueryUrl(config.baseUrl, messages, temperature, {
+      promptParam: promptParamOverride
     });
-    status = response.status;
-    ok = response.ok;
-    rawText = await response.text();
-  } catch (directError) {
-    const isNetworkOrCors =
-      directError instanceof TypeError ||
-      (directError instanceof Error && /failed to fetch|networkerror|load failed/i.test(directError.message));
-
-    if (!isNetworkOrCors || typeof window === "undefined" || !targetUrl.startsWith("https://")) {
-      throw directError instanceof Error
-        ? directError
-        : new Error("Gagal terhubung ke endpoint GET REST API.");
+    const headers: Record<string, string> = {};
+    if (trimmedKey) {
+      headers.Authorization = `Bearer ${trimmedKey}`;
     }
 
-    const proxyRes = await fetch("/api/ai-proxy", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: targetUrl,
-        ...(trimmedKey ? { apiKey: trimmedKey } : {})
-      }),
-      signal: AbortSignal.timeout(30000)
-    });
+    let status = 0;
+    let ok = false;
+    let rawText = "";
 
-    const proxyJson = await proxyRes.json().catch(() => ({}));
-    if (!proxyRes.ok || !proxyJson?.success) {
-      throw new Error(proxyJson?.error?.message || formatRestError(proxyRes.status));
-    }
-
-    status = Number(proxyJson.data?.status ?? 200);
-    ok = Boolean(proxyJson.data?.ok);
-    rawText = typeof proxyJson.data?.body === "string" ? proxyJson.data.body : "";
-  }
-
-  const trimmedBody = rawText.trim();
-  let parsedJson: unknown = null;
-  if (trimmedBody.startsWith("{") || trimmedBody.startsWith("[")) {
     try {
-      parsedJson = JSON.parse(trimmedBody);
-    } catch {
-      parsedJson = null;
+      const response = await fetch(targetUrl, {
+        method: "GET",
+        headers,
+        signal: AbortSignal.timeout(30000)
+      });
+      status = response.status;
+      ok = response.ok;
+      rawText = await response.text();
+    } catch (directError) {
+      const isNetworkOrCors =
+        directError instanceof TypeError ||
+        (directError instanceof Error && /failed to fetch|networkerror|load failed/i.test(directError.message));
+
+      if (!isNetworkOrCors || typeof window === "undefined" || !targetUrl.startsWith("https://")) {
+        throw directError instanceof Error
+          ? directError
+          : new Error("Gagal terhubung ke endpoint GET REST API.");
+      }
+
+      const proxyRes = await fetch("/api/ai-proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: targetUrl,
+          ...(trimmedKey ? { apiKey: trimmedKey } : {})
+        }),
+        signal: AbortSignal.timeout(30000)
+      });
+
+      const proxyJson = await proxyRes.json().catch(() => ({}));
+      if (!proxyRes.ok || !proxyJson?.success) {
+        throw new Error(proxyJson?.error?.message || formatRestError(proxyRes.status));
+      }
+
+      status = Number(proxyJson.data?.status ?? 200);
+      ok = Boolean(proxyJson.data?.ok);
+      rawText = typeof proxyJson.data?.body === "string" ? proxyJson.data.body : "";
+    }
+
+    const trimmedBody = rawText.trim();
+    let parsedJson: unknown = null;
+    if (trimmedBody.startsWith("{") || trimmedBody.startsWith("[")) {
+      try {
+        parsedJson = JSON.parse(trimmedBody);
+      } catch {
+        parsedJson = null;
+      }
+    }
+
+    const rawMsg = extractRawErrorMessage(parsedJson, trimmedBody);
+    return { status, ok, trimmedBody, parsedJson, rawMsg };
+  };
+
+  const cachedParam = hasTemplatePlaceholder ? undefined : detectedPromptParamCache.get(cacheKey);
+  let attempt = await executeGetAttempt(cachedParam);
+
+  if (!attempt.ok && (attempt.status === 400 || attempt.status === 422) && !hasTemplatePlaceholder) {
+    const detectedParam = detectMissingParamFromError(attempt.rawMsg || attempt.trimmedBody);
+    if (detectedParam && detectedParam !== (cachedParam ?? "prompt")) {
+      detectedPromptParamCache.set(cacheKey, detectedParam);
+      try {
+        attempt = await executeGetAttempt(detectedParam);
+        if (!attempt.ok) {
+          detectedPromptParamCache.delete(cacheKey);
+        }
+      } catch (retryErr) {
+        detectedPromptParamCache.delete(cacheKey);
+        throw retryErr;
+      }
     }
   }
 
-  if (!ok) {
-    const errObj = (parsedJson && typeof parsedJson === "object" ? parsedJson : {}) as Record<string, unknown>;
-    const rawMsg =
-      typeof errObj.message === "string"
-        ? errObj.message
-        : typeof (errObj.error as Record<string, unknown> | undefined)?.message === "string"
-        ? String((errObj.error as Record<string, unknown>).message)
-        : trimmedBody;
-    throw new Error(formatRestError(status, rawMsg));
+  if (!attempt.ok) {
+    throw new Error(formatRestError(attempt.status, attempt.rawMsg));
   }
 
-  if (parsedJson !== null && typeof parsedJson === "object") {
-    const record = parsedJson as Record<string, unknown>;
-    const extracted = extractFlexibleTextResponse(parsedJson);
+  if (attempt.parsedJson !== null && typeof attempt.parsedJson === "object") {
+    const record = attempt.parsedJson as Record<string, unknown>;
+    const extracted = extractFlexibleTextResponse(attempt.parsedJson);
     if ((record.status === false || record.success === false) && !extracted) {
-      const errMsg = typeof record.message === "string" ? record.message : "Server mengembalikan status gagal.";
+      const errMsg =
+        typeof record.error === "string"
+          ? record.error
+          : typeof record.message === "string"
+          ? record.message
+          : "Server mengembalikan status gagal.";
       throw new Error(errMsg);
     }
     if (extracted) return extracted;
   }
 
-  return trimmedBody;
+  return attempt.trimmedBody;
 };
 
 const runRestApiCompletion = async (

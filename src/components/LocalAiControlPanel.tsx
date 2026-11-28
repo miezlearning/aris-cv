@@ -23,6 +23,7 @@ import {
   deleteWebLlmModelCache,
   deriveGetQueryDisplayLabel,
   fetchLocalServerModels,
+  getDetectedPromptParam,
   isWebLlmLoaded,
   loadWebLlmModel,
   testRestApiConnection,
@@ -267,6 +268,12 @@ export const LocalAiControlPanel = ({
         localAiProgress: 100,
         localAiError: ""
       });
+      if (isGet) {
+        const detectedParam = getDetectedPromptParam(restApiUrl);
+        if (detectedParam) {
+          setNotice(`Terhubung memakai parameter ?${detectedParam}=...`);
+        }
+      }
       setConfigOpen(false);
     } catch (error) {
       setLocalAiRuntime({
@@ -640,7 +647,7 @@ export const LocalAiControlPanel = ({
                       label={isGetQuery ? "Endpoint GET URL" : "Endpoint Base URL"}
                       hint={
                         isGetQuery
-                          ? "Boleh tempel URL lengkap beserta contoh ?prompt=...; parameter akan diisi otomatis."
+                          ? "Boleh tempel URL polos (otomatis deteksi ?prompt= / ?text=), URL contoh (?text=Halo), atau template (?text={prompt}&system={system})."
                           : undefined
                       }
                     >
@@ -668,7 +675,7 @@ export const LocalAiControlPanel = ({
                     </Button>
                     <span className="text-[11px] text-[#59483F]">
                       {isGetQuery
-                        ? "Kirim ?prompt, ?system, & ?temperature (fallback proxy otomatis jika kena CORS)."
+                        ? "Otomatis deteksi ?prompt= / ?text= (atau {prompt}), plus fallback proxy CORS."
                         : "Langsung dari browser ke API."}
                     </span>
                   </div>
