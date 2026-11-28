@@ -45,11 +45,9 @@ const sourceTypeLabels = {
 export const BulletRewriter = () => {
   const resume = useCvStore((state) => state.resumeProfile);
   const suggestions = useCvStore((state) => state.suggestions);
-  const updateBullet = useCvStore((state) => state.updateBullet);
-  const updateProjectBullet = useCvStore((state) => state.updateProjectBullet);
-  const updateOrganizationBullet = useCvStore((state) => state.updateOrganizationBullet);
+  const applyOptimizedBullet = useCvStore((state) => state.applyOptimizedBullet);
+  const applyOptimizedSummary = useCvStore((state) => state.applyOptimizedSummary);
   const updateSuggestion = useCvStore((state) => state.updateSuggestion);
-  const updateSummary = useCvStore((state) => state.updateSummary);
   const job = useCvStore((state) => state.jobTarget);
 
   const aiEnabled = useCvStore((state) => state.aiEnabled);
@@ -117,13 +115,13 @@ export const BulletRewriter = () => {
 
   const writeBulletToStore = (record: ResumeBulletRecord, nextValue: string) => {
     rememberOriginal(record);
-    if (record.sourceType === "project") {
-      updateProjectBullet(record.sourceId, record.bulletIndex, nextValue);
-    } else if (record.sourceType === "organization") {
-      updateOrganizationBullet(record.sourceId, record.bulletIndex, nextValue);
-    } else {
-      updateBullet(record.sourceId, record.bulletIndex, nextValue);
-    }
+    applyOptimizedBullet(
+      record.sourceType,
+      record.sourceId,
+      record.bulletIndex,
+      nextValue,
+      "Terapkan poin optimasi"
+    );
 
     const matchingSuggestion = suggestions.find(
       (s) =>
@@ -411,7 +409,7 @@ export const BulletRewriter = () => {
                     type="button"
                     disabled={!summaryDraft.trim()}
                     onClick={() => {
-                      updateSummary(summaryDraft.trim());
+                      applyOptimizedSummary(summaryDraft.trim(), "Terapkan ringkasan profil");
                       setSummaryStatus("Ringkasan profil diperbarui di CV. Skor ATS Live otomatis disesuaikan.");
                     }}
                     className="min-h-[40px] text-xs gap-1.5"

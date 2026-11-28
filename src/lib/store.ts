@@ -40,6 +40,12 @@ import {
   type RestApiPresetId
 } from "@/lib/local-ai/models";
 import { readSessionApiKey, saveSessionApiKey } from "@/lib/local-ai/engine";
+import {
+  applyRedo,
+  applyUndo,
+  pushHistorySnapshot,
+  type HistorySnapshot
+} from "@/lib/history";
 
 export type MasterTab =
   | "contact"
@@ -202,6 +208,20 @@ type AppState = {
   updateSuggestion: (id: string, patch: Partial<RewriteSuggestion>) => void;
   applySuggestion: (id: string, value?: string) => void;
   rejectSuggestion: (id: string) => void;
+  historyPast: HistorySnapshot[];
+  historyFuture: HistorySnapshot[];
+  undoToast: { id: number; label: string } | null;
+  dismissUndoToast: () => void;
+  undoResume: () => void;
+  redoResume: () => void;
+  applyOptimizedBullet: (
+    sourceType: "work" | "project" | "organization",
+    sourceId: string,
+    bulletIndex: number,
+    value: string,
+    label?: string
+  ) => void;
+  applyOptimizedSummary: (value: string, label?: string) => void;
   resetAll: () => void;
 };
 
@@ -343,8 +363,73 @@ const migrateLegacyProfile = (raw?: Partial<ResumeProfile>): ResumeProfile => {
 
 export const useCvStore = create<AppState>()(
   persist(
-    (set, getState) => ({
+    (set, getState) => {
+      const commitResumeChange = (
+        label: string,
+        updater: (current: ResumeProfile) => ResumeProfile,
+        options?: { coalesceKey?: string; showToast?: boolean; extraPatch?: Partial<AppState> }
+      ) => {
+        set((state) => {
+          const nextProfile = updater(state.resumeProfile);
+          const nextHistory = pushHistorySnapshot(
+            { past: state.historyPast, future: state.historyFuture },
+            state.resumeProfile,
+            { label, coalesceKey: options?.coalesceKey }
+          );
+          return {
+            ...(options?.extraPatch ?? {}),
+            resumeProfile: nextProfile,
+            historyPast: nextHistory.past,
+            historyFuture: nextHistory.future,
+            ...(options?.showToast ? { undoToast: { id: Date.now(), label } } : {})
+          };
+        });
+      };
+
+      return {
       resumeProfile: emptyResumeProfile(),
+      historyPast: [],
+      historyFuture: [],
+      undoToast: null,
+      dismissUndoToast: () => set({ undoToast: null }),
+      undoResume: () => {
+        const state = getState();
+        const result = applyUndo(
+          { past: state.historyPast, future: state.historyFuture },
+          state.resumeProfile
+        );
+        if (!result) return;
+        const nextAnalytics =
+          state.matchAnalytics.hasAnalyzed && state.jobTarget.rawDescription.trim()
+            ? analyzeMatch(result.nextProfile, state.jobTarget)
+            : state.matchAnalytics;
+        set({
+          resumeProfile: result.nextProfile,
+          historyPast: result.nextHistory.past,
+          historyFuture: result.nextHistory.future,
+          undoToast: null,
+          matchAnalytics: nextAnalytics
+        });
+      },
+      redoResume: () => {
+        const state = getState();
+        const result = applyRedo(
+          { past: state.historyPast, future: state.historyFuture },
+          state.resumeProfile
+        );
+        if (!result) return;
+        const nextAnalytics =
+          state.matchAnalytics.hasAnalyzed && state.jobTarget.rawDescription.trim()
+            ? analyzeMatch(result.nextProfile, state.jobTarget)
+            : state.matchAnalytics;
+        set({
+          resumeProfile: result.nextProfile,
+          historyPast: result.nextHistory.past,
+          historyFuture: result.nextHistory.future,
+          undoToast: null,
+          matchAnalytics: nextAnalytics
+        });
+      },
       jobTarget: emptyJobTarget(),
       matchAnalytics: emptyAnalytics(),
       suggestions: [],
@@ -408,21 +493,25 @@ export const useCvStore = create<AppState>()(
           savedAt: new Date().toISOString(),
           targetLang: lang
         };
-        set({
-          resumeProfile: nextProfile,
-          preTranslationBackup: backup,
-          cvLanguage: lang,
-          aiTranslatedProfiles: {}
+        commitResumeChange("Salin terjemahan ke editor", () => nextProfile, {
+          showToast: true,
+          extraPatch: {
+            preTranslationBackup: backup,
+            cvLanguage: lang,
+            aiTranslatedProfiles: {}
+          }
         });
       },
       restorePreTranslationBackup: () => {
         const backup = getState().preTranslationBackup;
         if (!backup) return;
-        set({
-          resumeProfile: backup.profile,
-          preTranslationBackup: null,
-          aiTranslatedProfiles: {},
-          cvLanguage: "auto"
+        commitResumeChange("Kembalikan teks asli terjemahan", () => backup.profile, {
+          showToast: true,
+          extraPatch: {
+            preTranslationBackup: null,
+            aiTranslatedProfiles: {},
+            cvLanguage: "auto"
+          }
         });
       },
       aiEnabled: false,
@@ -465,397 +554,417 @@ export const useCvStore = create<AppState>()(
       hydrated: false,
       setHydrated: (value) => set({ hydrated: value }),
       setExperienceLevel: (level) =>
-        set((state) => ({
-          resumeProfile: { ...state.resumeProfile, experienceLevel: level }
-        })),
+        commitResumeChange("Ubah tingkat pengalaman", (curr) => ({ ...curr, experienceLevel: level })),
       updateContact: (field, value) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            contact: { ...state.resumeProfile.contact, [field]: value }
-          }
-        })),
+        commitResumeChange(
+          "Ubah profil & kontak",
+          (curr) => ({
+            ...curr,
+            contact: { ...curr.contact, [field]: value }
+          }),
+          { coalesceKey: `contact-${field}` }
+        ),
       updateSummary: (value) =>
-        set((state) => ({
-          resumeProfile: { ...state.resumeProfile, summary: value }
-        })),
+        commitResumeChange(
+          "Ubah ringkasan profil",
+          (curr) => ({ ...curr, summary: value }),
+          { coalesceKey: "summary" }
+        ),
       addExperience: () =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            workExperience: [
-              ...state.resumeProfile.workExperience,
-              {
-                id: createId(),
-                company: "",
-                role: "",
-                type: state.resumeProfile.experienceLevel === "fresh_graduate" ? "internship" : "fulltime",
-                location: "",
-                startDate: "",
-                endDate: "",
-                isCurrent: false,
-                bulletPoints: [""]
-              }
-            ]
-          }
+        commitResumeChange("Tambah pengalaman", (curr) => ({
+          ...curr,
+          workExperience: [
+            ...curr.workExperience,
+            {
+              id: createId(),
+              company: "",
+              role: "",
+              type: curr.experienceLevel === "fresh_graduate" ? "internship" : "fulltime",
+              location: "",
+              startDate: "",
+              endDate: "",
+              isCurrent: false,
+              bulletPoints: [""]
+            }
+          ]
         })),
       updateExperience: (id, patch) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            workExperience: state.resumeProfile.workExperience.map((item) =>
+        commitResumeChange(
+          "Ubah detail pengalaman",
+          (curr) => ({
+            ...curr,
+            workExperience: curr.workExperience.map((item) =>
               item.id === id ? { ...item, ...patch } : item
             )
-          }
-        })),
+          }),
+          { coalesceKey: `work-${id}-${Object.keys(patch).sort().join(",")}` }
+        ),
       removeExperience: (id) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            workExperience: state.resumeProfile.workExperience.filter((item) => item.id !== id)
-          }
-        })),
+        commitResumeChange(
+          "Hapus pengalaman",
+          (curr) => ({
+            ...curr,
+            workExperience: curr.workExperience.filter((item) => item.id !== id)
+          }),
+          { showToast: true }
+        ),
       moveExperience: (id, direction) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            workExperience: moveItemById(state.resumeProfile.workExperience, id, direction)
-          }
+        commitResumeChange("Ubah urutan pengalaman", (curr) => ({
+          ...curr,
+          workExperience: moveItemById(curr.workExperience, id, direction)
         })),
       sortExperiencesChronologically: () =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            workExperience: sortWorkExperienceDesc(state.resumeProfile.workExperience)
-          }
-        })),
+        commitResumeChange(
+          "Urutkan pengalaman terbaru",
+          (curr) => ({
+            ...curr,
+            workExperience: sortWorkExperienceDesc(curr.workExperience)
+          }),
+          { showToast: true }
+        ),
       updateBullet: (experienceId, index, value) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            workExperience: state.resumeProfile.workExperience.map((item) => {
+        commitResumeChange(
+          "Ubah poin pengalaman",
+          (curr) => ({
+            ...curr,
+            workExperience: curr.workExperience.map((item) => {
               if (item.id !== experienceId) return item;
               const bulletPoints = [...item.bulletPoints];
               bulletPoints[index] = value;
               return { ...item, bulletPoints };
             })
-          }
-        })),
+          }),
+          { coalesceKey: `work-bullet-${experienceId}-${index}` }
+        ),
       addBullet: (experienceId) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            workExperience: state.resumeProfile.workExperience.map((item) =>
-              item.id === experienceId ? { ...item, bulletPoints: [...item.bulletPoints, ""] } : item
-            )
-          }
+        commitResumeChange("Tambah poin pengalaman", (curr) => ({
+          ...curr,
+          workExperience: curr.workExperience.map((item) =>
+            item.id === experienceId ? { ...item, bulletPoints: [...item.bulletPoints, ""] } : item
+          )
         })),
       removeBullet: (experienceId, index) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            workExperience: state.resumeProfile.workExperience.map((item) => {
+        commitResumeChange(
+          "Hapus poin pengalaman",
+          (curr) => ({
+            ...curr,
+            workExperience: curr.workExperience.map((item) => {
               if (item.id !== experienceId) return item;
               const bulletPoints = item.bulletPoints.filter((_, bulletIndex) => bulletIndex !== index);
               return { ...item, bulletPoints: bulletPoints.length ? bulletPoints : [""] };
             })
-          }
-        })),
+          }),
+          { showToast: true }
+        ),
       addEducation: () =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            education: [
-              ...state.resumeProfile.education,
-              {
-                id: createId(),
-                institution: "",
-                degree: "",
-                fieldOfStudy: "",
-                gpa: "",
-                graduationDate: "",
-                thesisTitle: "",
-                relevantCoursework: [],
-                achievements: ""
-              }
-            ]
-          }
+        commitResumeChange("Tambah pendidikan", (curr) => ({
+          ...curr,
+          education: [
+            ...curr.education,
+            {
+              id: createId(),
+              institution: "",
+              degree: "",
+              fieldOfStudy: "",
+              gpa: "",
+              graduationDate: "",
+              thesisTitle: "",
+              relevantCoursework: [],
+              achievements: ""
+            }
+          ]
         })),
       updateEducation: (id, patch) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            education: state.resumeProfile.education.map((item) => (item.id === id ? { ...item, ...patch } : item))
-          }
-        })),
+        commitResumeChange(
+          "Ubah detail pendidikan",
+          (curr) => ({
+            ...curr,
+            education: curr.education.map((item) => (item.id === id ? { ...item, ...patch } : item))
+          }),
+          { coalesceKey: `edu-${id}-${Object.keys(patch).sort().join(",")}` }
+        ),
       removeEducation: (id) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            education: state.resumeProfile.education.filter((item) => item.id !== id)
-          }
-        })),
+        commitResumeChange(
+          "Hapus pendidikan",
+          (curr) => ({
+            ...curr,
+            education: curr.education.filter((item) => item.id !== id)
+          }),
+          { showToast: true }
+        ),
       moveEducation: (id, direction) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            education: moveItemById(state.resumeProfile.education, id, direction)
-          }
+        commitResumeChange("Ubah urutan pendidikan", (curr) => ({
+          ...curr,
+          education: moveItemById(curr.education, id, direction)
         })),
       sortEducationChronologically: () =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            education: sortEducationDesc(state.resumeProfile.education)
-          }
-        })),
+        commitResumeChange(
+          "Urutkan pendidikan terbaru",
+          (curr) => ({
+            ...curr,
+            education: sortEducationDesc(curr.education)
+          }),
+          { showToast: true }
+        ),
       addProject: () =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            projects: [
-              ...state.resumeProfile.projects,
-              {
-                id: createId(),
-                name: "",
-                role: "",
-                context: "Proyek Kuliah",
-                period: "",
-                technologies: [],
-                url: "",
-                bulletPoints: [""]
-              }
-            ]
-          }
+        commitResumeChange("Tambah proyek", (curr) => ({
+          ...curr,
+          projects: [
+            ...curr.projects,
+            {
+              id: createId(),
+              name: "",
+              role: "",
+              context: "Proyek Kuliah",
+              period: "",
+              technologies: [],
+              url: "",
+              bulletPoints: [""]
+            }
+          ]
         })),
       updateProject: (id, patch) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            projects: state.resumeProfile.projects.map((item) => (item.id === id ? { ...item, ...patch } : item))
-          }
-        })),
+        commitResumeChange(
+          "Ubah detail proyek",
+          (curr) => ({
+            ...curr,
+            projects: curr.projects.map((item) => (item.id === id ? { ...item, ...patch } : item))
+          }),
+          { coalesceKey: `proj-${id}-${Object.keys(patch).sort().join(",")}` }
+        ),
       removeProject: (id) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            projects: state.resumeProfile.projects.filter((item) => item.id !== id)
-          }
-        })),
+        commitResumeChange(
+          "Hapus proyek",
+          (curr) => ({
+            ...curr,
+            projects: curr.projects.filter((item) => item.id !== id)
+          }),
+          { showToast: true }
+        ),
       moveProject: (id, direction) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            projects: moveItemById(state.resumeProfile.projects, id, direction)
-          }
+        commitResumeChange("Ubah urutan proyek", (curr) => ({
+          ...curr,
+          projects: moveItemById(curr.projects, id, direction)
         })),
       sortProjectsChronologically: () =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            projects: sortProjectsDesc(state.resumeProfile.projects)
-          }
-        })),
+        commitResumeChange(
+          "Urutkan proyek terbaru",
+          (curr) => ({
+            ...curr,
+            projects: sortProjectsDesc(curr.projects)
+          }),
+          { showToast: true }
+        ),
       addProjectBullet: (projectId) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            projects: state.resumeProfile.projects.map((item) =>
-              item.id === projectId ? { ...item, bulletPoints: [...item.bulletPoints, ""] } : item
-            )
-          }
+        commitResumeChange("Tambah poin proyek", (curr) => ({
+          ...curr,
+          projects: curr.projects.map((item) =>
+            item.id === projectId ? { ...item, bulletPoints: [...item.bulletPoints, ""] } : item
+          )
         })),
       updateProjectBullet: (projectId, index, value) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            projects: state.resumeProfile.projects.map((item) => {
+        commitResumeChange(
+          "Ubah poin proyek",
+          (curr) => ({
+            ...curr,
+            projects: curr.projects.map((item) => {
               if (item.id !== projectId) return item;
               const bulletPoints = [...item.bulletPoints];
               bulletPoints[index] = value;
               return { ...item, bulletPoints };
             })
-          }
-        })),
+          }),
+          { coalesceKey: `proj-bullet-${projectId}-${index}` }
+        ),
       removeProjectBullet: (projectId, index) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            projects: state.resumeProfile.projects.map((item) => {
+        commitResumeChange(
+          "Hapus poin proyek",
+          (curr) => ({
+            ...curr,
+            projects: curr.projects.map((item) => {
               if (item.id !== projectId) return item;
               const bulletPoints = item.bulletPoints.filter((_, idx) => idx !== index);
               return { ...item, bulletPoints: bulletPoints.length ? bulletPoints : [""] };
             })
-          }
-        })),
+          }),
+          { showToast: true }
+        ),
       addOrganization: () =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            organizations: [
-              ...state.resumeProfile.organizations,
-              {
-                id: createId(),
-                organization: "",
-                role: "",
-                period: "",
-                bulletPoints: [""]
-              }
-            ]
-          }
+        commitResumeChange("Tambah organisasi", (curr) => ({
+          ...curr,
+          organizations: [
+            ...curr.organizations,
+            {
+              id: createId(),
+              organization: "",
+              role: "",
+              period: "",
+              bulletPoints: [""]
+            }
+          ]
         })),
       updateOrganization: (id, patch) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            organizations: state.resumeProfile.organizations.map((item) =>
+        commitResumeChange(
+          "Ubah detail organisasi",
+          (curr) => ({
+            ...curr,
+            organizations: curr.organizations.map((item) =>
               item.id === id ? { ...item, ...patch } : item
             )
-          }
-        })),
+          }),
+          { coalesceKey: `org-${id}-${Object.keys(patch).sort().join(",")}` }
+        ),
       removeOrganization: (id) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            organizations: state.resumeProfile.organizations.filter((item) => item.id !== id)
-          }
-        })),
+        commitResumeChange(
+          "Hapus organisasi",
+          (curr) => ({
+            ...curr,
+            organizations: curr.organizations.filter((item) => item.id !== id)
+          }),
+          { showToast: true }
+        ),
       moveOrganization: (id, direction) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            organizations: moveItemById(state.resumeProfile.organizations, id, direction)
-          }
+        commitResumeChange("Ubah urutan organisasi", (curr) => ({
+          ...curr,
+          organizations: moveItemById(curr.organizations, id, direction)
         })),
       sortOrganizationsChronologically: () =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            organizations: sortOrganizationsDesc(state.resumeProfile.organizations)
-          }
-        })),
+        commitResumeChange(
+          "Urutkan organisasi terbaru",
+          (curr) => ({
+            ...curr,
+            organizations: sortOrganizationsDesc(curr.organizations)
+          }),
+          { showToast: true }
+        ),
       addOrganizationBullet: (orgId) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            organizations: state.resumeProfile.organizations.map((item) =>
-              item.id === orgId ? { ...item, bulletPoints: [...item.bulletPoints, ""] } : item
-            )
-          }
+        commitResumeChange("Tambah poin organisasi", (curr) => ({
+          ...curr,
+          organizations: curr.organizations.map((item) =>
+            item.id === orgId ? { ...item, bulletPoints: [...item.bulletPoints, ""] } : item
+          )
         })),
       updateOrganizationBullet: (orgId, index, value) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            organizations: state.resumeProfile.organizations.map((item) => {
+        commitResumeChange(
+          "Ubah poin organisasi",
+          (curr) => ({
+            ...curr,
+            organizations: curr.organizations.map((item) => {
               if (item.id !== orgId) return item;
               const bulletPoints = [...item.bulletPoints];
               bulletPoints[index] = value;
               return { ...item, bulletPoints };
             })
-          }
-        })),
+          }),
+          { coalesceKey: `org-bullet-${orgId}-${index}` }
+        ),
       removeOrganizationBullet: (orgId, index) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            organizations: state.resumeProfile.organizations.map((item) => {
+        commitResumeChange(
+          "Hapus poin organisasi",
+          (curr) => ({
+            ...curr,
+            organizations: curr.organizations.map((item) => {
               if (item.id !== orgId) return item;
               const bulletPoints = item.bulletPoints.filter((_, idx) => idx !== index);
               return { ...item, bulletPoints: bulletPoints.length ? bulletPoints : [""] };
             })
-          }
-        })),
+          }),
+          { showToast: true }
+        ),
       addCertification: () =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            certificationItems: [
-              ...state.resumeProfile.certificationItems,
-              { id: createId(), name: "", issuer: "", year: "" }
-            ]
-          }
+        commitResumeChange("Tambah sertifikasi", (curr) => ({
+          ...curr,
+          certificationItems: [
+            ...curr.certificationItems,
+            { id: createId(), name: "", issuer: "", year: "" }
+          ]
         })),
       updateCertification: (id, patch) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            certificationItems: state.resumeProfile.certificationItems.map((item) =>
+        commitResumeChange(
+          "Ubah detail sertifikasi",
+          (curr) => ({
+            ...curr,
+            certificationItems: curr.certificationItems.map((item) =>
               item.id === id ? { ...item, ...patch } : item
             )
-          }
-        })),
+          }),
+          { coalesceKey: `cert-${id}-${Object.keys(patch).sort().join(",")}` }
+        ),
       removeCertification: (id) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            certificationItems: state.resumeProfile.certificationItems.filter((item) => item.id !== id)
-          }
-        })),
+        commitResumeChange(
+          "Hapus sertifikasi",
+          (curr) => ({
+            ...curr,
+            certificationItems: curr.certificationItems.filter((item) => item.id !== id)
+          }),
+          { showToast: true }
+        ),
       moveCertification: (id, direction) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            certificationItems: moveItemById(state.resumeProfile.certificationItems, id, direction)
-          }
+        commitResumeChange("Ubah urutan sertifikasi", (curr) => ({
+          ...curr,
+          certificationItems: moveItemById(curr.certificationItems, id, direction)
         })),
       sortCertificationsChronologically: () =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            certificationItems: sortCertificationsDesc(state.resumeProfile.certificationItems)
-          }
-        })),
+        commitResumeChange(
+          "Urutkan sertifikasi terbaru",
+          (curr) => ({
+            ...curr,
+            certificationItems: sortCertificationsDesc(curr.certificationItems)
+          }),
+          { showToast: true }
+        ),
       updateSkills: (field, values) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            skills: { ...state.resumeProfile.skills, [field]: values }
-          }
-        })),
+        commitResumeChange(
+          "Ubah daftar keahlian",
+          (curr) => ({
+            ...curr,
+            skills: { ...curr.skills, [field]: values }
+          }),
+          { coalesceKey: `skills-${field}` }
+        ),
       addSkillGroup: () =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            skills: {
-              ...state.resumeProfile.skills,
-              groups: [
-                ...(state.resumeProfile.skills.groups ?? []),
-                { id: createId(), category: "", items: [] }
-              ]
-            }
+        commitResumeChange("Tambah kategori keahlian", (curr) => ({
+          ...curr,
+          skills: {
+            ...curr.skills,
+            groups: [
+              ...(curr.skills.groups ?? []),
+              { id: createId(), category: "", items: [] }
+            ]
           }
         })),
       updateSkillGroup: (id, patch) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
+        commitResumeChange(
+          "Ubah kategori keahlian",
+          (curr) => ({
+            ...curr,
             skills: {
-              ...state.resumeProfile.skills,
-              groups: (state.resumeProfile.skills.groups ?? []).map((grp) =>
+              ...curr.skills,
+              groups: (curr.skills.groups ?? []).map((grp) =>
                 grp.id === id ? { ...grp, ...patch } : grp
               )
             }
-          }
-        })),
+          }),
+          { coalesceKey: `skill-grp-${id}-${Object.keys(patch).sort().join(",")}` }
+        ),
       removeSkillGroup: (id) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
+        commitResumeChange(
+          "Hapus kategori keahlian",
+          (curr) => ({
+            ...curr,
             skills: {
-              ...state.resumeProfile.skills,
-              groups: (state.resumeProfile.skills.groups ?? []).filter((grp) => grp.id !== id)
+              ...curr.skills,
+              groups: (curr.skills.groups ?? []).filter((grp) => grp.id !== id)
             }
-          }
-        })),
+          }),
+          { showToast: true }
+        ),
       setSkillGroups: (groups) =>
-        set((state) => ({
-          resumeProfile: {
-            ...state.resumeProfile,
-            skills: {
-              ...state.resumeProfile.skills,
-              groups
-            }
+        commitResumeChange("Ubah kelompok keahlian", (curr) => ({
+          ...curr,
+          skills: {
+            ...curr.skills,
+            groups
           }
         })),
       addSkillItem: (field, skill) => {
@@ -891,17 +1000,18 @@ export const useCvStore = create<AppState>()(
           ? state.addedGapTerms
           : [...state.addedGapTerms, clean];
 
-        set((curr) => ({
-          addedGapTerms: nextGapTerms,
-          resumeProfile: {
-            ...curr.resumeProfile,
+        commitResumeChange(
+          "Tambah keahlian",
+          (curr) => ({
+            ...curr,
             skills: {
-              ...curr.resumeProfile.skills,
+              ...curr.skills,
               [field]: existsFlat ? current : [...current, clean],
               groups: nextGroups
             }
-          }
-        }));
+          }),
+          { extraPatch: { addedGapTerms: nextGapTerms } }
+        );
 
         const { matchAnalytics, resumeProfile, jobTarget } = getState();
         if (matchAnalytics.hasAnalyzed && jobTarget.rawDescription.trim()) {
@@ -915,24 +1025,29 @@ export const useCvStore = create<AppState>()(
         const filterOut = (arr: string[] | undefined) =>
           (arr ?? []).filter((item) => normalizeForMatch(item) !== normClean);
 
-        set((curr) => ({
-          addedGapTerms: curr.addedGapTerms.filter((t) => normalizeForMatch(t) !== normClean),
-          resumeProfile: {
-            ...curr.resumeProfile,
+        commitResumeChange(
+          "Hapus keahlian",
+          (curr) => ({
+            ...curr,
             skills: {
-              ...curr.resumeProfile.skills,
-              hardSkills: filterOut(curr.resumeProfile.skills.hardSkills),
-              softSkills: filterOut(curr.resumeProfile.skills.softSkills),
-              tools: filterOut(curr.resumeProfile.skills.tools),
-              groups: (curr.resumeProfile.skills.groups ?? []).map((grp) => ({
+              ...curr.skills,
+              hardSkills: filterOut(curr.skills.hardSkills),
+              softSkills: filterOut(curr.skills.softSkills),
+              tools: filterOut(curr.skills.tools),
+              groups: (curr.skills.groups ?? []).map((grp) => ({
                 ...grp,
                 items: filterOut(grp.items)
               }))
             }
+          }),
+          {
+            extraPatch: {
+              addedGapTerms: state.addedGapTerms.filter((t) => normalizeForMatch(t) !== normClean)
+            }
           }
-        }));
+        );
 
-        const { matchAnalytics, resumeProfile, jobTarget } = state;
+        const { matchAnalytics, jobTarget } = state;
         if (matchAnalytics.hasAnalyzed && jobTarget.rawDescription.trim()) {
           set({ matchAnalytics: analyzeMatch(getState().resumeProfile, jobTarget) });
         }
@@ -956,8 +1071,20 @@ export const useCvStore = create<AppState>()(
         getState().addSkillItem(field, clean);
         return true;
       },
-      setResumeProfile: (profile) =>
-        set({ resumeProfile: profile, preTranslationBackup: null, addedGapTerms: [], aiTranslatedProfiles: {} }),
+      setResumeProfile: (profile) => {
+        const curr = getState().resumeProfile;
+        const hasExistingContent = Boolean(
+          curr.contact.fullName.trim() ||
+            curr.summary.trim() ||
+            curr.workExperience.length > 0 ||
+            curr.projects.length > 0 ||
+            curr.organizations.length > 0
+        );
+        commitResumeChange("Impor / ganti data CV", () => profile, {
+          showToast: hasExistingContent,
+          extraPatch: { preTranslationBackup: null, addedGapTerms: [], aiTranslatedProfiles: {} }
+        });
+      },
       updateJobTarget: (patch) =>
         set((state) => ({
           jobTarget: { ...state.jobTarget, ...patch }
@@ -968,19 +1095,65 @@ export const useCvStore = create<AppState>()(
         set((state) => ({
           suggestions: state.suggestions.map((item) => (item.id === id ? { ...item, ...patch } : item))
         })),
+      applyOptimizedBullet: (sourceType, sourceId, bulletIndex, value, label = "Terapkan poin optimasi") => {
+        commitResumeChange(
+          label,
+          (curr) => {
+            if (sourceType === "project") {
+              return {
+                ...curr,
+                projects: curr.projects.map((item) => {
+                  if (item.id !== sourceId) return item;
+                  const bulletPoints = [...item.bulletPoints];
+                  bulletPoints[bulletIndex] = value;
+                  return { ...item, bulletPoints };
+                })
+              };
+            }
+            if (sourceType === "organization") {
+              return {
+                ...curr,
+                organizations: curr.organizations.map((item) => {
+                  if (item.id !== sourceId) return item;
+                  const bulletPoints = [...item.bulletPoints];
+                  bulletPoints[bulletIndex] = value;
+                  return { ...item, bulletPoints };
+                })
+              };
+            }
+            return {
+              ...curr,
+              workExperience: curr.workExperience.map((item) => {
+                if (item.id !== sourceId) return item;
+                const bulletPoints = [...item.bulletPoints];
+                bulletPoints[bulletIndex] = value;
+                return { ...item, bulletPoints };
+              })
+            };
+          },
+          { showToast: true }
+        );
+      },
+      applyOptimizedSummary: (value, label = "Terapkan ringkasan AI") => {
+        commitResumeChange(
+          label,
+          (curr) => ({ ...curr, summary: value }),
+          { showToast: true }
+        );
+      },
       applySuggestion: (id, value) => {
         const suggestion = getState().suggestions.find((item) => item.id === id);
         if (!suggestion) return;
         const finalValue = value ?? suggestion.suggestion;
         const sourceId = suggestion.sourceId || suggestion.experienceId;
 
-        if (suggestion.sourceType === "project") {
-          getState().updateProjectBullet(sourceId, suggestion.bulletIndex, finalValue);
-        } else if (suggestion.sourceType === "organization") {
-          getState().updateOrganizationBullet(sourceId, suggestion.bulletIndex, finalValue);
-        } else {
-          getState().updateBullet(sourceId, suggestion.bulletIndex, finalValue);
-        }
+        getState().applyOptimizedBullet(
+          suggestion.sourceType ?? "work",
+          sourceId,
+          suggestion.bulletIndex,
+          finalValue,
+          "Terapkan saran optimasi"
+        );
 
         getState().updateSuggestion(id, {
           suggestion: finalValue,
@@ -995,8 +1168,27 @@ export const useCvStore = create<AppState>()(
       rejectSuggestion: (id) => getState().updateSuggestion(id, { status: "rejected" }),
       resetAll: () => {
         saveSessionApiKey("");
+        const state = getState();
+        const hadContent = Boolean(
+          state.resumeProfile.contact.fullName.trim() ||
+            state.resumeProfile.summary.trim() ||
+            state.resumeProfile.workExperience.length > 0 ||
+            state.resumeProfile.projects.length > 0 ||
+            state.resumeProfile.organizations.length > 0
+        );
+        const nextHistory = hadContent
+          ? pushHistorySnapshot(
+              { past: state.historyPast, future: state.historyFuture },
+              state.resumeProfile,
+              { label: "Hapus semua data CV" }
+            )
+          : { past: state.historyPast, future: state.historyFuture };
+
         set({
           resumeProfile: emptyResumeProfile(),
+          historyPast: nextHistory.past,
+          historyFuture: nextHistory.future,
+          undoToast: hadContent ? { id: Date.now(), label: "Hapus semua data CV" } : null,
           jobTarget: emptyJobTarget(),
           matchAnalytics: emptyAnalytics(),
           suggestions: [],
@@ -1017,7 +1209,8 @@ export const useCvStore = create<AppState>()(
           modalPreviewOpen: false
         });
       }
-    }),
+      };
+    },
     {
       name: "quicktailor-cv-store",
       storage: createJSONStorage(() => indexedDbStorage),
@@ -1146,7 +1339,10 @@ export const useCvStore = create<AppState>()(
           localAiProgressText: "",
           localAiLoadedModel: "",
           localAiError: "",
-          checkedAdminItems: persisted.checkedAdminItems ?? {}
+          checkedAdminItems: persisted.checkedAdminItems ?? {},
+          historyPast: [],
+          historyFuture: [],
+          undoToast: null
         };
       },
       onRehydrateStorage: () => (state) => {

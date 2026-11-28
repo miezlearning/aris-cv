@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import {
+  ArrowUUpLeft,
+  ArrowUUpRight,
   Crosshair,
   Export,
   FileText,
@@ -67,6 +69,10 @@ export const Header = ({
   const resumeProfile = useCvStore((state) => state.resumeProfile);
   const { analytics, effectiveResume } = useLiveAts();
   const resetAll = useCvStore((state) => state.resetAll);
+  const historyPast = useCvStore((state) => state.historyPast);
+  const historyFuture = useCvStore((state) => state.historyFuture);
+  const undoResume = useCvStore((state) => state.undoResume);
+  const redoResume = useCvStore((state) => state.redoResume);
   const storePreviewOpenDesktop = useCvStore((state) => state.previewOpenDesktop);
   const setStorePreviewOpenDesktop = useCvStore((state) => state.setPreviewOpenDesktop);
   const setStoreModalPreviewOpen = useCvStore((state) => state.setModalPreviewOpen);
@@ -103,6 +109,8 @@ export const Header = ({
   };
 
   const isDashboard = isStepActive("/");
+  const lastUndo = historyPast[historyPast.length - 1];
+  const lastRedo = historyFuture[historyFuture.length - 1];
 
   return (
     <header className="no-print sticky top-0 z-30 border-b border-[#D9CEBC] bg-[#FFFDF8]/95 backdrop-blur-sm">
@@ -241,6 +249,30 @@ export const Header = ({
             <FileText size={16} weight="duotone" aria-hidden="true" />
             <span>Lihat CV</span>
           </button>
+
+          {/* Undo & Redo Global */}
+          <div className="flex items-center gap-1" role="group" aria-label="Riwayat perubahan CV">
+            <button
+              type="button"
+              disabled={!lastUndo}
+              onClick={undoResume}
+              title={lastUndo ? `Urungkan: ${lastUndo.label} (Ctrl+Z)` : "Belum ada perubahan untuk diurungkan"}
+              aria-label={lastUndo ? `Urungkan ${lastUndo.label}` : "Urungkan perubahan"}
+              className="grid h-11 w-11 place-items-center rounded-xl border border-[#D9CEBC] bg-white text-[#251813] hover:bg-[#FFF8DF] transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F6B57]"
+            >
+              <ArrowUUpLeft size={17} weight="bold" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              disabled={!lastRedo}
+              onClick={redoResume}
+              title={lastRedo ? `Ulangi: ${lastRedo.label} (Ctrl+Y)` : "Belum ada perubahan untuk diulangi"}
+              aria-label={lastRedo ? `Ulangi ${lastRedo.label}` : "Ulangi perubahan"}
+              className="grid h-11 w-11 place-items-center rounded-xl border border-[#D9CEBC] bg-white text-[#251813] hover:bg-[#FFF8DF] transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F6B57]"
+            >
+              <ArrowUUpRight size={17} weight="bold" aria-hidden="true" />
+            </button>
+          </div>
 
           {/* Reset Data Lokal */}
           {confirmReset ? (
