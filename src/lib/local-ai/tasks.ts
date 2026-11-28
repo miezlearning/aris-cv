@@ -1,4 +1,5 @@
 import type { ResumeProfile } from "@/types/resume";
+import { findInventedSkills } from "@/lib/ats/hygiene";
 import { translateProfileDeterministic } from "@/lib/ats/translator";
 import { runLocalChatCompletion, type ActiveLocalAiConfig } from "@/lib/local-ai/engine";
 
@@ -104,11 +105,16 @@ export const rewriteBulletWithLocalAi = async (
     role: string;
     jobTitle: string;
     jobDescription: string;
-    targetKeywords: string[];
+    verifiedKeywords?: string[];
+    targetKeywords?: string[];
+    forbiddenSkills?: string[];
     targetLang: "id" | "en";
   }
-): Promise<{ suggestion: string; note: string }> => {
-  const kwText = params.targetKeywords.length ? params.targetKeywords.join(", ") : "-";
+): Promise<{ suggestion: string; note: string; inventedSkills: string[] }> => {
+  const verified = params.verifiedKeywords ?? params.targetKeywords ?? [];
+  const forbidden = params.forbiddenSkills ?? [];
+  const kwText = verified.length ? verified.join(", ") : "-";
+  const forbiddenText = forbidden.length ? forbidden.join(", ") : "";
   const langLabel = params.targetLang === "en" ? "ATS English" : "Bahasa Indonesia formal ATS";
   const actionRule =
     params.targetLang === "en"
@@ -117,16 +123,21 @@ export const rewriteBulletWithLocalAi = async (
 
   const compactMode = isGetQueryConfig(config);
   const systemPrompt = compactMode
-    ? `Rewrite ONE CV bullet in ${langLabel} (Action + Tools + Result). NEVER invent metrics or tools. ${actionRule} Return ONLY ONE plain sentence. NO intro or preamble like 'Here is...'.`
-    : `You are a strict, honest ATS Resume Coach. Rewrite ONE resume bullet point in ${langLabel} so it aligns better with the target job description using Google XYZ/STAR structure (Action + Context/Tools + Outcome).
+    ? `Rewrite ONE CV bullet in ${langLabel} (Action + Tools + Result). ONLY use skills from Original Bullet or Verified Candidate Skills. NEVER mention FORBIDDEN skills or invent metrics/tools. ${actionRule} Return ONLY ONE plain sentence. NO intro like 'Here is...'.`
+    : `You are a strict, honest ATS Resume Coach. Rewrite ONE resume bullet point in ${langLabel} using Google XYZ/STAR structure (Action + Context/Tools + Outcome).
 STRICT RULES:
 1. NEVER invent numbers, percentages, metrics, tools, or achievements not stated in the original bullet.
-2. Only incorporate target keywords if they accurately describe what is already in the original bullet.
-3. ${actionRule}
-4. Return ONLY ONE plain single-line bullet sentence without bullet symbol, quotes, explanation, or intro/preamble like 'Here is...'.`;
+2. Only emphasize Verified Candidate Skills if they accurately describe what is already in the original bullet.
+3. NEVER mention, add, or imply any skill listed under FORBIDDEN / UNOWNED SKILLS.
+4. ${actionRule}
+5. Return ONLY ONE plain single-line bullet sentence without bullet symbol, quotes, explanation, or intro/preamble like 'Here is...'.`;
 
   const userPrompt = `Target Role: ${params.jobTitle || "General Role"}
-Relevant Job Keywords: ${kwText}
+Verified Candidate Skills (already in CV; emphasize only if relevant to this bullet): ${kwText}${
+    forbiddenText
+      ? `\nFORBIDDEN / UNOWNED SKILLS (candidate does NOT know these; NEVER mention, add, or imply them): ${forbiddenText}`
+      : ""
+  }
 Target Job Context: ${(params.jobDescription || "").slice(0, compactMode ? 220 : 700)}
 Candidate Source Role: ${params.role || "-"}
 Original Bullet: ${params.bullet}`;
@@ -140,17 +151,49 @@ Original Bullet: ${params.bullet}`;
     { temperature: 0.25, maxTokens: 160 }
   );
 
-  const cleaned = cleanAiSingleLineOutput(raw);
+  let cleaned = cleanAiSingleLineOutput(raw);
   if (!cleaned || cleaned.length < 10) {
     throw new Error("Model mengembalikan output tidak valid atau hanya kalimat pembuka. Coba susun ulang lagi.");
+  }
+
+  let inventedSkills = findInventedSkills(params.bullet, cleaned, forbidden);
+  if (inventedSkills.length > 0) {
+    try {
+      const retryRaw = await runLocalChatCompletion(
+        config,
+        [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: `${userPrompt}\nCORRECTION: Your previous draft wrongly mentioned unowned skills (${inventedSkills.join(
+              ", "
+            )}). Rewrite again using ONLY skills and facts from the Original Bullet, and NEVER mention ${inventedSkills.join(
+              ", "
+            )}.`
+          }
+        ],
+        { temperature: 0.15, maxTokens: 160 }
+      );
+      const retryCleaned = cleanAiSingleLineOutput(retryRaw);
+      if (retryCleaned && retryCleaned.length >= 10) {
+        cleaned = retryCleaned;
+        inventedSkills = findInventedSkills(params.bullet, cleaned, forbidden);
+      }
+    } catch {
+      // Tetap tampilkan peringatan jujur jika percobaan ulang gagal
+    }
   }
 
   const hasNumber = /\d/.test(cleaned);
   return {
     suggestion: cleaned,
-    note: hasNumber
-      ? "Disusun ulang oleh AI selaras lowongan Langkah 2 dengan mempertahankan data aslimu."
-      : "Disusun ulang oleh AI. Jika ada angka atau cakupan nyata dari pengalamanmu, kamu bisa menambahkannya manual."
+    inventedSkills,
+    note:
+      inventedSkills.length > 0
+        ? `Peringatan: AI sempat menyisipkan ${inventedSkills.join(", ")} yang belum ada di CV kamu. Hapus jika kamu memang belum menguasainya.`
+        : hasNumber
+        ? "Disusun ulang oleh AI selaras keahlian nyatamu dengan mempertahankan data asli."
+        : "Disusun ulang oleh AI. Jika ada angka atau cakupan nyata dari pengalamanmu, kamu bisa menambahkannya manual."
   };
 };
 
@@ -162,18 +205,24 @@ export const tailorSummaryWithLocalAi = async (
     jobTitle: string;
     companyName: string;
     matchedKeywords: string[];
+    forbiddenSkills?: string[];
     targetLang: "id" | "en";
   }
-): Promise<string> => {
+): Promise<{ summary: string; inventedSkills: string[] }> => {
+  const forbidden = params.forbiddenSkills ?? [];
+  const forbiddenText = forbidden.length ? forbidden.join(", ") : "";
   const langLabel = params.targetLang === "en" ? "ATS English" : "Bahasa Indonesia formal ATS";
   const systemPrompt = `You are an expert ATS Resume Writer. Tailor the candidate's existing profile summary to emphasize relevant real strengths for the target role in ${langLabel}.
 STRICT RULES:
 1. Keep 2 to 4 concise sentences without first-person pronouns ("I", "Saya", "Aku").
 2. NEVER fabricate years of experience, companies, GPA, tools, or metrics not already present in the original summary or matched facts.
-3. Return ONLY the rewritten summary paragraph, with NO quotes, NO prefix labels, and NO intro/preamble like 'Here is...'.`;
+3. NEVER mention, add, or claim any skill listed under FORBIDDEN / UNOWNED SKILLS.
+4. Return ONLY the rewritten summary paragraph, with NO quotes, NO prefix labels, and NO intro/preamble like 'Here is...'.`;
 
   const userPrompt = `Target Role: ${params.jobTitle || "-"} ${params.companyName ? `at ${params.companyName}` : ""}
-Verified Matching Qualifications on Candidate CV: ${params.matchedKeywords.slice(0, 10).join(", ") || "-"}
+Verified Matching Qualifications on Candidate CV: ${params.matchedKeywords.slice(0, 10).join(", ") || "-"}${
+    forbiddenText ? `\nFORBIDDEN / UNOWNED SKILLS (NEVER mention or claim): ${forbiddenText}` : ""
+  }
 Candidate Headline: ${params.headline || "-"}
 Original Summary: ${params.summary}`;
 
@@ -186,11 +235,40 @@ Original Summary: ${params.summary}`;
     { temperature: 0.25, maxTokens: 260 }
   );
 
-  const cleaned = cleanAiParagraphOutput(raw);
+  let cleaned = cleanAiParagraphOutput(raw);
   if (!cleaned || cleaned.length < 25) {
     throw new Error("Ringkasan dari model terlalu pendek atau tidak valid. Coba jalankan kembali.");
   }
-  return cleaned;
+
+  let inventedSkills = findInventedSkills(params.summary, cleaned, forbidden);
+  if (inventedSkills.length > 0) {
+    try {
+      const retryRaw = await runLocalChatCompletion(
+        config,
+        [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: `${userPrompt}\nCORRECTION: Your previous draft wrongly claimed unowned skills (${inventedSkills.join(
+              ", "
+            )}). Rewrite again using ONLY real strengths from Original Summary and Verified Matching Qualifications, and NEVER mention ${inventedSkills.join(
+              ", "
+            )}.`
+          }
+        ],
+        { temperature: 0.15, maxTokens: 260 }
+      );
+      const retryCleaned = cleanAiParagraphOutput(retryRaw);
+      if (retryCleaned && retryCleaned.length >= 25) {
+        cleaned = retryCleaned;
+        inventedSkills = findInventedSkills(params.summary, cleaned, forbidden);
+      }
+    } catch {
+      // Tetap kembalikan peringatan jika percobaan ulang gagal
+    }
+  }
+
+  return { summary: cleaned, inventedSkills };
 };
 
 const translateTextWithModel = async (

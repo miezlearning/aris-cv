@@ -110,6 +110,8 @@ type AppState = {
   preTranslationBackup: PreTranslationBackup | null;
   restorePreTranslationBackup: () => void;
   addedGapTerms: string[];
+  excludedGapTerms: string[];
+  toggleExcludedGapTerm: (term: string) => void;
   aiEnabled: boolean;
   localAiMode: LocalAiProvider;
   webLlmModelId: string;
@@ -444,6 +446,20 @@ export const useCvStore = create<AppState>()(
       aiTranslatedProfiles: {},
       preTranslationBackup: null,
       addedGapTerms: [],
+      excludedGapTerms: [],
+      toggleExcludedGapTerm: (term) => {
+        const clean = term.trim();
+        const normClean = normalizeForMatch(clean);
+        if (!normClean) return;
+        set((state) => {
+          const exists = state.excludedGapTerms.some((t) => normalizeForMatch(t) === normClean);
+          return {
+            excludedGapTerms: exists
+              ? state.excludedGapTerms.filter((t) => normalizeForMatch(t) !== normClean)
+              : [...state.excludedGapTerms, clean]
+          };
+        });
+      },
       setAiTranslatedProfile: (lang, profile, sourceHash, providerLabel = "AI Lokal") =>
         set((state) => {
           const next = { ...state.aiTranslatedProfiles };
@@ -999,6 +1015,9 @@ export const useCvStore = create<AppState>()(
         const nextGapTerms = state.addedGapTerms.some((t) => normalizeForMatch(t) === normClean)
           ? state.addedGapTerms
           : [...state.addedGapTerms, clean];
+        const nextExcludedTerms = state.excludedGapTerms.filter(
+          (t) => normalizeForMatch(t) !== normClean
+        );
 
         commitResumeChange(
           "Tambah keahlian",
@@ -1010,7 +1029,7 @@ export const useCvStore = create<AppState>()(
               groups: nextGroups
             }
           }),
-          { extraPatch: { addedGapTerms: nextGapTerms } }
+          { extraPatch: { addedGapTerms: nextGapTerms, excludedGapTerms: nextExcludedTerms } }
         );
 
         const { matchAnalytics, resumeProfile, jobTarget } = getState();
@@ -1082,7 +1101,12 @@ export const useCvStore = create<AppState>()(
         );
         commitResumeChange("Impor / ganti data CV", () => profile, {
           showToast: hasExistingContent,
-          extraPatch: { preTranslationBackup: null, addedGapTerms: [], aiTranslatedProfiles: {} }
+          extraPatch: {
+            preTranslationBackup: null,
+            addedGapTerms: [],
+            excludedGapTerms: [],
+            aiTranslatedProfiles: {}
+          }
         });
       },
       updateJobTarget: (patch) =>
@@ -1195,6 +1219,7 @@ export const useCvStore = create<AppState>()(
           aiTranslatedProfiles: {},
           preTranslationBackup: null,
           addedGapTerms: [],
+          excludedGapTerms: [],
           aiEnabled: false,
           localAiMode: "off",
           localAiStatus: "idle",
@@ -1226,6 +1251,7 @@ export const useCvStore = create<AppState>()(
         aiTranslatedProfiles: state.aiTranslatedProfiles,
         preTranslationBackup: state.preTranslationBackup,
         addedGapTerms: state.addedGapTerms,
+        excludedGapTerms: state.excludedGapTerms,
         aiEnabled: state.aiEnabled,
         localAiMode: state.localAiMode,
         webLlmModelId: state.webLlmModelId,
@@ -1320,6 +1346,7 @@ export const useCvStore = create<AppState>()(
               : {},
           preTranslationBackup: persisted.preTranslationBackup ?? null,
           addedGapTerms: Array.isArray(persisted.addedGapTerms) ? persisted.addedGapTerms : [],
+          excludedGapTerms: Array.isArray(persisted.excludedGapTerms) ? persisted.excludedGapTerms : [],
           aiEnabled: Boolean(persisted.aiEnabled),
           localAiMode,
           webLlmModelId: persisted.webLlmModelId || DEFAULT_WEBLLM_MODEL_ID,

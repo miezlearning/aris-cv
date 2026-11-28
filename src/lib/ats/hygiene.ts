@@ -1,4 +1,5 @@
 import type { ResumeProfile, WorkExperience } from "@/types/resume";
+import { containsTermBoundary, getRelatedTerms, normalizeForMatch } from "@/lib/ats/synonyms";
 import {
   isPresentToken,
   isWorkExperienceChronological,
@@ -170,4 +171,111 @@ export const buildAtsFileName = (
   const rolePart = sanitizeFileSegment(limitedRole);
 
   return rolePart ? `${prefix}_${namePart}_${rolePart}` : `${prefix}_${namePart}`;
+};
+
+const TRANSFERABLE_SKILL_CLUSTERS: string[][] = [
+  ["C#", ".NET", "ASP.NET", "Java", "Spring Boot", "TypeScript", "Node.js", "Python", "Go", "PHP", "Laravel", "Kotlin", "C++", "REST API"],
+  ["React", "React.js", "Next.js", "Vue", "Vue.js", "Angular", "Svelte", "JavaScript", "TypeScript", "Tailwind CSS"],
+  ["PostgreSQL", "MySQL", "SQL Server", "Oracle", "SQLite", "MongoDB", "Redis", "SQL"],
+  ["AWS", "Google Cloud", "GCP", "Azure", "Docker", "Kubernetes", "CI/CD", "Linux", "Git"],
+  ["Power BI", "Tableau", "Looker", "Microsoft Excel", "Excel", "SQL", "Python", "SPSS", "Google Sheets"],
+  ["Flutter", "React Native", "Kotlin", "Swift", "Android", "iOS"],
+  ["Figma", "Adobe XD", "Canva", "Photoshop", "Illustrator"]
+];
+
+export const findTransferableSkillsInProfile = (
+  resume: ResumeProfile,
+  missingSkill: string
+): string[] => {
+  const normMissing = normalizeForMatch(missingSkill);
+  if (!normMissing) return [];
+
+  const candidateTerms = new Set<string>();
+  const clusterTermsForLookup: string[] = [];
+
+  for (const cluster of TRANSFERABLE_SKILL_CLUSTERS) {
+    if (cluster.some((item) => normalizeForMatch(item) === normMissing)) {
+      for (const item of cluster) {
+        const normItem = normalizeForMatch(item);
+        if (normItem && normItem !== normMissing) {
+          candidateTerms.add(normItem);
+          clusterTermsForLookup.push(item);
+        }
+      }
+    }
+  }
+
+  for (const related of getRelatedTerms(missingSkill)) {
+    const normRel = normalizeForMatch(related);
+    if (normRel && normRel !== normMissing) {
+      candidateTerms.add(normRel);
+    }
+  }
+
+  if (candidateTerms.size === 0) return [];
+
+  const found: string[] = [];
+  const seen = new Set<string>();
+  const addIfRelevant = (rawSkill: string) => {
+    const clean = rawSkill.trim();
+    const norm = normalizeForMatch(clean);
+    if (!norm || norm === normMissing || seen.has(norm) || !candidateTerms.has(norm)) return;
+    seen.add(norm);
+    found.push(clean);
+  };
+
+  const explicitSkills = [
+    ...(resume.skills?.hardSkills ?? []),
+    ...(resume.skills?.tools ?? []),
+    ...(resume.skills?.softSkills ?? []),
+    ...(resume.skills?.groups ?? []).flatMap((g) => g.items ?? [])
+  ];
+  explicitSkills.forEach(addIfRelevant);
+
+  if (found.length < 3) {
+    const proseCorpus = normalizeForMatch(
+      [
+        resume.summary ?? "",
+        ...(resume.workExperience ?? []).flatMap((w) => [w.role, ...(w.bulletPoints ?? [])]),
+        ...(resume.projects ?? []).flatMap((p) => [p.name, ...(p.technologies ?? []), ...(p.bulletPoints ?? [])]),
+        ...(resume.organizations ?? []).flatMap((o) => [o.role, ...(o.bulletPoints ?? [])])
+      ].join(" ")
+    );
+    if (proseCorpus) {
+      for (const clusterTerm of clusterTermsForLookup) {
+        if (containsTermBoundary(proseCorpus, clusterTerm)) {
+          addIfRelevant(clusterTerm);
+        }
+        if (found.length >= 3) break;
+      }
+    }
+  }
+
+  return found.slice(0, 3);
+};
+
+export const findInventedSkills = (
+  originalText: string,
+  aiOutput: string,
+  forbiddenSkills: string[]
+): string[] => {
+  const normOriginal = normalizeForMatch(originalText);
+  const normOutput = normalizeForMatch(aiOutput);
+  if (!normOutput || !forbiddenSkills.length) return [];
+
+  const invented: string[] = [];
+  const seen = new Set<string>();
+
+  for (const skill of forbiddenSkills) {
+    const clean = skill.trim();
+    const normSkill = normalizeForMatch(clean);
+    if (!normSkill || seen.has(normSkill)) continue;
+    seen.add(normSkill);
+
+    if (containsTermBoundary(normOutput, clean) && !containsTermBoundary(normOriginal, clean)) {
+      invented.push(clean);
+    }
+  }
+
+  return invented;
 };

@@ -12,7 +12,8 @@ import {
   Lightning,
   PencilLine,
   PlusCircle,
-  Sparkle
+  Sparkle,
+  WarningCircle
 } from "@phosphor-icons/react";
 import { GapTogglePanel } from "@/components/GapTogglePanel";
 import { LiveAtsBar } from "@/components/LiveAtsBar";
@@ -30,7 +31,7 @@ import {
 } from "@/lib/ats/rewriter";
 import { hasMetric } from "@/lib/ats/scorer";
 import { containsTermBoundary, normalizeForMatch } from "@/lib/ats/synonyms";
-import { useLiveAts } from "@/lib/live-ats";
+import { hasSkillInProfile, useLiveAts } from "@/lib/live-ats";
 import { resolveActiveAiConfig } from "@/lib/local-ai/engine";
 import { rewriteBulletWithLocalAi, tailorSummaryWithLocalAi } from "@/lib/local-ai/tasks";
 import { useCvStore } from "@/lib/store";
@@ -45,6 +46,7 @@ const sourceTypeLabels = {
 export const BulletRewriter = () => {
   const resume = useCvStore((state) => state.resumeProfile);
   const suggestions = useCvStore((state) => state.suggestions);
+  const excludedGapTerms = useCvStore((state) => state.excludedGapTerms);
   const applyOptimizedBullet = useCvStore((state) => state.applyOptimizedBullet);
   const applyOptimizedSummary = useCvStore((state) => state.applyOptimizedSummary);
   const updateSuggestion = useCvStore((state) => state.updateSuggestion);
@@ -68,6 +70,7 @@ export const BulletRewriter = () => {
   const [verbSteps, setVerbSteps] = useState<Record<string, number>>({});
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
   const [cardMessage, setCardMessage] = useState<Record<string, string>>({});
+  const [cardInventedWarning, setCardInventedWarning] = useState<Record<string, string[]>>({});
   const [filterMode, setFilterMode] = useState<"weak" | "all">("weak");
   const [examplesOpen, setExamplesOpen] = useState(false);
 
@@ -75,6 +78,7 @@ export const BulletRewriter = () => {
   const [summaryEditorOpen, setSummaryEditorOpen] = useState(false);
   const [summaryBusy, setSummaryBusy] = useState(false);
   const [summaryStatus, setSummaryStatus] = useState("");
+  const [summaryInventedWarning, setSummaryInventedWarning] = useState<string[]>([]);
   const [batchProgress, setBatchProgress] = useState("");
 
   const activeLocalConfig = resolveActiveAiConfig({
@@ -97,11 +101,20 @@ export const BulletRewriter = () => {
     filterMode === "weak" && weakBullets.length > 0 ? "weak" : "all";
   const visibleBullets = activeFilter === "weak" ? weakBullets : allBullets;
 
-  const suggestableKeywords = unique([
+  const excludedSet = new Set(excludedGapTerms.map(normalizeForMatch));
+  const verifiedTargetKeywords = unique([
+    ...(analytics.matchedKeywords ?? []),
+    ...(analytics.semanticKeywords ?? [])
+  ])
+    .filter((kw) => !excludedSet.has(normalizeForMatch(kw)))
+    .slice(0, 8);
+
+  const forbiddenSkills = unique([
     ...(analytics.missingKeywords ?? []),
-    ...(analytics.semanticKeywords ?? []),
-    ...(job.extractedKeywords?.requiredHardSkills ?? [])
-  ]).slice(0, 8);
+    ...excludedGapTerms
+  ])
+    .filter((kw) => !hasSkillInProfile(resume, kw))
+    .slice(0, 12);
 
   const rememberOriginal = (record: ResumeBulletRecord) => {
     setSessionOriginals((prev) => (prev[record.id] !== undefined ? prev : { ...prev, [record.id]: record.text }));
@@ -150,6 +163,7 @@ export const BulletRewriter = () => {
     const original = sessionOriginals[record.id] ?? record.text;
     writeBulletToStore(record, original);
     setDrafts((prev) => ({ ...prev, [record.id]: original }));
+    setCardInventedWarning((prev) => ({ ...prev, [record.id]: [] }));
     setCardMessage((prev) => ({
       ...prev,
       [record.id]: "Dikembalikan ke teks awal."
@@ -200,6 +214,7 @@ export const BulletRewriter = () => {
 
     setAiLoading((prev) => ({ ...prev, [record.id]: true }));
     setCardMessage((prev) => ({ ...prev, [record.id]: "" }));
+    setCardInventedWarning((prev) => ({ ...prev, [record.id]: [] }));
 
     try {
       const localResult = await rewriteBulletWithLocalAi(activeLocalConfig, {
@@ -207,14 +222,19 @@ export const BulletRewriter = () => {
         role: record.sourceLabel,
         jobTitle: job.jobTitle,
         jobDescription: job.rawDescription,
-        targetKeywords: suggestableKeywords.slice(0, 5),
+        verifiedKeywords: verifiedTargetKeywords.slice(0, 6),
+        forbiddenSkills,
         targetLang
       });
 
       setDrafts((prev) => ({ ...prev, [record.id]: localResult.suggestion }));
+      setCardInventedWarning((prev) => ({ ...prev, [record.id]: localResult.inventedSkills }));
       setCardMessage((prev) => ({
         ...prev,
-        [record.id]: `Disusun ulang oleh AI (${activeLocalConfig.modelId}). Periksa teksnya lalu klik 'Terapkan ke CV'.`
+        [record.id]:
+          localResult.inventedSkills.length > 0
+            ? `Periksa dulu: AI sempat menyertakan ${localResult.inventedSkills.join(", ")} yang belum ada di CV kamu.`
+            : `Disusun ulang oleh AI (${activeLocalConfig.modelId}). Periksa teksnya lalu klik 'Terapkan ke CV'.`
       }));
     } catch (err) {
       setCardMessage((prev) => ({
@@ -236,19 +256,24 @@ export const BulletRewriter = () => {
     if (preferAi && activeLocalConfig) {
       setSummaryBusy(true);
       setSummaryStatus("");
+      setSummaryInventedWarning([]);
       setSummaryEditorOpen(true);
       try {
-        const tailored = await tailorSummaryWithLocalAi(activeLocalConfig, {
+        const result = await tailorSummaryWithLocalAi(activeLocalConfig, {
           summary: resume.summary,
           headline: resume.contact.headline ?? "",
           jobTitle: job.jobTitle,
           companyName: job.companyName,
-          matchedKeywords: [...(analytics.matchedKeywords ?? []), ...(analytics.semanticKeywords ?? [])],
+          matchedKeywords: verifiedTargetKeywords,
+          forbiddenSkills,
           targetLang
         });
-        setSummaryDraft(tailored);
+        setSummaryDraft(result.summary);
+        setSummaryInventedWarning(result.inventedSkills);
         setSummaryStatus(
-          `Ringkasan diselaraskan oleh AI (${activeLocalConfig.modelId}). Sunting jika perlu lalu klik Terapkan.`
+          result.inventedSkills.length > 0
+            ? `Periksa dulu: AI sempat menyebut ${result.inventedSkills.join(", ")} yang belum ada di CV kamu.`
+            : `Ringkasan diselaraskan oleh AI (${activeLocalConfig.modelId}). Sunting jika perlu lalu klik Terapkan.`
         );
       } catch (err) {
         setSummaryStatus(err instanceof Error ? err.message : "Gagal menyelaraskan ringkasan dengan AI.");
@@ -400,9 +425,24 @@ export const BulletRewriter = () => {
                 <TextArea
                   rows={3}
                   value={summaryDraft}
-                  onChange={(event) => setSummaryDraft(event.target.value)}
+                  onChange={(event) => {
+                    setSummaryDraft(event.target.value);
+                    if (summaryInventedWarning.length > 0) setSummaryInventedWarning([]);
+                  }}
                   placeholder="Sunting ringkasan profil di sini..."
                 />
+
+                {summaryInventedWarning.length > 0 ? (
+                  <p
+                    role="alert"
+                    className="rounded-lg border border-[#E9A590] bg-[#FFE3D8] px-3 py-2 text-xs font-semibold text-[#7B1F14] flex items-start gap-2"
+                  >
+                    <WarningCircle size={15} weight="duotone" className="shrink-0 mt-0.5" aria-hidden="true" />
+                    <span>
+                      Hati-hati: draft ini menyebut {summaryInventedWarning.join(", ")} yang belum ada di CV kamu. Hapus sebelum menerapkan jika kamu memang belum menguasainya.
+                    </span>
+                  </p>
+                ) : null}
 
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
@@ -546,6 +586,13 @@ export const BulletRewriter = () => {
             </div>
           </div>
 
+          {forbiddenSkills.length > 0 ? (
+            <p className="rounded-xl border border-[#94D1DF] bg-[#ECF9FC] px-3.5 py-2 text-xs font-medium text-[#124959]">
+              Mode CV Jujur: AI hanya menonjolkan keahlian yang sudah ada di CV kamu dan tidak akan menyisipkan keahlian yang belum dikuasai ({forbiddenSkills.slice(0, 4).join(", ")}
+              {forbiddenSkills.length > 4 ? ", ..." : ""}).
+            </p>
+          ) : null}
+
           {strongCount > 0 && activeFilter === "weak" ? (
             <div className="flex items-center justify-between gap-2 rounded-xl border border-[#9FD499] bg-[#DFF5DA] px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#144C32]">
               <span className="flex items-center gap-2">
@@ -571,9 +618,10 @@ export const BulletRewriter = () => {
             const canRestore =
               originalBeforeEdit !== undefined && originalBeforeEdit.trim() !== record.text.trim();
             const showMetricQuickAdd = !hasMetric(draft);
-            const candidateKeywords = suggestableKeywords
+            const candidateKeywords = verifiedTargetKeywords
               .filter((kw) => !containsTermBoundary(normalizeForMatch(draft), kw))
               .slice(0, 3);
+            const inventedOnCard = cardInventedWarning[record.id] ?? [];
 
             return (
               <Reveal key={record.id} delay={Math.min(index, 4) * 35}>
@@ -632,9 +680,13 @@ export const BulletRewriter = () => {
                         <TextArea
                           rows={3}
                           value={draft}
-                          onChange={(event) =>
-                            setDrafts((current) => ({ ...current, [record.id]: event.target.value }))
-                          }
+                          onChange={(event) => {
+                            const nextVal = event.target.value;
+                            setDrafts((current) => ({ ...current, [record.id]: nextVal }));
+                            if (inventedOnCard.length > 0) {
+                              setCardInventedWarning((prev) => ({ ...prev, [record.id]: [] }));
+                            }
+                          }}
                           placeholder="Sunting kalimat di sini..."
                         />
                       </div>
@@ -686,7 +738,7 @@ export const BulletRewriter = () => {
 
                       {candidateKeywords.length > 0 ? (
                         <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[#EFE7D6]">
-                          <span className="text-[11px] font-semibold text-[#59483F] mr-1">Sisipkan kata kunci:</span>
+                          <span className="text-[11px] font-semibold text-[#59483F] mr-1">Tonjolkan keahlianmu yang cocok:</span>
                           {candidateKeywords.map((kw) => (
                             <button
                               key={kw}
@@ -721,6 +773,18 @@ export const BulletRewriter = () => {
                         <Tag tone="neutral">Perbaikan struktur kalimat</Tag>
                       )}
                     </div>
+
+                    {inventedOnCard.length > 0 ? (
+                      <p
+                        role="alert"
+                        className="rounded-xl bg-[#FFE3D8] border border-[#E9A590] px-3 py-2 text-xs font-semibold text-[#7B1F14] flex items-start gap-2"
+                      >
+                        <WarningCircle size={15} weight="duotone" className="shrink-0 mt-0.5" aria-hidden="true" />
+                        <span>
+                          Peringatan jujur: draft ini masih menyebut {inventedOnCard.join(", ")} yang belum ada di CV kamu. Hapus sebelum menekan Terapkan jika kamu belum menguasainya.
+                        </span>
+                      </p>
+                    ) : null}
 
                     {cardMessage[record.id] ? (
                       <p className="rounded-xl bg-[#D6F3FA] border border-[#94D1DF] px-3 py-2 text-xs font-semibold text-[#124959]">

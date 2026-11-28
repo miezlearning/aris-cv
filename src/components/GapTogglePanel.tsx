@@ -2,7 +2,17 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CaretDown, CheckCircle, Compass, GraduationCap, WarningCircle } from "@phosphor-icons/react";
+import {
+  ArrowCounterClockwise,
+  CaretDown,
+  CheckCircle,
+  Compass,
+  EyeSlash,
+  GraduationCap,
+  Lightbulb,
+  WarningCircle
+} from "@phosphor-icons/react";
+import { findTransferableSkillsInProfile } from "@/lib/ats/hygiene";
 import { normalizeForMatch } from "@/lib/ats/synonyms";
 import { hasSkillInProfile, useLiveAts } from "@/lib/live-ats";
 import { useCvStore } from "@/lib/store";
@@ -32,7 +42,9 @@ export const GapTogglePanel = ({
   const { analytics } = useLiveAts();
   const resume = useCvStore((state) => state.resumeProfile);
   const addedGapTerms = useCvStore((state) => state.addedGapTerms);
+  const excludedGapTerms = useCvStore((state) => state.excludedGapTerms);
   const toggleSkillItem = useCvStore((state) => state.toggleSkillItem);
+  const toggleExcludedGapTerm = useCvStore((state) => state.toggleExcludedGapTerm);
   const setActiveMasterTab = useCvStore((state) => state.setActiveMasterTab);
 
   const [expanded, setExpanded] = useState(!compact);
@@ -109,8 +121,23 @@ export const GapTogglePanel = ({
     return null;
   }
 
-  const gapOnlyCount = skillItems.filter((i) => !i.enabled).length + eduGaps.length;
-  const visibleItems = showAll ? skillItems : skillItems.slice(0, compact ? 4 : 6);
+  const excludedNormSet = new Set(excludedGapTerms.map(normalizeForMatch));
+  const sortedItems = [...skillItems].sort((a, b) => {
+    const rank = (item: ToggleItem) => {
+      if (!item.enabled && !excludedNormSet.has(normalizeForMatch(item.term))) return 0;
+      if (item.enabled) return 1;
+      return 2;
+    };
+    return rank(a) - rank(b);
+  });
+
+  const excludedCount = sortedItems.filter(
+    (i) => !i.enabled && excludedNormSet.has(normalizeForMatch(i.term))
+  ).length;
+  const gapOnlyCount = sortedItems.filter(
+    (i) => !i.enabled && !excludedNormSet.has(normalizeForMatch(i.term))
+  ).length + eduGaps.length;
+  const visibleItems = showAll ? sortedItems : sortedItems.slice(0, compact ? 4 : 6);
 
   return (
     <div
@@ -128,10 +155,10 @@ export const GapTogglePanel = ({
           </span>
           <div className="min-w-0">
             <h3 className="text-xs sm:text-sm font-bold text-[#251813]">
-              Tambah Cepat Keahlian Kurang ({gapOnlyCount})
+              Tinjau Keahlian Kurang ({gapOnlyCount})
             </h3>
             <p className="text-xs text-[#59483F]">
-              Aktifkan hanya yang benar-benar kamu kuasai.
+              Aktifkan hanya jika benar-benar kamu kuasai. Jika belum bisa, tandai &ldquo;Belum bisa&rdquo; agar AI tidak menyarankannya.
             </p>
           </div>
         </div>
@@ -141,9 +168,9 @@ export const GapTogglePanel = ({
             type="button"
             onClick={() => setExpanded((prev) => !prev)}
             aria-expanded={expanded}
-            className="inline-flex items-center gap-1 min-h-[38px] rounded-lg border border-[#D9CEBC] bg-[#FAF5E8] px-2.5 text-xs font-bold text-[#251813] hover:bg-[#FFF0A8] transition-colors"
+            className="inline-flex items-center gap-1 min-h-[44px] rounded-lg border border-[#D9CEBC] bg-[#FAF5E8] px-3 text-xs font-bold text-[#251813] hover:bg-[#FFF0A8] transition-colors cursor-pointer"
           >
-            <span>{expanded ? "Sembunyikan" : "Buka Toggle Gap"}</span>
+            <span>{expanded ? "Sembunyikan" : "Buka Tinjau Gap"}</span>
             <CaretDown
               size={13}
               weight="bold"
@@ -156,74 +183,133 @@ export const GapTogglePanel = ({
 
       {expanded ? (
         <div className="mt-3 grid gap-3">
-          {visibleItems.length > 0 ? (
-            <div className="grid gap-2.5 sm:grid-cols-2">
-              {visibleItems.map((item) => (
-                <div
-                  key={item.key}
-                  className={`rounded-xl border p-3 flex flex-col justify-between gap-2.5 transition-colors ${
-                    item.enabled
-                      ? "border-[#9FD499] bg-[#EEF9EB]"
-                      : item.kind === "implicit"
-                      ? "border-[#94D1DF] bg-[#ECF9FC]/60"
-                      : "border-[#E9A590] bg-[#FFFDF8]"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Tag tone={item.enabled ? "match" : item.kind === "cross_language" ? "partial" : "gap"}>
-                          {item.term}
-                        </Tag>
-                        <span className="text-[11px] font-semibold text-[#59483F]">
-                          {item.field === "softSkills" ? "Soft Skill" : item.field === "tools" ? "Alat" : "Teknis"}
-                        </span>
-                      </div>
-                      <p className="mt-1.5 text-xs text-[#4E3E36] leading-relaxed break-words">
-                        {item.reason}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={item.enabled}
-                      aria-label={`${item.enabled ? "Hapus" : "Tambahkan"} ${item.term} di Keahlian CV`}
-                      onClick={() => toggleSkillItem(item.field, item.term)}
-                      className={`inline-flex shrink-0 items-center gap-1.5 min-h-[40px] rounded-full border px-2.5 text-[11px] font-bold transition-colors ${
-                        item.enabled
-                          ? "border-[#144C32] bg-[#1F6B57] text-white"
-                          : "border-[#C2B49E] bg-[#FAF5E8] text-[#251813] hover:bg-[#FFF0A8]"
-                      }`}
-                    >
-                      <span>{item.enabled ? "ON" : "OFF"}</span>
-                      <span
-                        aria-hidden="true"
-                        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-2xs transition-transform ${
-                          item.enabled ? "translate-x-0.5" : "-translate-x-0.5"
-                        }`}
-                      />
-                    </button>
-                  </div>
-
-                  {item.enabled ? (
-                    <p className="inline-flex items-center gap-1 text-[11px] font-bold text-[#144C32]">
-                      <CheckCircle size={13} weight="fill" aria-hidden="true" />
-                      <span>Terpasang di CV</span>
-                    </p>
-                  ) : null}
-                </div>
-              ))}
+          {gapOnlyCount > 0 || excludedCount > 0 ? (
+            <div className="rounded-xl border border-[#DFC25A] bg-[#FFF8DF] p-3 text-xs text-[#4A3A2E] flex items-start gap-2">
+              <Lightbulb size={16} weight="duotone" className="shrink-0 mt-0.5 text-[#4A3A2E]" aria-hidden="true" />
+              <p className="leading-relaxed">
+                <span className="font-bold text-[#251813]">Tetap bisa melamar meski masih ada gap:</span> rekruter umumnya mempertimbangkan kandidat yang memenuhi 60-75% kualifikasi inti. Jangan tambahkan skill yang belum dikuasai; fokus perkuat skill serumpun dan hasil nyata di CV.
+              </p>
             </div>
           ) : null}
 
-          {skillItems.length > visibleItems.length ? (
+          {visibleItems.length > 0 ? (
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              {visibleItems.map((item) => {
+                const isExcluded = !item.enabled && excludedNormSet.has(normalizeForMatch(item.term));
+                const transferable = !item.enabled ? findTransferableSkillsInProfile(resume, item.term) : [];
+                return (
+                  <div
+                    key={item.key}
+                    className={`rounded-xl border p-3 flex flex-col justify-between gap-2.5 transition-colors ${
+                      item.enabled
+                        ? "border-[#9FD499] bg-[#EEF9EB]"
+                        : isExcluded
+                        ? "border-[#D9CEBC] bg-[#FAF5E8]/80"
+                        : item.kind === "implicit"
+                        ? "border-[#94D1DF] bg-[#ECF9FC]/60"
+                        : "border-[#E9A590] bg-[#FFFDF8]"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Tag
+                            tone={
+                              item.enabled
+                                ? "match"
+                                : isExcluded
+                                ? "neutral"
+                                : item.kind === "cross_language"
+                                ? "partial"
+                                : "gap"
+                            }
+                          >
+                            {item.term}
+                          </Tag>
+                          <span className="text-[11px] font-semibold text-[#59483F]">
+                            {item.field === "softSkills" ? "Soft Skill" : item.field === "tools" ? "Alat" : "Teknis"}
+                          </span>
+                          {isExcluded ? (
+                            <span className="rounded-md border border-[#D9CEBC] bg-white px-1.5 py-0.5 text-[10.5px] font-bold text-[#4E3E36]">
+                              Dilewati (belum dikuasai)
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1.5 text-xs text-[#4E3E36] leading-relaxed break-words">
+                          {isExcluded
+                            ? "Dikunci dari saran AI. Tetap tonjolkan skill serumpunmu di pengalaman atau proyek."
+                            : item.reason}
+                        </p>
+                        {transferable.length > 0 ? (
+                          <p className="mt-1.5 rounded-lg border border-[#94D1DF]/80 bg-[#ECF9FC] px-2 py-1 text-[11px] font-semibold text-[#124959] leading-snug">
+                            Skill serumpun di CV kamu: <span className="font-bold">{transferable.join(", ")}</span> (tonjolkan ini sebagai bukti adaptasi).
+                          </p>
+                        ) : null}
+                      </div>
+
+                      {!isExcluded ? (
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={item.enabled}
+                          aria-label={`${item.enabled ? "Hapus" : "Tambahkan"} ${item.term} di Keahlian CV`}
+                          onClick={() => toggleSkillItem(item.field, item.term)}
+                          className={`inline-flex shrink-0 items-center gap-1.5 min-h-[44px] rounded-full border px-2.5 text-[11px] font-bold transition-colors cursor-pointer ${
+                            item.enabled
+                              ? "border-[#144C32] bg-[#1F6B57] text-white"
+                              : "border-[#C2B49E] bg-[#FAF5E8] text-[#251813] hover:bg-[#FFF0A8]"
+                          }`}
+                        >
+                          <span>{item.enabled ? "ON" : "OFF"}</span>
+                          <span
+                            aria-hidden="true"
+                            className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-2xs transition-transform ${
+                              item.enabled ? "translate-x-0.5" : "-translate-x-0.5"
+                            }`}
+                          />
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      {item.enabled ? (
+                        <p className="inline-flex items-center gap-1 text-[11px] font-bold text-[#144C32]">
+                          <CheckCircle size={13} weight="fill" aria-hidden="true" />
+                          <span>Terpasang di CV</span>
+                        </p>
+                      ) : isExcluded ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleExcludedGapTerm(item.term)}
+                          className="inline-flex items-center gap-1 min-h-[44px] rounded-lg border border-[#C2B49E] bg-white px-3 text-xs font-bold text-[#251813] hover:bg-[#FFF0A8] transition-colors cursor-pointer"
+                        >
+                          <ArrowCounterClockwise size={13} weight="bold" aria-hidden="true" />
+                          <span>Batal lewati</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => toggleExcludedGapTerm(item.term)}
+                          className="inline-flex items-center gap-1 min-h-[44px] rounded-lg border border-[#D9CEBC] bg-white px-3 text-xs font-bold text-[#4E3E36] hover:bg-[#FAF5E8] transition-colors cursor-pointer"
+                        >
+                          <EyeSlash size={13} weight="duotone" aria-hidden="true" />
+                          <span>Belum bisa</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {sortedItems.length > visibleItems.length ? (
             <button
               type="button"
               onClick={() => setShowAll(true)}
-              className="w-fit min-h-[38px] rounded-lg border border-[#D9CEBC] bg-[#FAF5E8] px-3 py-1.5 text-xs font-bold text-[#251813] hover:bg-[#FFF0A8]"
+              className="w-fit min-h-[44px] rounded-lg border border-[#D9CEBC] bg-[#FAF5E8] px-3 py-1.5 text-xs font-bold text-[#251813] hover:bg-[#FFF0A8] cursor-pointer"
             >
-              Tampilkan semua ({skillItems.length - visibleItems.length} lainnya)
+              Tampilkan semua ({sortedItems.length - visibleItems.length} lainnya)
             </button>
           ) : null}
 
