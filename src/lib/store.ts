@@ -19,6 +19,14 @@ import type {
 import { emptyAnalytics, emptyJobTarget, emptyResumeProfile, createId } from "@/lib/defaults";
 import { analyzeMatch } from "@/lib/ats/scorer";
 import {
+  moveItemById,
+  sortCertificationsDesc,
+  sortEducationDesc,
+  sortOrganizationsDesc,
+  sortProjectsDesc,
+  sortWorkExperienceDesc
+} from "@/lib/chronology";
+import {
   applyTranslatedFieldEdit,
   computeProfileContentHash,
   translateProfileDeterministic,
@@ -146,27 +154,37 @@ type AppState = {
   addExperience: () => void;
   updateExperience: (id: string, patch: Partial<WorkExperience>) => void;
   removeExperience: (id: string) => void;
+  moveExperience: (id: string, direction: "up" | "down") => void;
+  sortExperiencesChronologically: () => void;
   updateBullet: (experienceId: string, index: number, value: string) => void;
   addBullet: (experienceId: string) => void;
   removeBullet: (experienceId: string, index: number) => void;
   addEducation: () => void;
   updateEducation: (id: string, patch: Partial<Education>) => void;
   removeEducation: (id: string) => void;
+  moveEducation: (id: string, direction: "up" | "down") => void;
+  sortEducationChronologically: () => void;
   addProject: () => void;
   updateProject: (id: string, patch: Partial<ProjectItem>) => void;
   removeProject: (id: string) => void;
+  moveProject: (id: string, direction: "up" | "down") => void;
+  sortProjectsChronologically: () => void;
   addProjectBullet: (projectId: string) => void;
   updateProjectBullet: (projectId: string, index: number, value: string) => void;
   removeProjectBullet: (projectId: string, index: number) => void;
   addOrganization: () => void;
   updateOrganization: (id: string, patch: Partial<OrganizationItem>) => void;
   removeOrganization: (id: string) => void;
+  moveOrganization: (id: string, direction: "up" | "down") => void;
+  sortOrganizationsChronologically: () => void;
   addOrganizationBullet: (orgId: string) => void;
   updateOrganizationBullet: (orgId: string, index: number, value: string) => void;
   removeOrganizationBullet: (orgId: string, index: number) => void;
   addCertification: () => void;
   updateCertification: (id: string, patch: Partial<CertificationItem>) => void;
   removeCertification: (id: string) => void;
+  moveCertification: (id: string, direction: "up" | "down") => void;
+  sortCertificationsChronologically: () => void;
   updateSkills: (field: keyof ResumeProfile["skills"], values: string[]) => void;
   addSkillGroup: () => void;
   updateSkillGroup: (id: string, patch: Partial<SkillGroup>) => void;
@@ -495,6 +513,20 @@ export const useCvStore = create<AppState>()(
             workExperience: state.resumeProfile.workExperience.filter((item) => item.id !== id)
           }
         })),
+      moveExperience: (id, direction) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            workExperience: moveItemById(state.resumeProfile.workExperience, id, direction)
+          }
+        })),
+      sortExperiencesChronologically: () =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            workExperience: sortWorkExperienceDesc(state.resumeProfile.workExperience)
+          }
+        })),
       updateBullet: (experienceId, index, value) =>
         set((state) => ({
           resumeProfile: {
@@ -561,6 +593,20 @@ export const useCvStore = create<AppState>()(
             education: state.resumeProfile.education.filter((item) => item.id !== id)
           }
         })),
+      moveEducation: (id, direction) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            education: moveItemById(state.resumeProfile.education, id, direction)
+          }
+        })),
+      sortEducationChronologically: () =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            education: sortEducationDesc(state.resumeProfile.education)
+          }
+        })),
       addProject: () =>
         set((state) => ({
           resumeProfile: {
@@ -592,6 +638,20 @@ export const useCvStore = create<AppState>()(
           resumeProfile: {
             ...state.resumeProfile,
             projects: state.resumeProfile.projects.filter((item) => item.id !== id)
+          }
+        })),
+      moveProject: (id, direction) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            projects: moveItemById(state.resumeProfile.projects, id, direction)
+          }
+        })),
+      sortProjectsChronologically: () =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            projects: sortProjectsDesc(state.resumeProfile.projects)
           }
         })),
       addProjectBullet: (projectId) =>
@@ -658,6 +718,20 @@ export const useCvStore = create<AppState>()(
             organizations: state.resumeProfile.organizations.filter((item) => item.id !== id)
           }
         })),
+      moveOrganization: (id, direction) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            organizations: moveItemById(state.resumeProfile.organizations, id, direction)
+          }
+        })),
+      sortOrganizationsChronologically: () =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            organizations: sortOrganizationsDesc(state.resumeProfile.organizations)
+          }
+        })),
       addOrganizationBullet: (orgId) =>
         set((state) => ({
           resumeProfile: {
@@ -714,6 +788,20 @@ export const useCvStore = create<AppState>()(
           resumeProfile: {
             ...state.resumeProfile,
             certificationItems: state.resumeProfile.certificationItems.filter((item) => item.id !== id)
+          }
+        })),
+      moveCertification: (id, direction) =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            certificationItems: moveItemById(state.resumeProfile.certificationItems, id, direction)
+          }
+        })),
+      sortCertificationsChronologically: () =>
+        set((state) => ({
+          resumeProfile: {
+            ...state.resumeProfile,
+            certificationItems: sortCertificationsDesc(state.resumeProfile.certificationItems)
           }
         })),
       updateSkills: (field, values) =>

@@ -12,6 +12,12 @@ import type {
 } from "@/types/resume";
 import { normalizeJobDescription, toLegacyExtractedKeywords } from "@/lib/ats/normalizer";
 import { containsTermBoundary, findSynonymMatch, getRelatedTerms, normalizeForMatch } from "@/lib/ats/synonyms";
+import {
+  hasFirstPersonPronoun,
+  hasInvertedWorkDateRange,
+  hasUnfilledPlaceholder
+} from "@/lib/ats/hygiene";
+import { isWorkExperienceChronological } from "@/lib/chronology";
 import { detectResumeProseLanguage } from "@/lib/resume-document";
 import { compact, toPercent } from "@/lib/text";
 
@@ -492,8 +498,14 @@ export const evaluateFormatQuality = (resume: ResumeProfile): { score: number; c
     (resume.organizations ?? []).some((o) => o.organization.trim() || o.bulletPoints.some((b) => b.trim()));
 
   const hasValidDates = (resume.workExperience ?? []).every(
-    (w) => isValidDateToken(w.startDate) && (w.isCurrent || isValidDateToken(w.endDate))
+    (w) =>
+      isValidDateToken(w.startDate) &&
+      (w.isCurrent || isValidDateToken(w.endDate)) &&
+      !hasInvertedWorkDateRange(w)
   );
+  const allProseTexts = [resume.summary ?? "", ...allBullets];
+  const hasFirstPerson = allProseTexts.some(hasFirstPersonPronoun);
+  const hasPlaceholders = allProseTexts.some(hasUnfilledPlaceholder);
 
   const groupedSkillItems = (resume.skills?.groups ?? []).flatMap((group) => group.items ?? []).filter((s) => s.trim());
   const flatSkillCount =
@@ -557,8 +569,34 @@ export const evaluateFormatQuality = (resume: ResumeProfile): { score: number; c
       id: "dates-consistent",
       label: "Format tanggal konsisten (MM/YYYY atau Bulan YYYY)",
       passed: hasValidDates,
-      tip: "Gunakan format seragam seperti '08/2024' atau 'Agu 2024' dan 'Present'/'Sekarang'."
-    }
+      tip: "Gunakan format seragam seperti '08/2024' atau 'Agu 2024' dan 'Present'/'Sekarang'. Pastikan juga tanggal selesai tidak lebih awal dari tanggal mulai."
+    },
+    {
+      id: "no-first-person",
+      label: "Gaya bahasa profesional tanpa kata ganti orang pertama (Saya/Aku/I)",
+      passed: !hasFirstPerson,
+      tip: "Hindari kata 'Saya', 'Aku', atau 'I' di ringkasan dan poin pengalaman; langsung awali dengan peran atau kata kerja aktif."
+    },
+    ...(hasPlaceholders
+      ? [
+          {
+            id: "no-placeholders",
+            label: "Tidak ada placeholder [...] yang belum diisi",
+            passed: false,
+            tip: "Masih ada tanda kurung seperti [isi jumlah] yang belum diganti dengan angka nyata atau dihapus."
+          }
+        ]
+      : []),
+    ...((resume.workExperience ?? []).length >= 2
+      ? [
+          {
+            id: "experience-chronological",
+            label: "Urutan pengalaman kerja dari terbaru ke terlama",
+            passed: isWorkExperienceChronological(resume.workExperience ?? []),
+            tip: "Standar ATS menempatkan pengalaman aktif (Sekarang/Present) dan terbaru di paling atas. Gunakan tombol 'Urutkan Terbaru' di Langkah 1."
+          }
+        ]
+      : [])
   ];
 
   const impactChecks: FormatCheckItem[] = [

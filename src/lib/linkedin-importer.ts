@@ -10,6 +10,7 @@ import type {
   WorkType
 } from "@/types/resume";
 import { createId, emptyResumeProfile } from "@/lib/defaults";
+import { sortWorkExperienceDesc } from "@/lib/chronology";
 import { unique } from "@/lib/text";
 
 export type LinkedInImportStats = {
@@ -334,28 +335,30 @@ export const parseLinkedInCsvArchive = (
     if (num) profile.contact.phone = num;
   }
 
-  const workExperience: WorkExperience[] = positionRows
-    .map((row): WorkExperience | null => {
-      const company = readCell(row, ["Company Name", "Company"]);
-      const role = readCell(row, ["Title", "Position", "Role"]);
-      if (!company && !role) return null;
-      const startDate = readCell(row, ["Started On", "Start Date"]);
-      const rawEnd = readCell(row, ["Finished On", "End Date"]);
-      const isCurrent = !rawEnd;
-      const description = readCell(row, ["Description"]);
-      return {
-        id: createId(),
-        company,
-        role,
-        type: inferWorkType(`${role} ${description}`),
-        location: readCell(row, ["Location"]),
-        startDate,
-        endDate: isCurrent ? "Present" : rawEnd,
-        isCurrent,
-        bulletPoints: splitDescriptionToBullets(description)
-      };
-    })
-    .filter((w): w is WorkExperience => w !== null);
+  const workExperience: WorkExperience[] = sortWorkExperienceDesc(
+    positionRows
+      .map((row): WorkExperience | null => {
+        const company = readCell(row, ["Company Name", "Company"]);
+        const role = readCell(row, ["Title", "Position", "Role"]);
+        if (!company && !role) return null;
+        const startDate = readCell(row, ["Started On", "Start Date"]);
+        const rawEnd = readCell(row, ["Finished On", "End Date"]);
+        const isCurrent = !rawEnd;
+        const description = readCell(row, ["Description"]);
+        return {
+          id: createId(),
+          company,
+          role,
+          type: inferWorkType(`${role} ${description}`),
+          location: readCell(row, ["Location"]),
+          startDate,
+          endDate: isCurrent ? "Present" : rawEnd,
+          isCurrent,
+          bulletPoints: splitDescriptionToBullets(description)
+        };
+      })
+      .filter((w): w is WorkExperience => w !== null)
+  );
 
   const educationList: Education[] = eduRows
     .map((row): Education | null => {
@@ -1126,7 +1129,8 @@ export const parseLinkedInText = (
 
   profile.summary = sections.summary.join(" ").replace(/\s+/g, " ").trim();
 
-  const { entries: workExperience, inlineSkills } = parseLinkedInExperienceLines(sections.experience);
+  const { entries: rawWorkExperience, inlineSkills } = parseLinkedInExperienceLines(sections.experience);
+  const workExperience = sortWorkExperienceDesc(rawWorkExperience);
   const education = parseLinkedInEducationLines(sections.education);
   const certificationItems = parseLinkedInCertificationLines(sections.certifications);
   const organizations = parseLinkedInOrganizationLines(sections.organizations);

@@ -6,9 +6,12 @@ import {
   ArrowCounterClockwise,
   ArrowsClockwise,
   ArrowsSplit,
+  Check,
   CheckCircle,
+  Copy,
   DownloadSimple,
   Export,
+  Eye,
   FileDoc,
   FilePdf,
   FileTxt,
@@ -16,6 +19,7 @@ import {
   Rows,
   SealCheck,
   ShieldCheck,
+  SortDescending,
   TextAlignLeft,
   Translate,
   WarningCircle
@@ -24,7 +28,8 @@ import { LiveAtsBar } from "@/components/LiveAtsBar";
 import { LocalAiControlPanel } from "@/components/LocalAiControlPanel";
 import { TranslationComparePanel } from "@/components/TranslationComparePanel";
 import { Button, SectionCard } from "@/components/ui";
-import { exportDocx, exportPdf, exportTextFallback } from "@/lib/exporters";
+import { buildAtsFileName, collectPreExportAtsWarnings } from "@/lib/ats/hygiene";
+import { buildPlainTextResume, exportDocx, exportPdf, exportTextFallback } from "@/lib/exporters";
 import { useLiveAts } from "@/lib/live-ats";
 import { resolveActiveAiConfig } from "@/lib/local-ai/engine";
 import { translateProfileWithLocalAi } from "@/lib/local-ai/tasks";
@@ -34,8 +39,6 @@ import {
 } from "@/lib/resume-document";
 import { useCvStore } from "@/lib/store";
 import type { CvLanguage, CvTemplate } from "@/types/resume";
-
-const kindLabels = { pdf: "PDF", docx: "DOCX", txt: "TXT" } as const;
 
 const TEMPLATE_OPTIONS: Array<{
   value: CvTemplate;
@@ -87,6 +90,8 @@ const LANGUAGE_OPTIONS: Array<{ value: CvLanguage; label: string; hint: string }
 
 export const ExportPanel = () => {
   const resume = useCvStore((state) => state.resumeProfile);
+  const jobTarget = useCvStore((state) => state.jobTarget);
+  const sortExperiencesChronologically = useCvStore((state) => state.sortExperiencesChronologically);
   const cvLanguage = useCvStore((state) => state.cvLanguage);
   const setCvLanguage = useCvStore((state) => state.setCvLanguage);
   const cvTemplate = useCvStore((state) => state.cvTemplate);
@@ -113,6 +118,8 @@ export const ExportPanel = () => {
   const [translateProgress, setTranslateProgress] = useState("");
   const [busy, setBusy] = useState<"pdf" | "docx" | "txt" | "translate" | "">("");
   const [compareOpen, setCompareOpen] = useState(false);
+  const [atsPreviewOpen, setAtsPreviewOpen] = useState(false);
+  const [copiedPlainText, setCopiedPlainText] = useState(false);
 
   const activeLocalConfig = resolveActiveAiConfig({
     aiEnabled,
@@ -140,10 +147,28 @@ export const ExportPanel = () => {
     translateContent: isTranslatedView,
     translatedOverride
   };
+  const exportOptions = {
+    ...buildOptions,
+    targetJobTitle: jobTarget.jobTitle
+  };
 
   const document = buildResumeDocument(resume, activeLang, buildOptions);
   const pageInfo = estimateA4Pages(document);
   const activeTemplateMeta = TEMPLATE_OPTIONS.find((t) => t.value === cvTemplate) ?? TEMPLATE_OPTIONS[0];
+  const atsBaseFileName = buildAtsFileName(resume, activeLang, jobTarget.jobTitle);
+  const preExportWarnings = document.isEmpty ? [] : collectPreExportAtsWarnings(resume);
+  const plainTextSnapshot = atsPreviewOpen && !document.isEmpty ? buildPlainTextResume(resume, activeLang, buildOptions) : "";
+
+  const handleCopyPlainText = async () => {
+    if (!plainTextSnapshot || typeof navigator === "undefined" || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(plainTextSnapshot);
+      setCopiedPlainText(true);
+      window.setTimeout(() => setCopiedPlainText(false), 2000);
+    } catch {
+      setMessage("Gagal menyalin teks ke clipboard. Kamu tetap bisa menyalinnya secara manual atau mengunduh TXT.");
+    }
+  };
 
   const runExport = async (kind: "pdf" | "docx" | "txt") => {
     if (document.isEmpty) return;
@@ -151,11 +176,11 @@ export const ExportPanel = () => {
     try {
       setBusy(kind);
       setMessage("");
-      if (kind === "pdf") await exportPdf(resume, activeLang, buildOptions);
-      if (kind === "docx") await exportDocx(resume, activeLang, buildOptions);
-      if (kind === "txt") exportTextFallback(resume, activeLang, buildOptions);
+      if (kind === "pdf") await exportPdf(resume, activeLang, exportOptions);
+      if (kind === "docx") await exportDocx(resume, activeLang, exportOptions);
+      if (kind === "txt") exportTextFallback(resume, activeLang, exportOptions);
       setMessage(
-        `Berkas ${kindLabels[kind]} (${activeTemplateMeta.label}, ${
+        `Berkas ${atsBaseFileName}.${kind} (${activeTemplateMeta.label}, ${
           activeLang === "id" ? "Bahasa Indonesia" : "Full ATS English"
         }) berhasil diunduh ke perangkatmu.`
       );
@@ -474,19 +499,69 @@ export const ExportPanel = () => {
           </div>
         ) : (
           <div className="rounded-xl border border-[#9FD499] bg-[#DFF5DA] p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5">
-              <SealCheck size={20} weight="duotone" className="text-[#144C32] shrink-0" aria-hidden="true" />
-              <p className="text-xs sm:text-sm font-bold text-[#144C32]">
-                Siap diunduh (~{pageInfo.estimatedPages} hal. A4 &middot; {activeTemplateMeta.label})
-              </p>
+            <div className="flex items-start gap-2.5 min-w-0">
+              <SealCheck size={20} weight="duotone" className="text-[#144C32] shrink-0 mt-0.5" aria-hidden="true" />
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm font-bold text-[#144C32]">
+                  Siap diunduh (~{pageInfo.estimatedPages} hal. A4 &middot; {activeTemplateMeta.label})
+                </p>
+                <p className="text-xs text-[#144C32]/90 mt-0.5 break-all">
+                  Nama berkas: <span className="font-mono font-bold">{atsBaseFileName}.pdf</span>
+                </p>
+              </div>
             </div>
             {resume.experienceLevel === "fresh_graduate" && pageInfo.estimatedPages > 1 ? (
-              <span className="rounded-lg border border-[#DFC25A] bg-[#FFF0A8] px-2.5 py-1 text-xs font-bold text-[#4A3A2E]">
+              <span className="rounded-lg border border-[#DFC25A] bg-[#FFF0A8] px-2.5 py-1 text-xs font-bold text-[#4A3A2E] shrink-0">
                 Tip: pilih ATS Padat agar muat 1 halaman
               </span>
             ) : null}
           </div>
         )}
+
+        {/* Guardrail Pemeriksaan Sebelum Unduh (muncul hanya jika ada temuan nyata) */}
+        {preExportWarnings.length > 0 ? (
+          <div
+            role="status"
+            className="rounded-xl border border-[#DFC25A] bg-[#FFF8DF] p-4 grid gap-2.5"
+          >
+            <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-[#251813]">
+              <WarningCircle size={18} weight="duotone" className="shrink-0 text-[#4A3A2E]" aria-hidden="true" />
+              <span>Cek cepat sebelum unduh ({preExportWarnings.length} temuan)</span>
+            </div>
+            <div className="grid gap-2">
+              {preExportWarnings.map((warn) => (
+                <div
+                  key={warn.id}
+                  className={`rounded-lg border px-3 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs ${
+                    warn.severity === "error"
+                      ? "border-[#E9A590] bg-[#FFE3D8] text-[#7B1F14]"
+                      : "border-[#DFC25A] bg-white text-[#4A3A2E]"
+                  }`}
+                >
+                  <span className="font-semibold leading-relaxed">{warn.message}</span>
+                  {warn.actionKind === "sort_experience" ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={sortExperiencesChronologically}
+                      className="gap-1.5 text-xs shrink-0"
+                    >
+                      <SortDescending size={14} weight="bold" aria-hidden="true" />
+                      <span>Urutkan Terbaru di Atas</span>
+                    </Button>
+                  ) : warn.actionKind === "goto_editor" ? (
+                    <Link
+                      href="/master-cv"
+                      className="inline-flex items-center min-h-[44px] rounded-xl border border-[#C2B49E] bg-white px-3 text-xs font-bold text-[#251813] hover:bg-[#FFF0A8] transition-colors shrink-0"
+                    >
+                      Perbaiki di Langkah 1
+                    </Link>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {/* Export Formats Grid */}
         <div className="grid gap-4 sm:grid-cols-3">
@@ -576,6 +651,58 @@ export const ExportPanel = () => {
             </div>
           </div>
         </div>
+
+        {/* Simulasi Bacaan ATS (Teks Linear) */}
+        {!document.isEmpty ? (
+          <div className="rounded-xl border border-[#D9CEBC] bg-white p-3.5 sm:p-4 grid gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs sm:text-sm font-bold text-[#251813]">Simulasi Bacaan ATS (Teks Linear)</p>
+                <p className="text-xs text-[#59483F] mt-0.5">
+                  Urutan teks mentah persis seperti yang dibaca mesin penyaring ATS.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                aria-expanded={atsPreviewOpen}
+                onClick={() => setAtsPreviewOpen((prev) => !prev)}
+                className="gap-1.5 text-xs shrink-0"
+              >
+                <Eye size={15} weight="duotone" aria-hidden="true" />
+                <span>{atsPreviewOpen ? "Sembunyikan Simulasi Bacaan ATS" : "Lihat Simulasi Bacaan ATS"}</span>
+              </Button>
+            </div>
+
+            {atsPreviewOpen ? (
+              <div className="grid gap-2 border-t border-[#D9CEBC] pt-3">
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleCopyPlainText}
+                    className="gap-1.5 text-xs"
+                  >
+                    {copiedPlainText ? (
+                      <>
+                        <Check size={14} weight="bold" aria-hidden="true" />
+                        <span>Tersalin</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={14} weight="duotone" aria-hidden="true" />
+                        <span>Salin Teks Polos</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <pre className="max-h-72 overflow-auto rounded-lg border border-[#D9CEBC] bg-[#FFFDF8] p-3.5 text-xs leading-relaxed text-[#251813] whitespace-pre-wrap font-mono">
+                  {plainTextSnapshot}
+                </pre>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {/* Feedback Message */}
         <div role="status" aria-live="polite">

@@ -1,7 +1,12 @@
 import type { ReactElement, ReactNode } from "react";
 import type { CvTemplate, ResumeProfile } from "@/types/resume";
+import { buildAtsFileName } from "@/lib/ats/hygiene";
 import { DOC_STYLE, buildResumeDocument, type ResumeBuildOptions } from "@/lib/resume-document";
 import { compact } from "@/lib/text";
+
+export type ExportFileOptions = ResumeBuildOptions & {
+  targetJobTitle?: string;
+};
 
 const downloadBlob = (blob: Blob, fileName: string) => {
   const url = URL.createObjectURL(blob);
@@ -13,13 +18,6 @@ const downloadBlob = (blob: Blob, fileName: string) => {
   link.remove();
   URL.revokeObjectURL(url);
 };
-
-const safeFileName = (value: string) =>
-  value
-    .trim()
-    .replace(/[^a-z0-9]+/gi, "-")
-    .replace(/^-|-$/g, "")
-    .toLowerCase() || "quicktailor-cv";
 
 type PdfMetrics = {
   padV: number;
@@ -689,30 +687,30 @@ export const buildDocxDocument = async (
 export const exportPdf = async (
   resume: ResumeProfile,
   lang: "id" | "en" = "id",
-  options?: ResumeBuildOptions
+  options?: ExportFileOptions
 ) => {
   const { pdf } = await import("@react-pdf/renderer");
   const document = await buildPdfDocument(resume, lang, options);
   const blob = await pdf(document as Parameters<typeof pdf>[0]).toBlob();
-  downloadBlob(blob, `${safeFileName(resume.contact.fullName)}.pdf`);
+  downloadBlob(blob, `${buildAtsFileName(resume, lang, options?.targetJobTitle)}.pdf`);
 };
 
 export const exportDocx = async (
   resume: ResumeProfile,
   lang: "id" | "en" = "id",
-  options?: ResumeBuildOptions
+  options?: ExportFileOptions
 ) => {
   const { Packer } = await import("docx");
   const document = await buildDocxDocument(resume, lang, options);
   const blob = await Packer.toBlob(document);
-  downloadBlob(blob, `${safeFileName(resume.contact.fullName)}.docx`);
+  downloadBlob(blob, `${buildAtsFileName(resume, lang, options?.targetJobTitle)}.docx`);
 };
 
 export const exportTextFallback = (
   resume: ResumeProfile,
   lang: "id" | "en" = "id",
-  options?: ResumeBuildOptions
+  options?: ExportFileOptions
 ) => {
   const blob = new Blob([buildPlainTextResume(resume, lang, options)], { type: "text/plain;charset=utf-8" });
-  downloadBlob(blob, `${safeFileName(resume.contact.fullName)}.txt`);
+  downloadBlob(blob, `${buildAtsFileName(resume, lang, options?.targetJobTitle)}.txt`);
 };

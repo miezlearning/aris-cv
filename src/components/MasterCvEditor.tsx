@@ -4,6 +4,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   AddressBook,
+  ArrowDown,
+  ArrowUp,
   Briefcase,
   CaretDown,
   Certificate,
@@ -13,15 +15,34 @@ import {
   Medal,
   NotePencil,
   Plus,
+  SortDescending,
   Student,
   Trash,
   TrendUp,
   UsersThree,
+  WarningCircle,
   Wrench
 } from "@phosphor-icons/react";
 import { KumoTabs, type TabItem } from "@/components/KumoTabs";
 import { Button, Field, SectionCard, SelectInput, TextArea, TextInput } from "@/components/ui";
 import { FRESH_GRAD_XYZ_EXAMPLES } from "@/lib/analyzer";
+import {
+  isCertificationsChronological,
+  isEducationChronological,
+  isOrganizationsChronological,
+  isProjectsChronological,
+  isWorkExperienceChronological
+} from "@/lib/chronology";
+import {
+  cleanProfileUrl,
+  countWords,
+  getBulletHygieneWarnings,
+  hasFirstPersonPronoun,
+  hasInvertedWorkDateRange,
+  hasMessyUrl,
+  hasUnfilledPlaceholder,
+  isValidEmailFormat
+} from "@/lib/ats/hygiene";
 import { useCvStore, type MasterTab } from "@/lib/store";
 import { splitList } from "@/lib/text";
 import type { ExperienceLevel, WorkType } from "@/types/resume";
@@ -161,6 +182,105 @@ const XyzGuideToggle = () => {
   );
 };
 
+const EntryOrderControls = ({
+  index,
+  total,
+  itemLabel,
+  onMoveUp,
+  onMoveDown
+}: {
+  index: number;
+  total: number;
+  itemLabel: string;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+}) => {
+  if (total <= 1) return null;
+
+  return (
+    <div className="inline-flex items-center gap-1" role="group" aria-label={`Atur urutan ${itemLabel}`}>
+      <button
+        type="button"
+        onClick={onMoveUp}
+        disabled={index === 0}
+        title={`Geser ${itemLabel} ke atas`}
+        aria-label={`Geser ${itemLabel} ke atas`}
+        className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-xl border border-[#C2B49E] bg-white text-[#251813] hover:bg-[#FFF8DF] active:scale-[0.98] transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F6B57]"
+      >
+        <ArrowUp size={15} weight="bold" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        onClick={onMoveDown}
+        disabled={index === total - 1}
+        title={`Geser ${itemLabel} ke bawah`}
+        aria-label={`Geser ${itemLabel} ke bawah`}
+        className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-xl border border-[#C2B49E] bg-white text-[#251813] hover:bg-[#FFF8DF] active:scale-[0.98] transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F6B57]"
+      >
+        <ArrowDown size={15} weight="bold" aria-hidden="true" />
+      </button>
+    </div>
+  );
+};
+
+const ChronologyWarningBanner = ({
+  sectionLabel,
+  message,
+  onSort
+}: {
+  sectionLabel: string;
+  message: string;
+  onSort: () => void;
+}) => (
+  <div
+    role="status"
+    className="rounded-xl border border-[#DFC25A] bg-[#FFF0A8] p-3.5 text-xs sm:text-sm text-[#251813] flex flex-wrap items-center justify-between gap-2.5"
+  >
+    <div className="flex items-start gap-2.5 min-w-0 flex-1">
+      <WarningCircle size={18} weight="duotone" className="shrink-0 mt-0.5 text-[#4A3A2E]" aria-hidden="true" />
+      <p className="leading-relaxed">
+        <span className="font-bold">Urutan {sectionLabel} belum kronologis terbalik:</span> {message}
+      </p>
+    </div>
+    <Button type="button" variant="secondary" onClick={onSort} className="gap-1.5 shrink-0">
+      <SortDescending size={15} weight="bold" aria-hidden="true" />
+      <span>Urutkan Terbaru di Atas</span>
+    </Button>
+  </div>
+);
+
+const BulletCountChip = ({ bullets, ideal }: { bullets: string[]; ideal: string }) => {
+  const filledCount = bullets.filter((b) => b.trim()).length;
+  return (
+    <span className="rounded-md border border-[#D9CEBC] bg-[#FAF5E8] px-2 py-0.5 text-[11px] font-bold text-[#4E3E36]">
+      {filledCount} poin (Ideal: {ideal})
+    </span>
+  );
+};
+
+const BulletHygieneHints = ({ bullet }: { bullet: string }) => {
+  const warnings = getBulletHygieneWarnings(bullet);
+  if (warnings.length === 0) return null;
+
+  return (
+    <div className="mt-1.5 grid gap-1" role="status">
+      {warnings.map((msg) => {
+        const isPlaceholder = msg.includes("placeholder");
+        return (
+          <p
+            key={msg}
+            className={`text-xs leading-snug font-medium ${
+              isPlaceholder ? "text-[#7B1F14] font-semibold" : "text-[#4A3A2E]"
+            }`}
+          >
+            {msg}
+          </p>
+        );
+      })}
+    </div>
+  );
+};
+
 export const MasterCvEditor = () => {
   const activeTab = useCvStore((state) => state.activeMasterTab);
   const setActiveTab = useCvStore((state) => state.setActiveMasterTab);
@@ -172,6 +292,8 @@ export const MasterCvEditor = () => {
   const addExperience = useCvStore((state) => state.addExperience);
   const updateExperience = useCvStore((state) => state.updateExperience);
   const removeExperience = useCvStore((state) => state.removeExperience);
+  const moveExperience = useCvStore((state) => state.moveExperience);
+  const sortExperiencesChronologically = useCvStore((state) => state.sortExperiencesChronologically);
   const updateBullet = useCvStore((state) => state.updateBullet);
   const addBullet = useCvStore((state) => state.addBullet);
   const removeBullet = useCvStore((state) => state.removeBullet);
@@ -179,10 +301,14 @@ export const MasterCvEditor = () => {
   const addEducation = useCvStore((state) => state.addEducation);
   const updateEducation = useCvStore((state) => state.updateEducation);
   const removeEducation = useCvStore((state) => state.removeEducation);
+  const moveEducation = useCvStore((state) => state.moveEducation);
+  const sortEducationChronologically = useCvStore((state) => state.sortEducationChronologically);
 
   const addProject = useCvStore((state) => state.addProject);
   const updateProject = useCvStore((state) => state.updateProject);
   const removeProject = useCvStore((state) => state.removeProject);
+  const moveProject = useCvStore((state) => state.moveProject);
+  const sortProjectsChronologically = useCvStore((state) => state.sortProjectsChronologically);
   const addProjectBullet = useCvStore((state) => state.addProjectBullet);
   const updateProjectBullet = useCvStore((state) => state.updateProjectBullet);
   const removeProjectBullet = useCvStore((state) => state.removeProjectBullet);
@@ -190,6 +316,8 @@ export const MasterCvEditor = () => {
   const addOrganization = useCvStore((state) => state.addOrganization);
   const updateOrganization = useCvStore((state) => state.updateOrganization);
   const removeOrganization = useCvStore((state) => state.removeOrganization);
+  const moveOrganization = useCvStore((state) => state.moveOrganization);
+  const sortOrganizationsChronologically = useCvStore((state) => state.sortOrganizationsChronologically);
   const addOrganizationBullet = useCvStore((state) => state.addOrganizationBullet);
   const updateOrganizationBullet = useCvStore((state) => state.updateOrganizationBullet);
   const removeOrganizationBullet = useCvStore((state) => state.removeOrganizationBullet);
@@ -197,6 +325,8 @@ export const MasterCvEditor = () => {
   const addCertification = useCvStore((state) => state.addCertification);
   const updateCertification = useCvStore((state) => state.updateCertification);
   const removeCertification = useCvStore((state) => state.removeCertification);
+  const moveCertification = useCvStore((state) => state.moveCertification);
+  const sortCertificationsChronologically = useCvStore((state) => state.sortCertificationsChronologically);
 
   const updateSkills = useCvStore((state) => state.updateSkills);
   const addSkillGroup = useCvStore((state) => state.addSkillGroup);
@@ -398,14 +528,21 @@ export const MasterCvEditor = () => {
                   placeholder="Lulusan Teknik Informatika | Web Developer"
                 />
               </Field>
-              <Field label="Email aktif">
-                <TextInput
-                  type="email"
-                  value={resume.contact.email}
-                  onChange={(event) => updateContact("email", event.target.value)}
-                  placeholder="nama@email.com"
-                />
-              </Field>
+              <div className="grid gap-1.5">
+                <Field label="Email aktif">
+                  <TextInput
+                    type="email"
+                    value={resume.contact.email}
+                    onChange={(event) => updateContact("email", event.target.value)}
+                    placeholder="nama@email.com"
+                  />
+                </Field>
+                {resume.contact.email.trim() && !isValidEmailFormat(resume.contact.email) ? (
+                  <p className="text-xs font-semibold text-[#7B1F14]">
+                    Format email belum valid (contoh: nama@email.com).
+                  </p>
+                ) : null}
+              </div>
               <Field label="Nomor telepon / WhatsApp">
                 <TextInput
                   value={resume.contact.phone}
@@ -420,20 +557,48 @@ export const MasterCvEditor = () => {
                   placeholder="Kota, Provinsi"
                 />
               </Field>
-              <Field label="LinkedIn (opsional)">
-                <TextInput
-                  value={resume.contact.linkedinUrl}
-                  onChange={(event) => updateContact("linkedinUrl", event.target.value)}
-                  placeholder="linkedin.com/in/username"
-                />
-              </Field>
-              <Field label="Portofolio / GitHub (opsional)" className="sm:col-span-2">
-                <TextInput
-                  value={resume.contact.portfolioUrl}
-                  onChange={(event) => updateContact("portfolioUrl", event.target.value)}
-                  placeholder="github.com/username"
-                />
-              </Field>
+              <div className="grid gap-1.5">
+                <Field label="LinkedIn (opsional)">
+                  <TextInput
+                    value={resume.contact.linkedinUrl}
+                    onChange={(event) => updateContact("linkedinUrl", event.target.value)}
+                    placeholder="linkedin.com/in/username"
+                  />
+                </Field>
+                {hasMessyUrl(resume.contact.linkedinUrl) ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#DFC25A] bg-[#FFF8DF] px-2.5 py-1.5 text-xs text-[#4A3A2E]">
+                    <span>Hapus https://, www., atau parameter tracking agar rapi di CV.</span>
+                    <button
+                      type="button"
+                      onClick={() => updateContact("linkedinUrl", cleanProfileUrl(resume.contact.linkedinUrl))}
+                      className="min-h-[44px] rounded-lg border border-[#C2B49E] bg-white px-3 text-xs font-bold text-[#251813] hover:bg-[#FFF0A8] transition-colors cursor-pointer"
+                    >
+                      Rapikan URL
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              <div className="grid gap-1.5 sm:col-span-2">
+                <Field label="Portofolio / GitHub (opsional)">
+                  <TextInput
+                    value={resume.contact.portfolioUrl}
+                    onChange={(event) => updateContact("portfolioUrl", event.target.value)}
+                    placeholder="github.com/username"
+                  />
+                </Field>
+                {hasMessyUrl(resume.contact.portfolioUrl) ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#DFC25A] bg-[#FFF8DF] px-2.5 py-1.5 text-xs text-[#4A3A2E]">
+                    <span>Tautan lebih bersih untuk ATS tanpa https:// atau parameter URL.</span>
+                    <button
+                      type="button"
+                      onClick={() => updateContact("portfolioUrl", cleanProfileUrl(resume.contact.portfolioUrl))}
+                      className="min-h-[44px] rounded-lg border border-[#C2B49E] bg-white px-3 text-xs font-bold text-[#251813] hover:bg-[#FFF0A8] transition-colors cursor-pointer"
+                    >
+                      Rapikan URL
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </SectionCard>
         ) : null}
@@ -445,7 +610,7 @@ export const MasterCvEditor = () => {
             accent="sky"
             icon={<NotePencil size={20} weight="duotone" />}
           >
-            <div className="grid gap-4">
+            <div className="grid gap-3">
               <Field label="Ringkasan diri">
                 <TextArea
                   rows={5}
@@ -458,6 +623,43 @@ export const MasterCvEditor = () => {
                   }
                 />
               </Field>
+              {(() => {
+                const words = countWords(resume.summary);
+                const statusText =
+                  words === 0
+                    ? "Belum diisi"
+                    : words < 20
+                    ? "Terlalu singkat"
+                    : words <= 85
+                    ? "Panjang ideal"
+                    : "Cukup panjang, coba ringkas";
+                const statusTone =
+                  words >= 20 && words <= 85
+                    ? "border-[#9FD499] bg-[#DFF5DA] text-[#144C32]"
+                    : words === 0
+                    ? "border-[#D9CEBC] bg-[#FAF5E8] text-[#4E3E36]"
+                    : "border-[#DFC25A] bg-[#FFF0A8] text-[#4A3A2E]";
+                return (
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="text-[#4E3E36] font-medium">
+                      {words} kata (Ideal: 30-75 kata, 2-4 kalimat)
+                    </span>
+                    <span className={`rounded-md border px-2 py-0.5 font-bold ${statusTone}`}>
+                      {statusText}
+                    </span>
+                  </div>
+                );
+              })()}
+              {hasUnfilledPlaceholder(resume.summary) ? (
+                <p className="text-xs font-semibold text-[#7B1F14]">
+                  Masih ada placeholder [...] yang belum diisi di ringkasan profil.
+                </p>
+              ) : null}
+              {hasFirstPersonPronoun(resume.summary) ? (
+                <p className="text-xs font-medium text-[#4A3A2E]">
+                  Tips ATS: Hindari kata ganti orang pertama (Saya/Aku/I). Awali langsung dengan posisi atau latar belakangmu.
+                </p>
+              ) : null}
             </div>
           </SectionCard>
         ) : null}
@@ -467,35 +669,64 @@ export const MasterCvEditor = () => {
             title="Pendidikan"
             description={
               isFresh
-                ? "Cantumkan IPK, tugas akhir, atau mata kuliah yang relevan."
-                : "Tuliskan riwayat pendidikan terakhirmu."
+                ? "Cantumkan IPK, tugas akhir, atau mata kuliah yang relevan. Jika lebih dari satu, taruh jenjang terbaru di atas."
+                : "Tuliskan riwayat pendidikan terakhirmu (jenjang paling baru di atas)."
             }
             accent="sage"
             icon={<GraduationCap size={20} weight="duotone" />}
             actions={
-              <Button type="button" variant="secondary" onClick={addEducation} className="gap-1.5">
-                <Plus size={15} weight="bold" aria-hidden="true" />
-                <span>Tambah Pendidikan</span>
-              </Button>
+              <>
+                {resume.education.length >= 2 ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={sortEducationChronologically}
+                    className="gap-1.5"
+                  >
+                    <SortDescending size={15} weight="bold" aria-hidden="true" />
+                    <span>Urutkan Terbaru</span>
+                  </Button>
+                ) : null}
+                <Button type="button" variant="secondary" onClick={addEducation} className="gap-1.5">
+                  <Plus size={15} weight="bold" aria-hidden="true" />
+                  <span>Tambah Pendidikan</span>
+                </Button>
+              </>
             }
           >
             <div className="grid gap-5">
+              {resume.education.length >= 2 && !isEducationChronological(resume.education) ? (
+                <ChronologyWarningBanner
+                  sectionLabel="pendidikan"
+                  message="Jenjang atau tahun lulus terbaru sebaiknya ditaruh paling atas agar perekrut langsung melihat pendidikan terakhirmu."
+                  onSort={sortEducationChronologically}
+                />
+              ) : null}
               {resume.education.map((education, eduIndex) => (
                 <div key={education.id} className="rounded-xl border border-[#D9CEBC] bg-white p-4 sm:p-5">
-                  <div className="flex items-center justify-between mb-4 border-b border-[#D9CEBC] pb-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-4 border-b border-[#D9CEBC] pb-2.5">
                     <span className="text-xs font-bold uppercase tracking-wider text-[#59483F]">
                       Pendidikan #{eduIndex + 1}
                     </span>
-                    {resume.education.length > 1 ? (
-                      <button
-                        type="button"
-                        onClick={() => removeEducation(education.id)}
-                        className="inline-flex items-center gap-1 min-h-[44px] px-2.5 text-xs font-bold text-[#7B1F14] hover:underline"
-                      >
-                        <Trash size={14} weight="duotone" aria-hidden="true" />
-                        <span>Hapus</span>
-                      </button>
-                    ) : null}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <EntryOrderControls
+                        index={eduIndex}
+                        total={resume.education.length}
+                        itemLabel={`Pendidikan #${eduIndex + 1}`}
+                        onMoveUp={() => moveEducation(education.id, "up")}
+                        onMoveDown={() => moveEducation(education.id, "down")}
+                      />
+                      {resume.education.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => removeEducation(education.id)}
+                          className="inline-flex items-center gap-1 min-h-[44px] px-2.5 text-xs font-bold text-[#7B1F14] hover:underline cursor-pointer"
+                        >
+                          <Trash size={14} weight="duotone" aria-hidden="true" />
+                          <span>Hapus</span>
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2 items-start">
                     <Field label="Universitas / Sekolah">
@@ -572,18 +803,38 @@ export const MasterCvEditor = () => {
         {activeTab === "projects" ? (
           <SectionCard
             title="Proyek & Tugas Akhir"
-            description="Proyek kuliah, tugas akhir, freelance, atau karya mandiri."
+            description="Proyek kuliah, tugas akhir, freelance, atau karya mandiri. Urutkan dari yang paling baru atau paling relevan."
             accent="butter"
             icon={<CodeBlock size={20} weight="duotone" />}
             actions={
-              <Button type="button" onClick={addProject} className="gap-1.5">
-                <Plus size={15} weight="bold" aria-hidden="true" />
-                <span>Tambah Proyek</span>
-              </Button>
+              <>
+                {resume.projects.length >= 2 ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={sortProjectsChronologically}
+                    className="gap-1.5"
+                  >
+                    <SortDescending size={15} weight="bold" aria-hidden="true" />
+                    <span>Urutkan Terbaru</span>
+                  </Button>
+                ) : null}
+                <Button type="button" onClick={addProject} className="gap-1.5">
+                  <Plus size={15} weight="bold" aria-hidden="true" />
+                  <span>Tambah Proyek</span>
+                </Button>
+              </>
             }
           >
             <div className="grid gap-5">
               <XyzGuideToggle />
+              {resume.projects.length >= 2 && !isProjectsChronological(resume.projects) ? (
+                <ChronologyWarningBanner
+                  sectionLabel="proyek"
+                  message="Proyek yang sedang berjalan atau paling baru dikerjakan sebaiknya ditempatkan di paling atas."
+                  onSort={sortProjectsChronologically}
+                />
+              ) : null}
 
               {resume.projects.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-[#C2B49E] bg-white p-6 text-center">
@@ -604,18 +855,27 @@ export const MasterCvEditor = () => {
                     animate={{ opacity: 1, y: 0 }}
                     className="rounded-xl border border-[#D9CEBC] bg-white p-4 sm:p-5"
                   >
-                    <div className="flex items-center justify-between mb-4 border-b border-[#D9CEBC] pb-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-4 border-b border-[#D9CEBC] pb-2.5">
                       <span className="text-xs font-bold uppercase tracking-wider text-[#59483F]">
                         Proyek #{projIdx + 1}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => removeProject(project.id)}
-                        className="inline-flex items-center gap-1 min-h-[44px] px-2.5 text-xs font-bold text-[#7B1F14] hover:underline"
-                      >
-                        <Trash size={14} weight="duotone" aria-hidden="true" />
-                        <span>Hapus proyek</span>
-                      </button>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <EntryOrderControls
+                          index={projIdx}
+                          total={resume.projects.length}
+                          itemLabel={`Proyek #${projIdx + 1}`}
+                          onMoveUp={() => moveProject(project.id, "up")}
+                          onMoveDown={() => moveProject(project.id, "down")}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeProject(project.id)}
+                          className="inline-flex items-center gap-1 min-h-[44px] px-2.5 text-xs font-bold text-[#7B1F14] hover:underline cursor-pointer"
+                        >
+                          <Trash size={14} weight="duotone" aria-hidden="true" />
+                          <span>Hapus proyek</span>
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid gap-4 sm:grid-cols-2 items-start">
@@ -665,7 +925,10 @@ export const MasterCvEditor = () => {
                     </div>
 
                     <div className="mt-4 border-t border-[#D9CEBC] pt-4 grid gap-3">
-                      <p className="text-sm font-bold text-[#251813]">Poin hal yang kamu kerjakan & hasilnya</p>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-bold text-[#251813]">Poin hal yang kamu kerjakan & hasilnya</p>
+                        <BulletCountChip bullets={project.bulletPoints} ideal="2-4 poin" />
+                      </div>
                       {project.bulletPoints.map((bullet, bIdx) => (
                         <div key={`${project.id}-b-${bIdx}`} className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-start">
                           <div className="flex-1">
@@ -675,6 +938,7 @@ export const MasterCvEditor = () => {
                               onChange={(event) => updateProjectBullet(project.id, bIdx, event.target.value)}
                               placeholder="Contoh: Membangun modul pelacakan 180+ perangkat lab menggunakan PostgreSQL untuk menggantikan pencatatan manual."
                             />
+                            <BulletHygieneHints bullet={bullet} />
                           </div>
                           <Button
                             type="button"
@@ -705,20 +969,40 @@ export const MasterCvEditor = () => {
             title={isFresh ? "Magang, PKL, & Kerja" : "Pengalaman Kerja"}
             description={
               isFresh
-                ? "Boleh dikosongkan jika belum ada pengalaman kerja atau magang."
-                : "Urutkan dari pengalaman paling baru."
+                ? "Boleh dikosongkan jika belum ada. Jika lebih dari satu, taruh posisi aktif (Sekarang) atau paling baru di atas."
+                : "Urutkan dari pengalaman yang masih berjalan (Sekarang) atau paling baru di paling atas."
             }
             accent="sky"
             icon={<Briefcase size={20} weight="duotone" />}
             actions={
-              <Button type="button" variant="secondary" onClick={addExperience} className="gap-1.5">
-                <Plus size={15} weight="bold" aria-hidden="true" />
-                <span>Tambah Pengalaman</span>
-              </Button>
+              <>
+                {resume.workExperience.length >= 2 ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={sortExperiencesChronologically}
+                    className="gap-1.5"
+                  >
+                    <SortDescending size={15} weight="bold" aria-hidden="true" />
+                    <span>Urutkan Terbaru</span>
+                  </Button>
+                ) : null}
+                <Button type="button" variant="secondary" onClick={addExperience} className="gap-1.5">
+                  <Plus size={15} weight="bold" aria-hidden="true" />
+                  <span>Tambah Pengalaman</span>
+                </Button>
+              </>
             }
           >
             <div className="grid gap-5">
               <XyzGuideToggle />
+              {resume.workExperience.length >= 2 && !isWorkExperienceChronological(resume.workExperience) ? (
+                <ChronologyWarningBanner
+                  sectionLabel="pengalaman kerja"
+                  message="Pengalaman yang masih berjalan (Sekarang/Present) dan yang paling baru selesai harus berada di paling atas."
+                  onSort={sortExperiencesChronologically}
+                />
+              ) : null}
 
               {resume.workExperience.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-[#C2B49E] bg-white p-6 text-center">
@@ -741,18 +1025,34 @@ export const MasterCvEditor = () => {
                     animate={{ opacity: 1, y: 0 }}
                     className="rounded-xl border border-[#D9CEBC] bg-white p-4 sm:p-5"
                   >
-                    <div className="flex items-center justify-between mb-4 border-b border-[#D9CEBC] pb-2.5">
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#59483F]">
-                        Pengalaman #{expIndex + 1}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeExperience(experience.id)}
-                        className="inline-flex items-center gap-1 min-h-[44px] px-2.5 text-xs font-bold text-[#7B1F14] hover:underline"
-                      >
-                        <Trash size={14} weight="duotone" aria-hidden="true" />
-                        <span>Hapus bagian ini</span>
-                      </button>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-4 border-b border-[#D9CEBC] pb-2.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-[#59483F]">
+                          Pengalaman #{expIndex + 1}
+                        </span>
+                        {experience.isCurrent ? (
+                          <span className="rounded-md border border-[#9FD499] bg-[#DFF5DA] px-2 py-0.5 text-[11px] font-bold text-[#144C32]">
+                            Aktif
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <EntryOrderControls
+                          index={expIndex}
+                          total={resume.workExperience.length}
+                          itemLabel={`Pengalaman #${expIndex + 1}`}
+                          onMoveUp={() => moveExperience(experience.id, "up")}
+                          onMoveDown={() => moveExperience(experience.id, "down")}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeExperience(experience.id)}
+                          className="inline-flex items-center gap-1 min-h-[44px] px-2.5 text-xs font-bold text-[#7B1F14] hover:underline cursor-pointer"
+                        >
+                          <Trash size={14} weight="duotone" aria-hidden="true" />
+                          <span>Hapus bagian ini</span>
+                        </button>
+                      </div>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2 items-start">
                       <Field label="Nama perusahaan atau instansi">
@@ -827,12 +1127,24 @@ export const MasterCvEditor = () => {
                       </div>
                     </div>
 
+                    {hasInvertedWorkDateRange(experience) ? (
+                      <p
+                        role="alert"
+                        className="mt-3 rounded-xl border border-[#E9A590] bg-[#FFE3D8] px-3 py-2 text-xs font-semibold text-[#7B1F14]"
+                      >
+                        Tanggal selesai lebih awal dari tanggal mulai. Periksa kembali periode kerja ini.
+                      </p>
+                    ) : null}
+
                     <div className="mt-4 border-t border-[#D9CEBC] pt-4 grid gap-3">
-                      <div>
-                        <p className="text-sm font-bold text-[#251813]">Poin-poin pencapaian</p>
-                        <p className="text-xs text-[#59483F] mt-0.5">
-                          Tulis tindakan nyata, alat yang dipakai, dan angka hasil terukur jika datanya ada.
-                        </p>
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-bold text-[#251813]">Poin-poin pencapaian</p>
+                          <p className="text-xs text-[#59483F] mt-0.5">
+                            Tulis tindakan nyata, alat yang dipakai, dan angka hasil terukur jika datanya ada.
+                          </p>
+                        </div>
+                        <BulletCountChip bullets={experience.bulletPoints} ideal="2-5 poin" />
                       </div>
 
                       <div className="grid gap-2.5">
@@ -848,6 +1160,7 @@ export const MasterCvEditor = () => {
                                 onChange={(event) => updateBullet(experience.id, index, event.target.value)}
                                 placeholder="Contoh: Menangani troubleshooting 15+ tiket perangkat keras dan jaringan LAN setiap minggu untuk unit administrasi."
                               />
+                              <BulletHygieneHints bullet={bullet} />
                             </div>
                             <Button
                               type="button"
@@ -879,18 +1192,38 @@ export const MasterCvEditor = () => {
         {activeTab === "organizations" ? (
           <SectionCard
             title="Organisasi & Kepanitiaan"
-            description="Kegiatan kampus, UKM, kepanitiaan, atau relawan."
+            description="Kegiatan kampus, UKM, kepanitiaan, atau relawan. Urutkan dari yang masih aktif atau paling baru."
             accent="sage"
             icon={<UsersThree size={20} weight="duotone" />}
             actions={
-              <Button type="button" variant="secondary" onClick={addOrganization} className="gap-1.5">
-                <Plus size={15} weight="bold" aria-hidden="true" />
-                <span>Tambah Organisasi</span>
-              </Button>
+              <>
+                {resume.organizations.length >= 2 ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={sortOrganizationsChronologically}
+                    className="gap-1.5"
+                  >
+                    <SortDescending size={15} weight="bold" aria-hidden="true" />
+                    <span>Urutkan Terbaru</span>
+                  </Button>
+                ) : null}
+                <Button type="button" variant="secondary" onClick={addOrganization} className="gap-1.5">
+                  <Plus size={15} weight="bold" aria-hidden="true" />
+                  <span>Tambah Organisasi</span>
+                </Button>
+              </>
             }
           >
             <div className="grid gap-5">
               <XyzGuideToggle />
+              {resume.organizations.length >= 2 && !isOrganizationsChronological(resume.organizations) ? (
+                <ChronologyWarningBanner
+                  sectionLabel="organisasi"
+                  message="Pengalaman organisasi yang masih aktif atau paling baru sebaiknya berada di paling atas."
+                  onSort={sortOrganizationsChronologically}
+                />
+              ) : null}
 
               {resume.organizations.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-[#C2B49E] bg-white p-6 text-center">
@@ -911,18 +1244,27 @@ export const MasterCvEditor = () => {
                     animate={{ opacity: 1, y: 0 }}
                     className="rounded-xl border border-[#D9CEBC] bg-white p-4 sm:p-5"
                   >
-                    <div className="flex items-center justify-between mb-4 border-b border-[#D9CEBC] pb-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-4 border-b border-[#D9CEBC] pb-2.5">
                       <span className="text-xs font-bold uppercase tracking-wider text-[#59483F]">
                         Organisasi #{orgIdx + 1}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => removeOrganization(org.id)}
-                        className="inline-flex items-center gap-1 min-h-[44px] px-2.5 text-xs font-bold text-[#7B1F14] hover:underline"
-                      >
-                        <Trash size={14} weight="duotone" aria-hidden="true" />
-                        <span>Hapus</span>
-                      </button>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <EntryOrderControls
+                          index={orgIdx}
+                          total={resume.organizations.length}
+                          itemLabel={`Organisasi #${orgIdx + 1}`}
+                          onMoveUp={() => moveOrganization(org.id, "up")}
+                          onMoveDown={() => moveOrganization(org.id, "down")}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeOrganization(org.id)}
+                          className="inline-flex items-center gap-1 min-h-[44px] px-2.5 text-xs font-bold text-[#7B1F14] hover:underline cursor-pointer"
+                        >
+                          <Trash size={14} weight="duotone" aria-hidden="true" />
+                          <span>Hapus</span>
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid gap-4 sm:grid-cols-2 items-start">
@@ -950,7 +1292,10 @@ export const MasterCvEditor = () => {
                     </div>
 
                     <div className="mt-4 border-t border-[#D9CEBC] pt-4 grid gap-3">
-                      <p className="text-sm font-bold text-[#251813]">Kontribusi & hasil kegiatan</p>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-bold text-[#251813]">Kontribusi & hasil kegiatan</p>
+                        <BulletCountChip bullets={org.bulletPoints} ideal="2-4 poin" />
+                      </div>
                       {org.bulletPoints.map((bullet, bIdx) => (
                         <div key={`${org.id}-b-${bIdx}`} className="flex flex-col sm:flex-row gap-2 sm:items-start">
                           <div className="flex-1">
@@ -960,6 +1305,7 @@ export const MasterCvEditor = () => {
                               onChange={(event) => updateOrganizationBullet(org.id, bIdx, event.target.value)}
                               placeholder="Contoh: Mengkoordinasikan 4 lokakarya pelatihan teknologi yang diikuti 160 peserta mahasiswa."
                             />
+                            <BulletHygieneHints bullet={bullet} />
                           </div>
                           <Button
                             type="button"
@@ -988,14 +1334,27 @@ export const MasterCvEditor = () => {
         {activeTab === "certifications" ? (
           <SectionCard
             title="Sertifikasi & Pelatihan"
-            description="Kursus, bootcamp, atau sertifikat kompetensi relevan."
+            description="Kursus, bootcamp, atau sertifikat kompetensi relevan. Urutkan dari tahun terbaru."
             accent="butter"
             icon={<Certificate size={20} weight="duotone" />}
             actions={
-              <Button type="button" variant="secondary" onClick={addCertification} className="gap-1.5">
-                <Plus size={15} weight="bold" aria-hidden="true" />
-                <span>Tambah Sertifikasi</span>
-              </Button>
+              <>
+                {resume.certificationItems.length >= 2 ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={sortCertificationsChronologically}
+                    className="gap-1.5"
+                  >
+                    <SortDescending size={15} weight="bold" aria-hidden="true" />
+                    <span>Urutkan Terbaru</span>
+                  </Button>
+                ) : null}
+                <Button type="button" variant="secondary" onClick={addCertification} className="gap-1.5">
+                  <Plus size={15} weight="bold" aria-hidden="true" />
+                  <span>Tambah Sertifikasi</span>
+                </Button>
+              </>
             }
           >
             {resume.certificationItems.length === 0 ? (
@@ -1009,6 +1368,14 @@ export const MasterCvEditor = () => {
               </div>
             ) : (
               <div className="grid gap-4">
+                {resume.certificationItems.length >= 2 &&
+                !isCertificationsChronological(resume.certificationItems) ? (
+                  <ChronologyWarningBanner
+                    sectionLabel="sertifikasi"
+                    message="Sertifikat atau pelatihan dengan tahun terbaru sebaiknya berada di paling atas."
+                    onSort={sortCertificationsChronologically}
+                  />
+                ) : null}
                 {resume.certificationItems.map((cert, certIdx) => (
                   <motion.div
                     key={cert.id}
@@ -1016,18 +1383,27 @@ export const MasterCvEditor = () => {
                     animate={{ opacity: 1, y: 0 }}
                     className="rounded-xl border border-[#D9CEBC] bg-white p-4 sm:p-5"
                   >
-                    <div className="flex items-center justify-between mb-3 border-b border-[#D9CEBC] pb-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3 border-b border-[#D9CEBC] pb-2">
                       <span className="text-xs font-bold uppercase tracking-wider text-[#59483F]">
                         Sertifikasi #{certIdx + 1}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => removeCertification(cert.id)}
-                        className="inline-flex items-center gap-1 min-h-[44px] px-2.5 text-xs font-bold text-[#7B1F14] hover:underline"
-                      >
-                        <Trash size={14} weight="duotone" aria-hidden="true" />
-                        <span>Hapus</span>
-                      </button>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <EntryOrderControls
+                          index={certIdx}
+                          total={resume.certificationItems.length}
+                          itemLabel={`Sertifikasi #${certIdx + 1}`}
+                          onMoveUp={() => moveCertification(cert.id, "up")}
+                          onMoveDown={() => moveCertification(cert.id, "down")}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeCertification(cert.id)}
+                          className="inline-flex items-center gap-1 min-h-[44px] px-2.5 text-xs font-bold text-[#7B1F14] hover:underline cursor-pointer"
+                        >
+                          <Trash size={14} weight="duotone" aria-hidden="true" />
+                          <span>Hapus</span>
+                        </button>
+                      </div>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-3 items-start">
                       <Field label="Nama sertifikasi / pelatihan" className="sm:col-span-2">

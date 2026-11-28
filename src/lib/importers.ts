@@ -11,6 +11,7 @@ import type {
   WorkType
 } from "@/types/resume";
 import { createId, emptyResumeProfile } from "@/lib/defaults";
+import { sortWorkExperienceDesc } from "@/lib/chronology";
 import {
   looksLikeLinkedInText,
   mergeResumeProfiles,
@@ -228,15 +229,17 @@ const fromJsonResume = (json: Record<string, any>): ResumeProfile => {
   const workExperience =
     Array.isArray(json.work) && json.work.length
       ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        json.work.map((item: any) => ({
-          id: createId(),
-          company: item.name ?? item.company ?? "",
-          role: item.position ?? "",
-          startDate: toMonthYear(item.startDate),
-          endDate: item.endDate ? toMonthYear(item.endDate) : "Present",
-          isCurrent: !item.endDate,
-          bulletPoints: item.highlights?.length ? item.highlights : [item.summary ?? ""].filter(Boolean)
-        }))
+        sortWorkExperienceDesc(
+          json.work.map((item: any) => ({
+            id: createId(),
+            company: item.name ?? item.company ?? "",
+            role: item.position ?? "",
+            startDate: toMonthYear(item.startDate),
+            endDate: item.endDate ? toMonthYear(item.endDate) : "Present",
+            isCurrent: !item.endDate,
+            bulletPoints: item.highlights?.length ? item.highlights : [item.summary ?? ""].filter(Boolean)
+          }))
+        )
       : [];
 
   const projects =
@@ -1160,7 +1163,7 @@ const fromStructuredText = (raw: string): ResumeProfile => {
   const { contact, leftoverSummary } = parseHeaderLines(sections.header);
 
   const summary = [...leftoverSummary, ...sections.summary].join(" ").replace(/\s+/g, " ").trim();
-  const workExperience = parseExperienceSection(sections.experience);
+  const workExperience = sortWorkExperienceDesc(parseExperienceSection(sections.experience));
   const organizations = parseOrganizationsSection(sections.organizations);
   const projects = parseProjectsSection(sections.projects);
   const education = parseEducationSection(sections.education);
