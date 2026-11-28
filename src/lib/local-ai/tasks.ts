@@ -5,13 +5,97 @@ import { runLocalChatCompletion, type ActiveLocalAiConfig } from "@/lib/local-ai
 const isGetQueryConfig = (config: ActiveLocalAiConfig): boolean =>
   config.mode === "rest_api" && config.format === "get_query";
 
-const stripWrapperQuotes = (text: string): string =>
-  text
-    .replace(/^```[\s\S]*?\n|```$/g, "")
-    .replace(/^[-•*\s]+/, "")
-    .replace(/^["'`]+|["'`]+$/g, "")
-    .replace(/^(?:Rewritten bullet|Hasil|Output|Summary|Ringkasan)\s*:\s*/i, "")
+const PREAMBLE_KEYWORD_RE =
+  /\b(?:here(?:'s| is)|below is|sure|certainly|of course|rewritten|improved|updated|tailored|translated|translation|summary|bullet|output|result|ats english|bahasa indonesia|berikut|tentu|baik|hasil|ringkasan|terjemahan|versi)\b/i;
+
+const STANDALONE_LEADIN_RE =
+  /^(?:sure|certainly|of course|here(?:'s| is)\b[^.!?]{0,100}|tentu|baiklah|berikut(?:\s+adalah)?\b[^.!?]{0,100})[!.:\s]*$/i;
+
+const TRAILING_NOTE_RE =
+  /^(?:[*_]{1,2})?(?:note|catatan|explanation|penjelasan|reason|alasan|tips?|disclaimer|key changes|perubahan)(?:[*_]{1,2})?\s*:/i;
+
+const INLINE_LABEL_PREFIX_RE =
+  /^(?:here(?:'s| is)\s+(?:the\s+)?(?:rewritten|improved|updated|tailored|translated)\s+(?:bullet(?:\s+point)?|summary|text|version)(?:\s+in\s+[^:]{1,40})?|(?:rewritten|improved|updated|tailored)\s+(?:bullet(?:\s+point)?|summary)|hasil(?:\s+perbaikan)?|output|summary|ringkasan|translation|terjemahan)\s*:\s*/i;
+
+export const stripThinkingAndFences = (raw: string): string =>
+  (raw ?? "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/```[a-zA-Z0-9_-]*\r?\n([\s\S]*?)```/g, "$1")
+    .replace(/```/g, "")
     .trim();
+
+export const isConversationalPreambleLine = (line: string): boolean => {
+  const clean = line.trim().replace(/^[*_]+|[*_]+$/g, "").trim();
+  if (!clean) return true;
+  if (clean.endsWith(":") && clean.length <= 140 && PREAMBLE_KEYWORD_RE.test(clean)) {
+    return true;
+  }
+  return STANDALONE_LEADIN_RE.test(clean);
+};
+
+export const isTrailingNoteLine = (line: string): boolean =>
+  TRAILING_NOTE_RE.test(line.trim());
+
+export const stripInlineLabelAndFormatting = (line: string): string => {
+  let clean = line.trim();
+  clean = clean.replace(/^(?:[-•\u2022]|\*(?!\*)|\d+[.)])\s+/, "").trim();
+  clean = clean.replace(INLINE_LABEL_PREFIX_RE, "").trim();
+  clean = clean.replace(/^["'`]+|["'`]+$/g, "").trim();
+  clean = clean.replace(/^\*\*([\s\S]+)\*\*$/, "$1").replace(/^\*([\s\S]+)\*$/, "$1").trim();
+  clean = clean.replace(/^(?:[-•\u2022]|\*(?!\*))\s+/, "").replace(/^["'`]+|["'`]+$/g, "").trim();
+  return clean;
+};
+
+export const cleanAiSingleLineOutput = (raw: string): string => {
+  const lines = stripThinkingAndFences(raw)
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  while (lines.length > 0 && isConversationalPreambleLine(lines[0])) {
+    lines.shift();
+  }
+  while (lines.length > 0 && isTrailingNoteLine(lines[lines.length - 1])) {
+    lines.pop();
+  }
+
+  if (lines.length === 0) return "";
+
+  const chosen = lines.find((l) => !l.endsWith(":")) ?? lines[0];
+  const cleaned = stripInlineLabelAndFormatting(chosen);
+  if (!cleaned || cleaned.endsWith(":") || isConversationalPreambleLine(cleaned)) {
+    return "";
+  }
+  return cleaned;
+};
+
+export const cleanAiParagraphOutput = (raw: string): string => {
+  const lines = stripThinkingAndFences(raw)
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  while (lines.length > 0 && isConversationalPreambleLine(lines[0])) {
+    lines.shift();
+  }
+  while (lines.length > 0 && isTrailingNoteLine(lines[lines.length - 1])) {
+    lines.pop();
+  }
+
+  if (lines.length === 0) return "";
+
+  const cleaned = lines
+    .map((line) => stripInlineLabelAndFormatting(line))
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned || cleaned.endsWith(":") || isConversationalPreambleLine(cleaned)) {
+    return "";
+  }
+  return cleaned;
+};
 
 export const rewriteBulletWithLocalAi = async (
   config: ActiveLocalAiConfig,
@@ -33,13 +117,13 @@ export const rewriteBulletWithLocalAi = async (
 
   const compactMode = isGetQueryConfig(config);
   const systemPrompt = compactMode
-    ? `Rewrite ONE CV bullet in ${langLabel} (Action + Tools + Result). NEVER invent metrics or tools. ${actionRule} Return ONLY ONE plain sentence.`
+    ? `Rewrite ONE CV bullet in ${langLabel} (Action + Tools + Result). NEVER invent metrics or tools. ${actionRule} Return ONLY ONE plain sentence. NO intro or preamble like 'Here is...'.`
     : `You are a strict, honest ATS Resume Coach. Rewrite ONE resume bullet point in ${langLabel} so it aligns better with the target job description using Google XYZ/STAR structure (Action + Context/Tools + Outcome).
 STRICT RULES:
 1. NEVER invent numbers, percentages, metrics, tools, or achievements not stated in the original bullet.
 2. Only incorporate target keywords if they accurately describe what is already in the original bullet.
 3. ${actionRule}
-4. Return ONLY ONE plain single-line bullet sentence without bullet symbol, quotes, or explanation.`;
+4. Return ONLY ONE plain single-line bullet sentence without bullet symbol, quotes, explanation, or intro/preamble like 'Here is...'.`;
 
   const userPrompt = `Target Role: ${params.jobTitle || "General Role"}
 Relevant Job Keywords: ${kwText}
@@ -56,9 +140,9 @@ Original Bullet: ${params.bullet}`;
     { temperature: 0.25, maxTokens: 160 }
   );
 
-  const cleaned = stripWrapperQuotes(raw.split(/\r?\n/)[0] ?? "");
+  const cleaned = cleanAiSingleLineOutput(raw);
   if (!cleaned || cleaned.length < 10) {
-    throw new Error("Model mengembalikan output terlalu pendek. Coba susun ulang lagi.");
+    throw new Error("Model mengembalikan output tidak valid atau hanya kalimat pembuka. Coba susun ulang lagi.");
   }
 
   const hasNumber = /\d/.test(cleaned);
@@ -86,7 +170,7 @@ export const tailorSummaryWithLocalAi = async (
 STRICT RULES:
 1. Keep 2 to 4 concise sentences without first-person pronouns ("I", "Saya", "Aku").
 2. NEVER fabricate years of experience, companies, GPA, tools, or metrics not already present in the original summary or matched facts.
-3. Return ONLY the rewritten summary paragraph, with no quotes or prefix labels.`;
+3. Return ONLY the rewritten summary paragraph, with NO quotes, NO prefix labels, and NO intro/preamble like 'Here is...'.`;
 
   const userPrompt = `Target Role: ${params.jobTitle || "-"} ${params.companyName ? `at ${params.companyName}` : ""}
 Verified Matching Qualifications on Candidate CV: ${params.matchedKeywords.slice(0, 10).join(", ") || "-"}
@@ -102,9 +186,9 @@ Original Summary: ${params.summary}`;
     { temperature: 0.25, maxTokens: 260 }
   );
 
-  const cleaned = stripWrapperQuotes(raw);
+  const cleaned = cleanAiParagraphOutput(raw);
   if (!cleaned || cleaned.length < 25) {
-    throw new Error("Ringkasan dari model terlalu pendek. Coba jalankan kembali.");
+    throw new Error("Ringkasan dari model terlalu pendek atau tidak valid. Coba jalankan kembali.");
   }
   return cleaned;
 };
@@ -118,7 +202,7 @@ const translateTextWithModel = async (
   if (!clean) return text;
 
   const targetName = targetLang === "en" ? "natural, ATS-industry English" : "Bahasa Indonesia baku standar ATS";
-  const systemPrompt = `You are a professional ATS CV translator. Translate the input text to ${targetName}. Keep all technical terms (frameworks, programming languages, SQL, API, HTML, CSS), company/university names, numbers, and dates exact. Return ONLY the translated text without quotes or explanations.`;
+  const systemPrompt = `You are a professional ATS CV translator. Translate the input text to ${targetName}. Keep all technical terms (frameworks, programming languages, SQL, API, HTML, CSS), company/university names, numbers, and dates exact. Return ONLY the translated text without quotes, intro/preamble, or explanations.`;
 
   const raw = await runLocalChatCompletion(
     config,
@@ -129,7 +213,7 @@ const translateTextWithModel = async (
     { temperature: 0.15, maxTokens: 320 }
   );
 
-  const cleaned = stripWrapperQuotes(raw);
+  const cleaned = cleanAiParagraphOutput(raw);
   return cleaned.length >= 2 ? cleaned : clean;
 };
 
@@ -172,10 +256,10 @@ const translateIndexedChunk = async (
       );
 
       const parsedMap = new Map<number, string>();
-      for (const line of raw.split(/\r?\n/)) {
+      for (const line of stripThinkingAndFences(raw).split(/\r?\n/)) {
         const m = line.trim().match(/^\[(\d+)\]\s*(.+)$/);
         if (m) {
-          parsedMap.set(Number(m[1]), stripWrapperQuotes(m[2]));
+          parsedMap.set(Number(m[1]), stripInlineLabelAndFormatting(m[2]));
         }
       }
 
