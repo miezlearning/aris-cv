@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { ArrowsOutSimple, ArrowsSplit, FileText, MagnifyingGlassPlus, Translate } from "@phosphor-icons/react";
 import { TranslationComparePanel } from "@/components/TranslationComparePanel";
@@ -93,58 +94,75 @@ export const CvPreview = ({
                 </span>
               ) : null}
             </div>
-            <p className="mt-0.5 text-xs text-[#59483F]">{TEMPLATE_NAMES[cvTemplate]}</p>
+            <p className="mt-0.5 text-xs text-[#59483F] flex flex-wrap items-center gap-1.5">
+              <span>
+                {TEMPLATE_NAMES[cvTemplate]} &middot; {activeLang === "id" ? "ID" : "EN"}
+              </span>
+              {!isModal ? (
+                <Link
+                  href="/pengaturan#dokumen"
+                  prefetch={true}
+                  className="font-bold text-[#1F6B57] hover:underline"
+                >
+                  Ubah
+                </Link>
+              ) : null}
+            </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          {/* Switcher Jenis Gaya ATS */}
-          <div
-            role="group"
-            aria-label="Jenis template ATS"
-            className="inline-flex rounded-lg border border-[#D9CEBC] bg-[#F3E7C8] p-0.5 text-[11px] font-bold"
-          >
-            {TEMPLATE_PILLS.map((tpl) => (
-              <button
-                key={tpl.value}
-                type="button"
-                title={tpl.fullTitle}
-                onClick={() => setCvTemplate(tpl.value)}
-                aria-pressed={cvTemplate === tpl.value}
-                className={`min-h-[32px] rounded-md px-2 transition-colors ${
-                  cvTemplate === tpl.value
-                    ? "bg-white text-[#251813] shadow-2xs"
-                    : "text-[#4E3E36] hover:text-[#251813]"
-                }`}
+          {isModal ? (
+            <>
+              {/* Switcher Jenis Gaya ATS (hanya di Modal luas) */}
+              <div
+                role="group"
+                aria-label="Jenis template ATS"
+                className="inline-flex rounded-lg border border-[#D9CEBC] bg-[#F3E7C8] p-0.5 text-[11px] font-bold"
               >
-                {tpl.shortLabel}
-              </button>
-            ))}
-          </div>
+                {TEMPLATE_PILLS.map((tpl) => (
+                  <button
+                    key={tpl.value}
+                    type="button"
+                    title={tpl.fullTitle}
+                    onClick={() => setCvTemplate(tpl.value)}
+                    aria-pressed={cvTemplate === tpl.value}
+                    className={`min-h-[36px] rounded-md px-2.5 transition-colors ${
+                      cvTemplate === tpl.value
+                        ? "bg-white text-[#251813] shadow-2xs"
+                        : "text-[#4E3E36] hover:text-[#251813]"
+                    }`}
+                  >
+                    {tpl.shortLabel}
+                  </button>
+                ))}
+              </div>
 
-          {/* Switcher Bahasa Cepat */}
-          <div
-            role="group"
-            aria-label="Bahasa CV"
-            className="inline-flex rounded-lg border border-[#D9CEBC] bg-[#F3E7C8] p-0.5 text-[11px] font-bold"
-          >
-            {(["auto", "id", "en"] as CvLanguage[]).map((langOpt) => (
-              <button
-                key={langOpt}
-                type="button"
-                title={langOpt === "auto" ? "Gunakan bahasa asli teks CV" : `Terjemahkan ke ${langOpt.toUpperCase()}`}
-                onClick={() => setCvLanguage(langOpt)}
-                aria-pressed={cvLanguage === langOpt}
-                className={`min-h-[32px] rounded-md px-2 transition-colors ${
-                  cvLanguage === langOpt
-                    ? "bg-white text-[#251813] shadow-2xs"
-                    : "text-[#4E3E36] hover:text-[#251813]"
-                }`}
+              {/* Switcher Bahasa Cepat (hanya di Modal luas) */}
+              <div
+                role="group"
+                aria-label="Bahasa CV"
+                className="inline-flex rounded-lg border border-[#D9CEBC] bg-[#F3E7C8] p-0.5 text-[11px] font-bold"
               >
-                {langOpt === "auto" ? "Asli" : langOpt.toUpperCase()}
-              </button>
-            ))}
-          </div>
+                {(["auto", "id", "en"] as CvLanguage[]).map((langOpt) => (
+                  <button
+                    key={langOpt}
+                    type="button"
+                    title={langOpt === "auto" ? "Gunakan bahasa asli teks CV" : `Terjemahkan ke ${langOpt.toUpperCase()}`}
+                    onClick={() => setCvLanguage(langOpt)}
+                    aria-pressed={cvLanguage === langOpt}
+                    className={`min-h-[36px] rounded-md px-2.5 transition-colors ${
+                      cvLanguage === langOpt
+                        ? "bg-white text-[#251813] shadow-2xs"
+                        : "text-[#4E3E36] hover:text-[#251813]"
+                    }`}
+                  >
+                    {langOpt === "auto" ? "Asli" : langOpt.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
 
           {/* Kontrol Zoom */}
           <div
@@ -155,7 +173,7 @@ export const CvPreview = ({
             <button
               type="button"
               onClick={() => setZoomMode("fit")}
-              className={`min-h-[32px] rounded-md px-2 transition-colors ${
+              className={`min-h-[36px] rounded-md px-2.5 transition-colors ${
                 zoomMode === "fit" ? "bg-white text-[#251813] shadow-2xs" : "text-[#4E3E36]"
               }`}
             >
@@ -164,7 +182,7 @@ export const CvPreview = ({
             <button
               type="button"
               onClick={() => setZoomMode("full")}
-              className={`inline-flex items-center gap-1 min-h-[32px] rounded-md px-2 transition-colors ${
+              className={`inline-flex items-center gap-1 min-h-[36px] rounded-md px-2.5 transition-colors ${
                 zoomMode === "full" ? "bg-white text-[#251813] shadow-2xs" : "text-[#4E3E36]"
               }`}
             >
@@ -177,7 +195,7 @@ export const CvPreview = ({
             <button
               type="button"
               onClick={onOpenModal}
-              className="flex min-h-[34px] items-center gap-1 rounded-lg border border-[#C2B49E] bg-white px-2.5 py-1 text-xs font-bold text-[#251813] hover:bg-[#FFF8DF] transition-colors"
+              className="flex min-h-[36px] items-center gap-1 rounded-lg border border-[#C2B49E] bg-white px-2.5 py-1 text-xs font-bold text-[#251813] hover:bg-[#FFF8DF] transition-colors"
               title="Buka tampilan layar penuh"
             >
               <ArrowsOutSimple size={13} weight="bold" aria-hidden="true" />

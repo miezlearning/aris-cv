@@ -1,15 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowsClockwise,
   CheckCircle,
   DownloadSimple,
+  GearSix,
   Globe,
   HardDrives,
   Prohibit,
-  SlidersHorizontal,
   Sparkle,
   Trash,
   WarningCircle
@@ -40,10 +41,12 @@ import { useCvStore } from "@/lib/store";
 
 export const LocalAiControlPanel = ({
   contextLabel = "Optimasi & Terjemahan",
-  compact = false
+  compact = false,
+  mode = "full"
 }: {
   contextLabel?: string;
   compact?: boolean;
+  mode?: "full" | "bar";
 }) => {
   const aiEnabled = useCvStore((state) => state.aiEnabled);
   const localAiMode = useCvStore((state) => state.localAiMode);
@@ -97,7 +100,7 @@ export const LocalAiControlPanel = ({
   }, [aiEnabled, localAiMode, localAiStatus, setLocalAiRuntime, webLlmModelId]);
 
   useEffect(() => {
-    if (!aiEnabled || !configOpen || sourceTab !== "webllm") return;
+    if (!aiEnabled || (mode !== "full" && !configOpen) || sourceTab !== "webllm") return;
     let active = true;
     checkWebGpuSupport().then((res) => {
       if (active) setGpuSupport(res);
@@ -110,7 +113,7 @@ export const LocalAiControlPanel = ({
     return () => {
       active = false;
     };
-  }, [aiEnabled, configOpen, sourceTab, webLlmModelId]);
+  }, [aiEnabled, configOpen, mode, sourceTab, webLlmModelId]);
 
   const isReady = aiEnabled && localAiStatus === "ready" && localAiMode !== "off";
   const isDownloading = localAiStatus === "downloading";
@@ -338,12 +341,131 @@ export const LocalAiControlPanel = ({
   const isSelectedCached = Boolean(cachedMap[webLlmModelId]);
   const activePresetMeta = REST_API_PRESETS.find((p) => p.id === restApiPreset) ?? REST_API_PRESETS[0];
   const isGetQuery = restApiFormat === "get_query";
+  const showDrawer = mode === "full" ? aiEnabled : aiEnabled && configOpen;
+
+  if (mode === "bar") {
+    return (
+      <div className="rounded-xl border border-[#D9CEBC] bg-[#FFFDF8] px-3.5 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span
+              aria-hidden="true"
+              className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border ${
+                isReady
+                  ? "border-[#9FD499] bg-[#DFF5DA] text-[#144C32]"
+                  : aiEnabled
+                  ? "border-[#DFC25A] bg-[#FFF0A8] text-[#4A3A2E]"
+                  : "border-[#D9CEBC] bg-[#FAF5E8] text-[#59483F]"
+              }`}
+            >
+              <Sparkle size={16} weight="duotone" />
+            </span>
+
+            <div className="min-w-0 flex flex-wrap items-center gap-2">
+              <span className="text-xs sm:text-sm font-bold text-[#251813]">Asisten AI</span>
+              {!aiEnabled ? (
+                <span className="text-xs text-[#59483F]">Nonaktif (mode cepat)</span>
+              ) : isDownloading ? (
+                <span className="inline-flex items-center gap-1 rounded-md border border-[#DFC25A] bg-[#FFF0A8] px-2 py-0.5 text-[11px] font-bold text-[#4A3A2E]">
+                  <ArrowsClockwise size={11} className="animate-spin" aria-hidden="true" />
+                  <span>Mengunduh {localAiProgress}%</span>
+                </span>
+              ) : isReady ? (
+                <span className="inline-flex items-center gap-1 rounded-md border border-[#9FD499] bg-[#DFF5DA] px-2 py-0.5 text-[11px] font-bold text-[#144C32] max-w-[230px] truncate">
+                  <CheckCircle size={12} weight="fill" className="shrink-0" aria-hidden="true" />
+                  <span className="truncate">{localAiLoadedModel}</span>
+                </span>
+              ) : (
+                <span className="rounded-md border border-[#DFC25A] bg-[#FFF8DF] px-2 py-0.5 text-[11px] font-semibold text-[#4A3A2E]">
+                  Perlu dihubungkan ({contextLabel})
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {isReady ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleMasterToggle}
+                  className="inline-flex items-center min-h-[44px] rounded-xl border border-[#D9CEBC] bg-white px-3 text-xs font-bold text-[#4E3E36] hover:bg-[#FFE3D8] hover:text-[#7B1F14] transition-colors cursor-pointer"
+                >
+                  Matikan
+                </button>
+                <Link
+                  href="/pengaturan#ai"
+                  prefetch={true}
+                  className="inline-flex items-center gap-1.5 min-h-[44px] rounded-xl border border-[#C2B49E] bg-white px-3 text-xs font-bold text-[#251813] hover:bg-[#FFF8DF] transition-colors"
+                >
+                  <GearSix size={15} weight="duotone" aria-hidden="true" />
+                  <span>Pengaturan</span>
+                </Link>
+              </>
+            ) : (
+              <Link
+                href="/pengaturan#ai"
+                prefetch={true}
+                className="inline-flex items-center gap-1.5 min-h-[44px] rounded-xl border border-[#C2B49E] bg-white px-3.5 text-xs font-bold text-[#251813] hover:bg-[#FFF0A8] transition-colors"
+              >
+                <GearSix size={15} weight="duotone" aria-hidden="true" />
+                <span>{aiEnabled ? "Hubungkan AI" : "Atur AI"}</span>
+              </Link>
+            )}
+          </div>
+        </div>
+
+        {isDownloading ? (
+          <div className="mt-2.5 rounded-lg border border-[#DFC25A] bg-[#FFF8DF] p-2.5 grid gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-bold text-[#4A3A2E]">
+                Mengunduh ke cache browser ({localAiProgress}%)
+              </span>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={handleCancelDownload}
+                className="min-h-[44px] py-1 px-3 text-xs gap-1"
+              >
+                <Prohibit size={13} weight="bold" aria-hidden="true" />
+                <span>Batalkan</span>
+              </Button>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-white border border-[#D9CEBC]">
+              <div
+                className="h-full bg-[#1F6B57] transition-all duration-300"
+                style={{ width: `${localAiProgress}%` }}
+              />
+            </div>
+            {localAiProgressText ? (
+              <p className="text-[11px] text-[#59483F] truncate">{localAiProgressText}</p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {aiEnabled && localAiError ? (
+          <div
+            role="alert"
+            className="mt-2 rounded-lg border border-[#E9A590] bg-[#FFE3D8] px-3 py-2 text-xs font-semibold text-[#7B1F14] flex flex-wrap items-center justify-between gap-2"
+          >
+            <span className="flex items-start gap-2 min-w-0">
+              <WarningCircle size={15} weight="duotone" className="shrink-0 mt-0.5" aria-hidden="true" />
+              <span>{localAiError}</span>
+            </span>
+            <Link href="/pengaturan#ai" className="font-bold underline shrink-0">
+              Buka Pengaturan AI
+            </Link>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-xl border border-[#D9CEBC] bg-[#FFFDF8] px-3.5 py-2.5 sm:px-4 sm:py-3">
-      {/* Slim Master Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 min-w-0">
-        <div className="flex items-center gap-2.5 min-w-0">
+    <div className="rounded-xl border border-[#D9CEBC] bg-[#FFFDF8] px-3.5 py-3 sm:px-4 sm:py-3.5">
+      {/* Master Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 min-w-0">
+        <div className="flex items-start gap-2.5 min-w-0">
           <span
             aria-hidden="true"
             className={`grid ${compact ? "h-8 w-8" : "h-9 w-9"} shrink-0 place-items-center rounded-lg border ${
@@ -368,7 +490,7 @@ export const LocalAiControlPanel = ({
                   <span>Mengunduh {localAiProgress}%</span>
                 </span>
               ) : isReady ? (
-                <span className="inline-flex items-center gap-1 rounded-md border border-[#9FD499] bg-[#DFF5DA] px-2 py-0.5 text-[11px] font-bold text-[#144C32] max-w-[230px] truncate">
+                <span className="inline-flex items-center gap-1 rounded-md border border-[#9FD499] bg-[#DFF5DA] px-2 py-0.5 text-[11px] font-bold text-[#144C32] max-w-[260px] truncate">
                   <CheckCircle size={12} weight="fill" className="shrink-0" aria-hidden="true" />
                   <span className="truncate">{localAiLoadedModel}</span>
                 </span>
@@ -378,34 +500,26 @@ export const LocalAiControlPanel = ({
                 </span>
               )}
             </div>
+            <p className="mt-0.5 text-xs text-[#59483F] leading-relaxed">
+              Tanpa AI, seluruh fitur penulisan, pencocokan lowongan, dan unduh CV tetap berjalan cepat di perangkat.
+            </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {aiEnabled ? (
-            <button
-              type="button"
-              onClick={() => setConfigOpen((prev) => !prev)}
-              className="inline-flex items-center gap-1 min-h-[38px] rounded-lg border border-[#D9CEBC] bg-white px-2.5 text-xs font-bold text-[#251813] hover:bg-[#FAF5E8] transition-colors"
-            >
-              <SlidersHorizontal size={13} weight="bold" aria-hidden="true" />
-              <span>{configOpen ? "Tutup" : "Atur"}</span>
-            </button>
-          ) : null}
-
           <button
             type="button"
             role="switch"
             aria-checked={aiEnabled}
             aria-label="Aktifkan Asisten AI"
             onClick={handleMasterToggle}
-            className={`inline-flex items-center gap-2 min-h-[40px] rounded-full border px-2.5 transition-colors ${
+            className={`inline-flex items-center gap-2 min-h-[44px] rounded-full border px-3 transition-colors ${
               aiEnabled
                 ? "border-[#144C32] bg-[#1F6B57] text-white"
                 : "border-[#C2B49E] bg-[#F3E7C8] text-[#4E3E36]"
             }`}
           >
-            <span className="text-[11px] font-bold">{aiEnabled ? "ON" : "OFF"}</span>
+            <span className="text-xs font-bold">{aiEnabled ? "ON" : "OFF"}</span>
             <span
               aria-hidden="true"
               className={`inline-block h-4 w-4 rounded-full bg-white shadow-2xs transition-transform ${
@@ -427,7 +541,7 @@ export const LocalAiControlPanel = ({
               type="button"
               variant="danger"
               onClick={handleCancelDownload}
-              className="min-h-[34px] py-1 px-2.5 text-xs gap-1"
+              className="min-h-[44px] py-1 px-3 text-xs gap-1"
             >
               <Prohibit size={13} weight="bold" aria-hidden="true" />
               <span>Batalkan</span>
@@ -446,7 +560,7 @@ export const LocalAiControlPanel = ({
       ) : null}
 
       {notice ? (
-        <p className="mt-2 rounded-lg border border-[#D9CEBC] bg-[#FAF5E8] px-3 py-1.5 text-xs font-semibold text-[#4E3E36]">
+        <p className="mt-2.5 rounded-lg border border-[#D9CEBC] bg-[#FAF5E8] px-3 py-2 text-xs font-semibold text-[#4E3E36]">
           {notice}
         </p>
       ) : null}
@@ -454,16 +568,16 @@ export const LocalAiControlPanel = ({
       {localAiError ? (
         <div
           role="alert"
-          className="mt-2 rounded-lg border border-[#E9A590] bg-[#FFE3D8] px-3 py-2 text-xs font-semibold text-[#7B1F14] flex items-start gap-2"
+          className="mt-2.5 rounded-lg border border-[#E9A590] bg-[#FFE3D8] px-3 py-2 text-xs font-semibold text-[#7B1F14] flex items-start gap-2"
         >
           <WarningCircle size={15} weight="duotone" className="shrink-0 mt-0.5" aria-hidden="true" />
           <span>{localAiError}</span>
         </div>
       ) : null}
 
-      {/* Compact Expandable Config Drawer */}
+      {/* Expandable Full Config Panel */}
       <AnimatePresence initial={false}>
-        {aiEnabled && configOpen ? (
+        {showDrawer ? (
           <motion.div
             key="compact-ai-drawer"
             initial={{ opacity: 0, height: 0 }}
@@ -472,8 +586,8 @@ export const LocalAiControlPanel = ({
             transition={{ duration: 0.18 }}
             className="overflow-hidden"
           >
-            <div className="mt-3 border-t border-[#D9CEBC] pt-3 grid gap-3">
-              {/* 3 Compact Source Tabs */}
+            <div className="mt-3.5 border-t border-[#D9CEBC] pt-3.5 grid gap-3.5">
+              {/* 3 Source Tabs */}
               <div
                 role="tablist"
                 aria-label="Pilih sumber AI"
@@ -484,7 +598,7 @@ export const LocalAiControlPanel = ({
                   role="tab"
                   aria-selected={sourceTab === "webllm"}
                   onClick={() => setSourceTab("webllm")}
-                  className={`inline-flex items-center gap-1.5 min-h-[38px] rounded-lg px-3 text-xs font-bold transition-colors ${
+                  className={`inline-flex items-center gap-1.5 min-h-[44px] rounded-lg px-3.5 text-xs font-bold transition-colors ${
                     sourceTab === "webllm" ? "bg-white text-[#251813] shadow-2xs" : "text-[#4E3E36]"
                   }`}
                 >
@@ -496,7 +610,7 @@ export const LocalAiControlPanel = ({
                   role="tab"
                   aria-selected={sourceTab === "rest_api"}
                   onClick={() => setSourceTab("rest_api")}
-                  className={`inline-flex items-center gap-1.5 min-h-[38px] rounded-lg px-3 text-xs font-bold transition-colors ${
+                  className={`inline-flex items-center gap-1.5 min-h-[44px] rounded-lg px-3.5 text-xs font-bold transition-colors ${
                     sourceTab === "rest_api" ? "bg-white text-[#251813] shadow-2xs" : "text-[#4E3E36]"
                   }`}
                 >
@@ -508,7 +622,7 @@ export const LocalAiControlPanel = ({
                   role="tab"
                   aria-selected={sourceTab === "server"}
                   onClick={() => setSourceTab("server")}
-                  className={`inline-flex items-center gap-1.5 min-h-[38px] rounded-lg px-3 text-xs font-bold transition-colors ${
+                  className={`inline-flex items-center gap-1.5 min-h-[44px] rounded-lg px-3.5 text-xs font-bold transition-colors ${
                     sourceTab === "server" ? "bg-white text-[#251813] shadow-2xs" : "text-[#4E3E36]"
                   }`}
                 >

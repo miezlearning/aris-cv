@@ -207,7 +207,7 @@ export const BulletRewriter = () => {
       setCardMessage((prev) => ({
         ...prev,
         [record.id]:
-          "Asisten AI sedang OFF. Pakai tombol cepat atau aktifkan AI di atas."
+          "Asisten AI sedang nonaktif. Pakai tombol cepat atau aktifkan lewat Pengaturan (tombol Atur AI di atas)."
       }));
       return;
     }
@@ -286,7 +286,7 @@ export const BulletRewriter = () => {
     if (preferAi && !activeLocalConfig) {
       setSummaryEditorOpen(true);
       setSummaryStatus(
-        "Asisten AI sedang OFF. Gunakan opsi Quick Action instan atau aktifkan toggle Asisten AI di atas."
+        "Asisten AI sedang nonaktif. Pakai tombol cepat atau aktifkan lewat Pengaturan (tombol Atur AI di atas)."
       );
       return;
     }
@@ -342,8 +342,8 @@ export const BulletRewriter = () => {
         {/* Live ATS Bar Real-Time */}
         <LiveAtsBar />
 
-        {/* Slim Compact AI Toggle */}
-        <LocalAiControlPanel contextLabel="Optimasi Kalimat" />
+        {/* Slim AI Status Bar */}
+        <LocalAiControlPanel mode="bar" contextLabel="Optimasi Kalimat" />
 
         {/* Compact Gap Skill Toggles */}
         <GapTogglePanel compact />
@@ -473,117 +473,114 @@ export const BulletRewriter = () => {
             ) : null}
           </div>
         ) : null}
-
-        {/* Panduan Google XYZ / STAR Ringkas */}
-        <div className="rounded-xl border border-[#D9CEBC] bg-[#FAF5E8] px-3.5 py-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Lightbulb size={16} weight="duotone" className="text-[#4A3A2E] shrink-0" aria-hidden="true" />
-              <p className="text-xs sm:text-[13px] font-semibold text-[#251813]">
-                Rumus singkat: Kata kerja aktif + tugas + hasil terukur
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setExamplesOpen((prev) => !prev)}
-              aria-expanded={examplesOpen}
-              className="inline-flex items-center gap-1 min-h-[34px] rounded-lg border border-[#D9CEBC] bg-white px-2.5 text-xs font-bold text-[#251813] hover:bg-[#FFF8DF]"
-            >
-              <span>{examplesOpen ? "Tutup Contoh" : "Lihat Contoh"}</span>
-              <CaretDown
-                size={13}
-                weight="bold"
-                className={`transition-transform duration-200 ${examplesOpen ? "rotate-180" : ""}`}
-                aria-hidden="true"
-              />
-            </button>
-          </div>
-
-          <AnimatePresence initial={false}>
-            {examplesOpen ? (
-              <motion.div
-                key="rewriter-examples"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <div className="mt-2.5 grid gap-2.5 border-t border-[#D9CEBC] pt-2.5 sm:grid-cols-2">
-                  {FRESH_GRAD_XYZ_EXAMPLES.map((ex) => (
-                    <div key={ex.category} className="rounded-lg border border-[#D9CEBC] bg-white p-2.5 text-xs grid gap-1">
-                      <p className="font-bold text-[#144C32]">{ex.category}</p>
-                      <p className="text-[#7B1F14]">
-                        <span className="font-bold">Sebelum:</span> {ex.weak}
-                      </p>
-                      <p className="text-[#251813] leading-relaxed">
-                        <span className="font-bold text-[#144C32]">Sesudah:</span> {ex.strong}
-                      </p>
-                      <p className="text-[#59483F]">{ex.formulaNote}</p>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-        </div>
       </div>
 
       {/* Main Bullet Cards Section */}
       {allBullets.length > 0 ? (
         <div className="grid gap-4">
-          {/* Filter + Batch Quick Actions */}
-          <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-[#D9CEBC] bg-[#FAF5E8] px-3.5 py-2.5">
-            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter poin CV">
-              <button
-                type="button"
-                onClick={() => setFilterMode("weak")}
-                className={`min-h-[38px] rounded-lg border px-3 text-xs font-bold transition-colors ${
-                  activeFilter === "weak"
-                    ? "border-[#251813] bg-[#FFF0A8] text-[#251813]"
-                    : "border-[#D9CEBC] bg-white text-[#4E3E36]"
-                }`}
-              >
-                Perlu Diperkuat ({weakBullets.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterMode("all")}
-                className={`min-h-[38px] rounded-lg border px-3 text-xs font-bold transition-colors ${
-                  activeFilter === "all"
-                    ? "border-[#251813] bg-white text-[#251813] shadow-2xs"
-                    : "border-[#D9CEBC] bg-white text-[#4E3E36]"
-                }`}
-              >
-                Semua Poin ({allBullets.length})
-              </button>
+          {/* Filter + Batch Quick Actions + Contoh Rumus Toggle */}
+          <div className="grid gap-2.5 rounded-xl border border-[#D9CEBC] bg-[#FAF5E8] px-3.5 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter poin CV">
+                <button
+                  type="button"
+                  onClick={() => setFilterMode("weak")}
+                  className={`min-h-[38px] rounded-lg border px-3 text-xs font-bold transition-colors ${
+                    activeFilter === "weak"
+                      ? "border-[#251813] bg-[#FFF0A8] text-[#251813]"
+                      : "border-[#D9CEBC] bg-white text-[#4E3E36]"
+                  }`}
+                >
+                  Perlu Diperkuat ({weakBullets.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterMode("all")}
+                  className={`min-h-[38px] rounded-lg border px-3 text-xs font-bold transition-colors ${
+                    activeFilter === "all"
+                      ? "border-[#251813] bg-white text-[#251813] shadow-2xs"
+                      : "border-[#D9CEBC] bg-white text-[#4E3E36]"
+                  }`}
+                >
+                  Semua Poin ({allBullets.length})
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setExamplesOpen((prev) => !prev)}
+                  aria-expanded={examplesOpen}
+                  className="inline-flex items-center gap-1 min-h-[38px] rounded-lg border border-[#D9CEBC] bg-white px-2.5 text-xs font-bold text-[#251813] hover:bg-[#FFF8DF]"
+                >
+                  <Lightbulb size={14} weight="duotone" className="text-[#4A3A2E]" aria-hidden="true" />
+                  <span>Contoh Rumus</span>
+                  <CaretDown
+                    size={12}
+                    weight="bold"
+                    className={`transition-transform duration-200 ${examplesOpen ? "rotate-180" : ""}`}
+                    aria-hidden="true"
+                  />
+                </button>
+
+                {weakBullets.length > 0 ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleBatchQuickFixWeak}
+                    className="min-h-[38px] text-xs gap-1.5"
+                  >
+                    <Lightning size={14} weight="duotone" aria-hidden="true" />
+                    <span>Kuatkan Pembuka ({weakBullets.length} Poin)</span>
+                  </Button>
+                ) : null}
+
+                {activeLocalConfig ? (
+                  <Button
+                    type="button"
+                    disabled={Boolean(batchProgress)}
+                    onClick={handleBatchAiRewrite}
+                    className="min-h-[38px] text-xs gap-1.5"
+                  >
+                    <Sparkle size={14} weight="duotone" aria-hidden="true" />
+                    <span>{batchProgress || "Poles Semua dengan AI"}</span>
+                  </Button>
+                ) : null}
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {weakBullets.length > 0 ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={handleBatchQuickFixWeak}
-                  className="min-h-[38px] text-xs gap-1.5"
+            <AnimatePresence initial={false}>
+              {examplesOpen ? (
+                <motion.div
+                  key="rewriter-examples"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
                 >
-                  <Lightning size={14} weight="duotone" aria-hidden="true" />
-                  <span>Kuatkan Pembuka ({weakBullets.length} Poin)</span>
-                </Button>
+                  <div className="border-t border-[#D9CEBC] pt-2.5 grid gap-2.5">
+                    <p className="text-xs font-semibold text-[#4E3E36]">
+                      Rumus singkat: Kata kerja aktif + tugas + hasil terukur (contoh nyata):
+                    </p>
+                    <div className="grid gap-2.5 sm:grid-cols-2">
+                      {FRESH_GRAD_XYZ_EXAMPLES.map((ex) => (
+                        <div key={ex.category} className="rounded-lg border border-[#D9CEBC] bg-white p-2.5 text-xs grid gap-1">
+                          <p className="font-bold text-[#144C32]">{ex.category}</p>
+                          <p className="text-[#7B1F14]">
+                            <span className="font-bold">Sebelum:</span> {ex.weak}
+                          </p>
+                          <p className="text-[#251813] leading-relaxed">
+                            <span className="font-bold text-[#144C32]">Sesudah:</span> {ex.strong}
+                          </p>
+                          <p className="text-[#59483F]">{ex.formulaNote}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
               ) : null}
-
-              {activeLocalConfig ? (
-                <Button
-                  type="button"
-                  disabled={Boolean(batchProgress)}
-                  onClick={handleBatchAiRewrite}
-                  className="min-h-[38px] text-xs gap-1.5"
-                >
-                  <Sparkle size={14} weight="duotone" aria-hidden="true" />
-                  <span>{batchProgress || "Poles Semua dengan AI"}</span>
-                </Button>
-              ) : null}
-            </div>
+            </AnimatePresence>
           </div>
 
           {forbiddenSkills.length > 0 ? (

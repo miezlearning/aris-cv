@@ -22,13 +22,14 @@ import { JobAnalyzer } from "@/components/JobAnalyzer";
 import { MasterCvEditor } from "@/components/MasterCvEditor";
 import { MatchDashboard } from "@/components/MatchDashboard";
 import { Reveal } from "@/components/Reveal";
+import { SettingsPanel } from "@/components/SettingsPanel";
 import { getResumeCompleteness } from "@/lib/analyzer";
 import { extractAllResumeBullets } from "@/lib/ats/rewriter";
 import { useLiveAts } from "@/lib/live-ats";
 import { useCvStore } from "@/lib/store";
 
-export type WorkspacePage = "dashboard" | "master" | "target" | "rewrite" | "export";
-type StepId = Exclude<WorkspacePage, "dashboard">;
+export type WorkspacePage = "dashboard" | "master" | "target" | "rewrite" | "export" | "settings";
+type StepId = Exclude<WorkspacePage, "dashboard" | "settings">;
 
 type Step = {
   id: StepId;
@@ -121,6 +122,10 @@ const pageCopy: Record<WorkspacePage, { title: string; body: string; step?: numb
     title: "Unduh CV",
     body: "Pilih tampilan, bahasa dokumen, lalu unduh.",
     step: 4
+  },
+  settings: {
+    title: "Pengaturan",
+    body: "Kelola asisten AI, tampilan dokumen default, dan cadangan data lokal."
   }
 };
 
@@ -268,6 +273,7 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
   }
 
   const isDashboard = currentPage === "dashboard";
+  const isSettings = currentPage === "settings";
 
   return (
     <main className="flex-1 w-full mx-auto max-w-[1560px] px-4 py-5 sm:px-6 lg:px-8">
@@ -431,6 +437,10 @@ export const WorkspaceShell = ({ currentPage }: { currentPage: WorkspacePage }) 
               })}
             </div>
           </section>
+        </div>
+      ) : isSettings ? (
+        <div className="mx-auto max-w-4xl grid gap-6 py-2">
+          <SettingsPanel />
         </div>
       ) : (
         <div>

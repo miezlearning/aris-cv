@@ -277,9 +277,9 @@ export const ExportPanel = () => {
       <div className="grid gap-5">
         <LiveAtsBar compact />
 
-        {/* Pilihan Jenis / Gaya Format ATS */}
-        <div className="rounded-xl border border-[#D9CEBC] bg-white p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        {/* Format & Bahasa Dokumen (Ringkas Terpadu) */}
+        <div className="rounded-xl border border-[#D9CEBC] bg-white p-4 sm:p-5 grid gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-start gap-2.5">
               <span
                 aria-hidden="true"
@@ -288,198 +288,193 @@ export const ExportPanel = () => {
                 <Layout size={18} weight="duotone" />
               </span>
               <div>
-                <h3 className="text-sm font-bold text-[#251813]">Gaya Tata Letak</h3>
-                <p className="text-xs text-[#59483F] mt-0.5">Semua gaya memakai layout 1 kolom rapi tanpa tabel.</p>
+                <h3 className="text-sm font-bold text-[#251813]">Format &amp; Bahasa Dokumen</h3>
+                <p className="text-xs text-[#59483F] mt-0.5">
+                  Semua gaya memakai layout 1 kolom rapi tanpa tabel.
+                </p>
               </div>
             </div>
-            <span className="rounded-lg border border-[#DFC25A] bg-[#FFF8DF] px-2.5 py-1 text-xs font-bold text-[#4A3A2E]">
-              {activeTemplateMeta.label}
-            </span>
-          </div>
-
-          <div className="grid gap-2.5 sm:grid-cols-3" role="radiogroup" aria-label="Pilih jenis tata letak ATS">
-            {TEMPLATE_OPTIONS.map((opt) => {
-              const selected = cvTemplate === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => setCvTemplate(opt.value)}
-                  className={`text-left rounded-xl p-3.5 transition-all cursor-pointer min-h-[44px] flex flex-col justify-between ${
-                    selected
-                      ? "border-2 border-[#251813] bg-[#FFF8DF] shadow-[2px_3px_0_rgba(37,24,19,0.12)]"
-                      : "border border-[#D9CEBC] bg-[#FFFDF8] hover:border-[#251813]/40"
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <span className="grid h-8 w-8 place-items-center rounded-lg border border-[#251813]/20 bg-white text-[#251813]">
-                        {opt.icon}
-                      </span>
-                      <span className="rounded-md border border-[#D9CEBC] bg-white px-2 py-0.5 text-[10.5px] font-bold text-[#4E3E36]">
-                        {opt.badge}
-                      </span>
-                    </div>
-                    <p className="text-xs sm:text-sm font-bold text-[#251813]">{opt.label}</p>
-                    <p className="mt-1 text-xs text-[#4E3E36] leading-relaxed">{opt.hint}</p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Pilihan Bahasa CV */}
-        <div className="rounded-xl border border-[#D9CEBC] bg-white p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <div className="flex items-start gap-2.5">
-              <span
-                aria-hidden="true"
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[#94D1DF] bg-[#D6F3FA] text-[#124959]"
-              >
-                <Translate size={18} weight="duotone" />
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="rounded-lg border border-[#DFC25A] bg-[#FFF8DF] px-2.5 py-1 text-xs font-bold text-[#4A3A2E]">
+                {activeTemplateMeta.label}
               </span>
-              <div>
-                <h3 className="text-sm font-bold text-[#251813]">Bahasa Dokumen</h3>
-                <p className="text-xs text-[#59483F] mt-0.5">Pilih bahasa asli atau terjemahkan otomatis (ID / EN).</p>
+              <span className="rounded-lg border border-[#9FD499] bg-[#DFF5DA] px-2.5 py-1 text-xs font-bold text-[#144C32]">
+                {activeLang === "id" ? "Indonesia" : "English"}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            {/* Gaya Tata Letak */}
+            <div className="grid gap-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-[#59483F]">Gaya Tata Letak</p>
+              <div className="grid gap-2 grid-cols-3" role="radiogroup" aria-label="Pilih jenis tata letak ATS">
+                {TEMPLATE_OPTIONS.map((opt) => {
+                  const selected = cvTemplate === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      title={opt.hint}
+                      onClick={() => setCvTemplate(opt.value)}
+                      className={`text-left rounded-xl p-2.5 transition-all cursor-pointer min-h-[44px] flex flex-col justify-between ${
+                        selected
+                          ? "border-2 border-[#251813] bg-[#FFF8DF] shadow-[2px_3px_0_rgba(37,24,19,0.12)]"
+                          : "border border-[#D9CEBC] bg-[#FFFDF8] hover:border-[#251813]/40"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="text-[#251813]">{opt.icon}</span>
+                        <span className="text-[10px] font-bold text-[#59483F]">{opt.badge}</span>
+                      </div>
+                      <p className="text-xs font-bold text-[#251813] leading-tight">{opt.label}</p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            <span className="rounded-lg border border-[#9FD499] bg-[#DFF5DA] px-2.5 py-1 text-xs font-bold text-[#144C32]">
-              Aktif: {activeLang === "id" ? "Indonesia" : "English"}
-            </span>
+
+            {/* Bahasa Dokumen */}
+            <div className="grid gap-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-[#59483F]">Bahasa Dokumen</p>
+              <div className="grid gap-2 grid-cols-3">
+                {LANGUAGE_OPTIONS.map((opt) => {
+                  const selected = cvLanguage === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      title={opt.hint}
+                      onClick={() => setCvLanguage(opt.value)}
+                      aria-pressed={selected}
+                      className={`text-left rounded-xl p-2.5 transition-all cursor-pointer min-h-[44px] flex flex-col justify-between ${
+                        selected
+                          ? "border-2 border-[#251813] bg-[#FFF8DF] shadow-[2px_3px_0_rgba(37,24,19,0.12)]"
+                          : "border border-[#D9CEBC] bg-[#FFFDF8] hover:border-[#251813]/40"
+                      }`}
+                    >
+                      <span className="text-[#124959] mb-1">
+                        <Translate size={15} weight="duotone" aria-hidden="true" />
+                      </span>
+                      <p className="text-xs font-bold text-[#251813] leading-tight">{opt.label}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
-          <div className="grid gap-2.5 sm:grid-cols-3">
-            {LANGUAGE_OPTIONS.map((opt) => {
-              const selected = cvLanguage === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setCvLanguage(opt.value)}
-                  aria-pressed={selected}
-                  className={`text-left rounded-xl p-3 transition-all cursor-pointer min-h-[44px] ${
-                    selected
-                      ? "border-2 border-[#251813] bg-[#FFF8DF] shadow-[2px_3px_0_rgba(37,24,19,0.12)]"
-                      : "border border-[#D9CEBC] bg-[#FFFDF8] hover:border-[#251813]/40"
-                  }`}
-                >
-                  <p className="text-xs sm:text-sm font-bold text-[#251813]">{opt.label}</p>
-                  <p className="mt-1 text-xs text-[#4E3E36] leading-relaxed">{opt.hint}</p>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Kontrol Terjemahan Full-Content 2 Arah (ID <-> EN) */}
-          <div className="mt-4 rounded-xl border border-[#94D1DF] card-tint-sky p-3.5 sm:p-4 grid gap-3">
-            <label className="flex items-center gap-2.5 cursor-pointer min-h-[40px]">
-              <input
-                type="checkbox"
-                checked={autoTranslateContent}
-                onChange={(event) => setAutoTranslateContent(event.target.checked)}
-                className="checkbox checkbox-sm border-[#124959]/50 checked:bg-[#1F6B57] checked:border-[#1F6B57]"
-              />
-              <span className="text-xs sm:text-sm font-semibold text-[#124959]">
-                Terjemahkan seluruh isi CV saat mode Indonesia atau English dipilih
-              </span>
-            </label>
-
-            {translationAudit ? (
-              <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-                <span className="inline-flex items-center gap-1 rounded-lg border border-[#9FD499] bg-white px-2.5 py-1 text-[#144C32]">
-                  <CheckCircle size={14} weight="fill" aria-hidden="true" />
-                  <span>
-                    Cakupan terjemahan: {translationAudit.fullyTranslatedCount}/{translationAudit.totalFields} bagian penuh
-                  </span>
+          {/* Kontrol Terjemahan Full-Content 2 Arah (tampil saat mode terjemahan aktif) */}
+          {cvLanguage !== "auto" || isTranslatedView || Boolean(preTranslationBackup) ? (
+            <div className="rounded-xl border border-[#94D1DF] card-tint-sky p-3.5 sm:p-4 grid gap-3">
+              <label className="flex items-center gap-2.5 cursor-pointer min-h-[40px]">
+                <input
+                  type="checkbox"
+                  checked={autoTranslateContent}
+                  onChange={(event) => setAutoTranslateContent(event.target.checked)}
+                  className="checkbox checkbox-sm border-[#124959]/50 checked:bg-[#1F6B57] checked:border-[#1F6B57]"
+                />
+                <span className="text-xs sm:text-sm font-semibold text-[#124959]">
+                  Terjemahkan seluruh isi CV saat mode Indonesia atau English dipilih
                 </span>
-                {translationAudit.partialCount > 0 ? (
-                  <span className="inline-flex items-center gap-1 rounded-lg border border-[#DFC25A] bg-[#FFF0A8] px-2.5 py-1 text-[#4A3A2E]">
-                    <WarningCircle size={14} weight="duotone" aria-hidden="true" />
-                    <span>{translationAudit.partialCount} bagian perlu dicek</span>
+              </label>
+
+              {translationAudit ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+                  <span className="inline-flex items-center gap-1 rounded-lg border border-[#9FD499] bg-white px-2.5 py-1 text-[#144C32]">
+                    <CheckCircle size={14} weight="fill" aria-hidden="true" />
+                    <span>
+                      Cakupan terjemahan: {translationAudit.fullyTranslatedCount}/{translationAudit.totalFields} bagian penuh
+                    </span>
                   </span>
-                ) : null}
-              </div>
-            ) : null}
-
-            {!document.isEmpty && (isTranslatedView || Boolean(preTranslationBackup) || cvLanguage !== "auto" || Boolean(activeLocalConfig)) ? (
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                {isTranslatedView || Boolean(preTranslationBackup) ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => setCompareOpen(true)}
-                    className="min-h-[44px] text-xs gap-1.5"
-                  >
-                    <ArrowsSplit size={15} weight="bold" aria-hidden="true" />
-                    <span>Buka Teks Asli &amp; Sunting Terjemahan</span>
-                  </Button>
-                ) : null}
-
-                {autoTranslateContent && (cvLanguage !== "auto" || Boolean(activeLocalConfig)) ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={Boolean(busy)}
-                    onClick={handleAiTranslatePolish}
-                    className="min-h-[44px] text-xs gap-1.5"
-                  >
-                    <ShieldCheck size={15} weight="duotone" aria-hidden="true" />
-                    <span>
-                      {busy === "translate"
-                        ? translateProgress || "Menerjemahkan..."
-                        : activeLocalConfig
-                        ? `Perhalus Terjemahan (${activeLocalConfig.modelId})`
-                        : "Perhalus Terjemahan (Tanpa PII)"}
+                  {translationAudit.partialCount > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-lg border border-[#DFC25A] bg-[#FFF0A8] px-2.5 py-1 text-[#4A3A2E]">
+                      <WarningCircle size={14} weight="duotone" aria-hidden="true" />
+                      <span>{translationAudit.partialCount} bagian perlu dicek</span>
                     </span>
-                  </Button>
-                ) : null}
+                  ) : null}
+                </div>
+              ) : null}
 
-                {isTranslatedView ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={Boolean(busy)}
-                    onClick={() => {
-                      applyTranslationToEditor(activeLang);
-                      setMessage(
-                        `Seluruh isi CV versi ${
-                          activeLang === "en" ? "English" : "Bahasa Indonesia"
-                        } telah disalin ke formulir Langkah 1 (cadangan teks asli otomatis disimpan).`
-                      );
-                    }}
-                    className="min-h-[44px] text-xs gap-1.5"
-                  >
-                    <ArrowsClockwise size={15} weight="duotone" aria-hidden="true" />
-                    <span>
-                      Salin Hasil {activeLang === "en" ? "English" : "Indonesia"} ke Editor
-                    </span>
-                  </Button>
-                ) : null}
+              {!document.isEmpty ? (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {isTranslatedView || Boolean(preTranslationBackup) ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setCompareOpen(true)}
+                      className="min-h-[44px] text-xs gap-1.5"
+                    >
+                      <ArrowsSplit size={15} weight="bold" aria-hidden="true" />
+                      <span>Buka Teks Asli &amp; Sunting Terjemahan</span>
+                    </Button>
+                  ) : null}
 
-                {preTranslationBackup ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => {
-                      restorePreTranslationBackup();
-                      setMessage("Teks asli CV sebelum disalin berhasil dikembalikan ke formulir Langkah 1.");
-                    }}
-                    className="min-h-[44px] text-xs gap-1.5"
-                  >
-                    <ArrowCounterClockwise size={15} weight="bold" aria-hidden="true" />
-                    <span>Kembalikan Teks Asli</span>
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+                  {autoTranslateContent && (cvLanguage !== "auto" || Boolean(activeLocalConfig)) ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={Boolean(busy)}
+                      onClick={handleAiTranslatePolish}
+                      className="min-h-[44px] text-xs gap-1.5"
+                    >
+                      <ShieldCheck size={15} weight="duotone" aria-hidden="true" />
+                      <span>
+                        {busy === "translate"
+                          ? translateProgress || "Menerjemahkan..."
+                          : activeLocalConfig
+                          ? `Perhalus Terjemahan (${activeLocalConfig.modelId})`
+                          : "Perhalus Terjemahan (Tanpa PII)"}
+                      </span>
+                    </Button>
+                  ) : null}
+
+                  {isTranslatedView ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={Boolean(busy)}
+                      onClick={() => {
+                        applyTranslationToEditor(activeLang);
+                        setMessage(
+                          `Seluruh isi CV versi ${
+                            activeLang === "en" ? "English" : "Bahasa Indonesia"
+                          } telah disalin ke formulir Langkah 1 (cadangan teks asli otomatis disimpan).`
+                        );
+                      }}
+                      className="min-h-[44px] text-xs gap-1.5"
+                    >
+                      <ArrowsClockwise size={15} weight="duotone" aria-hidden="true" />
+                      <span>
+                        Salin Hasil {activeLang === "en" ? "English" : "Indonesia"} ke Editor
+                      </span>
+                    </Button>
+                  ) : null}
+
+                  {preTranslationBackup ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        restorePreTranslationBackup();
+                        setMessage("Teks asli CV sebelum disalin berhasil dikembalikan ke formulir Langkah 1.");
+                      }}
+                      className="min-h-[44px] text-xs gap-1.5"
+                    >
+                      <ArrowCounterClockwise size={15} weight="bold" aria-hidden="true" />
+                      <span>Kembalikan Teks Asli</span>
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
-        {/* Toggle Ringkas Asisten AI untuk Terjemahan */}
-        <LocalAiControlPanel compact contextLabel="Terjemahan 2 Arah" />
+        {/* Status Bar Ringkas Asisten AI untuk Terjemahan */}
+        <LocalAiControlPanel mode="bar" contextLabel="Terjemahan 2 Arah" />
 
         {/* Peringatan jika CV masih kosong */}
         {document.isEmpty ? (
