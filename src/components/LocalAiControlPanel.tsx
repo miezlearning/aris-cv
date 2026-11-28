@@ -21,6 +21,7 @@ import {
   checkCachedModels,
   checkWebGpuSupport,
   deleteWebLlmModelCache,
+  deriveGetQueryDisplayLabel,
   fetchLocalServerModels,
   isWebLlmLoaded,
   loadWebLlmModel,
@@ -244,19 +245,25 @@ export const LocalAiControlPanel = ({
     setNotice("");
     setBusyCheck(true);
     setLocalAiRuntime({ localAiError: "" });
+    const isGet = restApiFormat === "get_query";
+    const resolvedModelLabel = isGet
+      ? deriveGetQueryDisplayLabel(restApiUrl, restApiModel)
+      : restApiModel.trim();
 
     try {
       await testRestApiConnection({
         mode: "rest_api",
         format: restApiFormat,
         baseUrl: restApiUrl,
-        modelId: restApiModel,
+        modelId: resolvedModelLabel,
         apiKey: restApiKey
       });
       setLocalAiConfig({ aiEnabled: true, localAiMode: "rest_api" });
       setLocalAiRuntime({
         localAiStatus: "ready",
-        localAiLoadedModel: `${restApiModel} (REST)`,
+        localAiLoadedModel: isGet
+          ? `${resolvedModelLabel} (GET API)`
+          : `${resolvedModelLabel} (REST)`,
         localAiProgress: 100,
         localAiError: ""
       });
@@ -323,6 +330,7 @@ export const LocalAiControlPanel = ({
 
   const isSelectedCached = Boolean(cachedMap[webLlmModelId]);
   const activePresetMeta = REST_API_PRESETS.find((p) => p.id === restApiPreset) ?? REST_API_PRESETS[0];
+  const isGetQuery = restApiFormat === "get_query";
 
   return (
     <div className="rounded-xl border border-[#D9CEBC] bg-[#FFFDF8] px-3.5 py-2.5 sm:px-4 sm:py-3">
@@ -603,15 +611,22 @@ export const LocalAiControlPanel = ({
                       </SelectInput>
                     </Field>
 
-                    <Field label="Nama model">
+                    <Field label={isGetQuery ? "Label model (opsional)" : "Nama model"}>
                       <TextInput
                         value={restApiModel}
                         onChange={(event) => setLocalAiConfig({ restApiModel: event.target.value })}
-                        placeholder="Contoh: gemini-2.5-flash atau gpt-4o-mini"
+                        placeholder={
+                          isGetQuery
+                            ? "Otomatis dari URL (misal: glm47flash)"
+                            : "Contoh: gemini-2.5-flash atau gpt-4o-mini"
+                        }
                       />
                     </Field>
 
-                    <Field label="API Key" hint="Tersimpan hanya di tab ini.">
+                    <Field
+                      label={isGetQuery ? "API Key (opsional)" : "API Key"}
+                      hint={isGetQuery ? "Kosongkan jika API publik tanpa key." : "Tersimpan hanya di tab ini."}
+                    >
                       <TextInput
                         type="password"
                         value={restApiKey}
@@ -621,11 +636,22 @@ export const LocalAiControlPanel = ({
                       />
                     </Field>
 
-                    <Field label="Endpoint Base URL">
+                    <Field
+                      label={isGetQuery ? "Endpoint GET URL" : "Endpoint Base URL"}
+                      hint={
+                        isGetQuery
+                          ? "Boleh tempel URL lengkap beserta contoh ?prompt=...; parameter akan diisi otomatis."
+                          : undefined
+                      }
+                    >
                       <TextInput
                         value={restApiUrl}
                         onChange={(event) => setLocalAiConfig({ restApiUrl: event.target.value })}
-                        placeholder="https://api.openai.com/v1"
+                        placeholder={
+                          isGetQuery
+                            ? "https://api.siputzx.my.id/api/ai/glm47flash"
+                            : "https://api.openai.com/v1"
+                        }
                       />
                     </Field>
                   </div>
@@ -633,14 +659,18 @@ export const LocalAiControlPanel = ({
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
-                      disabled={busyCheck || !restApiUrl.trim() || !restApiModel.trim()}
+                      disabled={busyCheck || !restApiUrl.trim() || (!isGetQuery && !restApiModel.trim())}
                       onClick={handleActivateRestApi}
                       className="min-h-[40px] text-xs gap-1.5"
                     >
                       <Globe size={15} weight="duotone" aria-hidden="true" />
                       <span>{busyCheck ? "Menguji koneksi..." : "Tes & Aktifkan"}</span>
                     </Button>
-                    <span className="text-[11px] text-[#59483F]">Langsung dari browser ke API.</span>
+                    <span className="text-[11px] text-[#59483F]">
+                      {isGetQuery
+                        ? "Kirim ?prompt, ?system, & ?temperature (fallback proxy otomatis jika kena CORS)."
+                        : "Langsung dari browser ke API."}
+                    </span>
                   </div>
                 </div>
               ) : null}

@@ -64,6 +64,8 @@ const VALID_TABS: MasterTab[] = [
 
 const VALID_TEMPLATES: CvTemplate[] = ["compact_centered", "classic_editorial", "executive_left"];
 const VALID_LOCAL_AI_MODES: LocalAiProvider[] = ["off", "webllm", "rest_api", "ollama", "lmstudio"];
+const VALID_REST_API_FORMATS: RestApiFormat[] = ["openai", "gemini", "get_query"];
+const VALID_REST_API_PRESETS: RestApiPresetId[] = ["gemini", "openrouter", "groq", "openai", "custom", "custom_get"];
 
 export type CachedAiTranslation = {
   profile: ResumeProfile;
@@ -1098,8 +1100,16 @@ export const useCvStore = create<AppState>()(
           ? (persisted.localAiMode as LocalAiProvider)
           : "off";
 
-        const restApiPreset = persisted.restApiPreset ?? "gemini";
-        const restApiFormat = persisted.restApiFormat ?? "gemini";
+        const restApiPreset: RestApiPresetId = VALID_REST_API_PRESETS.includes(
+          persisted.restApiPreset as RestApiPresetId
+        )
+          ? (persisted.restApiPreset as RestApiPresetId)
+          : "gemini";
+        const restApiFormat: RestApiFormat = VALID_REST_API_FORMATS.includes(
+          persisted.restApiFormat as RestApiFormat
+        )
+          ? (persisted.restApiFormat as RestApiFormat)
+          : "gemini";
 
         return {
           ...currentState,
@@ -1124,8 +1134,12 @@ export const useCvStore = create<AppState>()(
           localServerModel: persisted.localServerModel || "",
           restApiPreset,
           restApiFormat,
-          restApiUrl: persisted.restApiUrl || "https://generativelanguage.googleapis.com/v1beta",
-          restApiModel: persisted.restApiModel || "gemini-2.5-flash",
+          restApiUrl:
+            typeof persisted.restApiUrl === "string"
+              ? persisted.restApiUrl
+              : "https://generativelanguage.googleapis.com/v1beta",
+          restApiModel:
+            typeof persisted.restApiModel === "string" ? persisted.restApiModel : "gemini-2.5-flash",
           restApiKey: "",
           localAiStatus: "idle",
           localAiProgress: 0,

@@ -2,6 +2,9 @@ import type { ResumeProfile } from "@/types/resume";
 import { translateProfileDeterministic } from "@/lib/ats/translator";
 import { runLocalChatCompletion, type ActiveLocalAiConfig } from "@/lib/local-ai/engine";
 
+const isGetQueryConfig = (config: ActiveLocalAiConfig): boolean =>
+  config.mode === "rest_api" && config.format === "get_query";
+
 const stripWrapperQuotes = (text: string): string =>
   text
     .replace(/^```[\s\S]*?\n|```$/g, "")
@@ -28,7 +31,10 @@ export const rewriteBulletWithLocalAi = async (
       ? "Start with a strong English past/present ATS action verb (e.g. Developed, Built, Engineered, Coordinated, Analyzed)."
       : "Awali dengan kata kerja aktif Bahasa Indonesia (misal: Mengembangkan, Merancang, Membangun, Mengkoordinasikan, Mengoptimalkan).";
 
-  const systemPrompt = `You are a strict, honest ATS Resume Coach. Rewrite ONE resume bullet point in ${langLabel} so it aligns better with the target job description using Google XYZ/STAR structure (Action + Context/Tools + Outcome).
+  const compactMode = isGetQueryConfig(config);
+  const systemPrompt = compactMode
+    ? `Rewrite ONE CV bullet in ${langLabel} (Action + Tools + Result). NEVER invent metrics or tools. ${actionRule} Return ONLY ONE plain sentence.`
+    : `You are a strict, honest ATS Resume Coach. Rewrite ONE resume bullet point in ${langLabel} so it aligns better with the target job description using Google XYZ/STAR structure (Action + Context/Tools + Outcome).
 STRICT RULES:
 1. NEVER invent numbers, percentages, metrics, tools, or achievements not stated in the original bullet.
 2. Only incorporate target keywords if they accurately describe what is already in the original bullet.
@@ -37,7 +43,7 @@ STRICT RULES:
 
   const userPrompt = `Target Role: ${params.jobTitle || "General Role"}
 Relevant Job Keywords: ${kwText}
-Target Job Context: ${(params.jobDescription || "").slice(0, 700)}
+Target Job Context: ${(params.jobDescription || "").slice(0, compactMode ? 220 : 700)}
 Candidate Source Role: ${params.role || "-"}
 Original Bullet: ${params.bullet}`;
 
@@ -139,9 +145,10 @@ const translateIndexedChunk = async (
   });
   if (!nonEmptyIndices.length) return sources;
 
+  const compactMode = isGetQueryConfig(config);
   const targetName = targetLang === "en" ? "natural, ATS-industry English" : "Bahasa Indonesia baku standar ATS";
   const result = [...fallbacks];
-  const CHUNK_SIZE = 10;
+  const CHUNK_SIZE = compactMode ? 3 : 10;
 
   for (let start = 0; start < nonEmptyIndices.length; start += CHUNK_SIZE) {
     const slice = nonEmptyIndices.slice(start, start + CHUNK_SIZE);
@@ -155,7 +162,9 @@ const translateIndexedChunk = async (
         [
           {
             role: "system",
-            content: `Translate each numbered CV entry to ${targetName}. Keep exact [0], [1], ... prefixes on separate lines. Preserve all proper organization/university names, technical stack names, numbers, and metrics. Return ONLY the numbered lines.`
+            content: compactMode
+              ? `Translate each [n] line to ${targetName}. Keep [0], [1] prefixes and technical terms/numbers exact. Return ONLY numbered lines.`
+              : `Translate each numbered CV entry to ${targetName}. Keep exact [0], [1], ... prefixes on separate lines. Preserve all proper organization/university names, technical stack names, numbers, and metrics. Return ONLY the numbered lines.`
           },
           { role: "user", content: numberedInput }
         ],

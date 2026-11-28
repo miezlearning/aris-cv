@@ -1,7 +1,7 @@
 export type LocalAiProvider = "off" | "webllm" | "rest_api" | "ollama" | "lmstudio";
 
-export type RestApiFormat = "openai" | "gemini";
-export type RestApiPresetId = "gemini" | "openrouter" | "groq" | "openai" | "custom";
+export type RestApiFormat = "openai" | "gemini" | "get_query";
+export type RestApiPresetId = "gemini" | "openrouter" | "groq" | "openai" | "custom" | "custom_get";
 
 export type RestApiPreset = {
   id: RestApiPresetId;
@@ -52,6 +52,14 @@ export const REST_API_PRESETS: RestApiPreset[] = [
     baseUrl: "",
     defaultModel: "",
     keyPlaceholder: "Opsional / Bearer token"
+  },
+  {
+    id: "custom_get",
+    label: "Custom GET Query API (?prompt=...&system=...)",
+    format: "get_query",
+    baseUrl: "",
+    defaultModel: "",
+    keyPlaceholder: "Opsional (Bearer token jika perlu)"
   }
 ];
 

@@ -76,17 +76,127 @@ export const resolveActiveAiConfig = (state: {
     };
   }
   if (state.localAiMode === "rest_api") {
-    if (!state.restApiUrl.trim() || !state.restApiModel.trim()) return null;
+    if (!state.restApiUrl.trim()) return null;
+    const isGetQuery = state.restApiFormat === "get_query";
+    if (!isGetQuery && !state.restApiModel.trim()) return null;
     return {
       mode: "rest_api",
       format: state.restApiFormat,
       baseUrl: state.restApiUrl,
-      modelId: state.restApiModel,
+      modelId: isGetQuery
+        ? deriveGetQueryDisplayLabel(state.restApiUrl, state.restApiModel)
+        : state.restApiModel,
       apiKey: state.restApiKey || readSessionApiKey()
     };
   }
 
   return null;
+};
+
+export const deriveGetQueryDisplayLabel = (baseUrl: string, modelId?: string): string => {
+  const customLabel = (modelId ?? "").trim();
+  if (customLabel) return customLabel;
+
+  try {
+    const parsed = new URL(baseUrl.trim());
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    if (segments.length > 0) return segments[segments.length - 1];
+    if (parsed.hostname) return parsed.hostname;
+  } catch {
+    // Abaikan error parsing URL untuk label tampilan
+  }
+
+  return "GET API";
+};
+
+export const buildGetQueryUrl = (
+  rawBaseUrl: string,
+  messages: LocalChatMessage[],
+  temperature: number
+): string => {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawBaseUrl.trim());
+  } catch {
+    throw new Error("Format URL endpoint GET tidak valid. Pastikan diawali https://.");
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("URL endpoint GET harus menggunakan protokol http:// atau https://.");
+  }
+
+  const systemText = messages
+    .filter((m) => m.role === "system")
+    .map((m) => m.content.trim())
+    .filter(Boolean)
+    .join("\n");
+
+  const nonSystem = messages.filter((m) => m.role !== "system");
+  const promptText =
+    nonSystem.length === 1
+      ? nonSystem[0].content.trim()
+      : nonSystem
+          .map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content.trim()}`)
+          .join("\n");
+
+  parsed.searchParams.set("prompt", promptText);
+  if (systemText) {
+    parsed.searchParams.set("system", systemText);
+  } else {
+    parsed.searchParams.delete("system");
+  }
+  parsed.searchParams.set("temperature", String(Number(temperature.toFixed(2))));
+
+  return parsed.toString();
+};
+
+const WRAPPER_TEXT_KEYS = [
+  "data",
+  "result",
+  "response",
+  "answer",
+  "output",
+  "reply",
+  "content",
+  "text",
+  "message"
+] as const;
+
+export const extractFlexibleTextResponse = (payload: unknown, depth = 0): string => {
+  if (depth > 4 || payload === null || payload === undefined) return "";
+  if (typeof payload === "string") return payload.trim();
+  if (typeof payload !== "object") return "";
+
+  const obj = payload as Record<string, unknown>;
+
+  if (Array.isArray(obj.choices) && obj.choices.length > 0) {
+    const firstChoice = obj.choices[0] as Record<string, unknown> | undefined;
+    const msgContent = (firstChoice?.message as Record<string, unknown> | undefined)?.content;
+    if (typeof msgContent === "string" && msgContent.trim()) return msgContent.trim();
+    if (typeof firstChoice?.text === "string" && firstChoice.text.trim()) return firstChoice.text.trim();
+  }
+
+  if (Array.isArray(obj.candidates) && obj.candidates.length > 0) {
+    const firstCand = obj.candidates[0] as Record<string, unknown> | undefined;
+    const parts = (firstCand?.content as Record<string, unknown> | undefined)?.parts;
+    if (Array.isArray(parts) && parts.length > 0) {
+      const partText = (parts[0] as Record<string, unknown> | undefined)?.text;
+      if (typeof partText === "string" && partText.trim()) return partText.trim();
+    }
+  }
+
+  for (const key of WRAPPER_TEXT_KEYS) {
+    const value = obj[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+    if (value && typeof value === "object") {
+      const nested = extractFlexibleTextResponse(value, depth + 1);
+      if (nested) return nested;
+    }
+  }
+
+  return "";
 };
 
 export const isWebLlmLoaded = (modelId?: string): boolean => {
@@ -338,12 +448,109 @@ const formatRestError = (status: number, rawMessage?: string): string => {
   return `Permintaan REST API gagal dengan status HTTP ${status}${snippet}.`;
 };
 
+const runGetQueryCompletion = async (
+  config: Extract<ActiveLocalAiConfig, { mode: "rest_api" }>,
+  messages: LocalChatMessage[],
+  temperature: number
+): Promise<string> => {
+  const targetUrl = buildGetQueryUrl(config.baseUrl, messages, temperature);
+  const trimmedKey = config.apiKey.trim();
+  const headers: Record<string, string> = {};
+  if (trimmedKey) {
+    headers.Authorization = `Bearer ${trimmedKey}`;
+  }
+
+  let status = 0;
+  let ok = false;
+  let rawText = "";
+
+  try {
+    const response = await fetch(targetUrl, {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(30000)
+    });
+    status = response.status;
+    ok = response.ok;
+    rawText = await response.text();
+  } catch (directError) {
+    const isNetworkOrCors =
+      directError instanceof TypeError ||
+      (directError instanceof Error && /failed to fetch|networkerror|load failed/i.test(directError.message));
+
+    if (!isNetworkOrCors || typeof window === "undefined" || !targetUrl.startsWith("https://")) {
+      throw directError instanceof Error
+        ? directError
+        : new Error("Gagal terhubung ke endpoint GET REST API.");
+    }
+
+    const proxyRes = await fetch("/api/ai-proxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: targetUrl,
+        ...(trimmedKey ? { apiKey: trimmedKey } : {})
+      }),
+      signal: AbortSignal.timeout(30000)
+    });
+
+    const proxyJson = await proxyRes.json().catch(() => ({}));
+    if (!proxyRes.ok || !proxyJson?.success) {
+      throw new Error(proxyJson?.error?.message || formatRestError(proxyRes.status));
+    }
+
+    status = Number(proxyJson.data?.status ?? 200);
+    ok = Boolean(proxyJson.data?.ok);
+    rawText = typeof proxyJson.data?.body === "string" ? proxyJson.data.body : "";
+  }
+
+  const trimmedBody = rawText.trim();
+  let parsedJson: unknown = null;
+  if (trimmedBody.startsWith("{") || trimmedBody.startsWith("[")) {
+    try {
+      parsedJson = JSON.parse(trimmedBody);
+    } catch {
+      parsedJson = null;
+    }
+  }
+
+  if (!ok) {
+    const errObj = (parsedJson && typeof parsedJson === "object" ? parsedJson : {}) as Record<string, unknown>;
+    const rawMsg =
+      typeof errObj.message === "string"
+        ? errObj.message
+        : typeof (errObj.error as Record<string, unknown> | undefined)?.message === "string"
+        ? String((errObj.error as Record<string, unknown>).message)
+        : trimmedBody;
+    throw new Error(formatRestError(status, rawMsg));
+  }
+
+  if (parsedJson !== null && typeof parsedJson === "object") {
+    const record = parsedJson as Record<string, unknown>;
+    const extracted = extractFlexibleTextResponse(parsedJson);
+    if ((record.status === false || record.success === false) && !extracted) {
+      const errMsg = typeof record.message === "string" ? record.message : "Server mengembalikan status gagal.";
+      throw new Error(errMsg);
+    }
+    if (extracted) return extracted;
+  }
+
+  return trimmedBody;
+};
+
 const runRestApiCompletion = async (
   config: Extract<ActiveLocalAiConfig, { mode: "rest_api" }>,
   messages: LocalChatMessage[],
   temperature: number,
   maxTokens: number
 ): Promise<string> => {
+  if (config.format === "get_query") {
+    if (!config.baseUrl.trim()) {
+      throw new Error("Isi alamat Endpoint GET URL terlebih dahulu.");
+    }
+    return runGetQueryCompletion(config, messages, temperature);
+  }
+
   const base = cleanBaseUrl(config.baseUrl);
   const model = config.modelId.trim();
   if (!base || !model) {
